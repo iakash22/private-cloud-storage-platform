@@ -1,0 +1,17 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/types" },
+    { "path": "./packages/validation" },
+    { "path": "./packages/config" },
+    { "path": "./packages/logger" },
+    { "path": "./packages/auth" },
+    { "path": "./packages/api-client" },
+    { "path": "./packages/testing" },
+    { "path": "./packages/ui" },
+    { "path": "./apps/api" },
+    { "path": "./apps/dashboard" },
+    { "path": "./services/backup-worker" },
+    { "path": "./services/artifact-worker" }
+  ]
+}
