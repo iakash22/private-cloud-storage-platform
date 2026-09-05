@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createTestId, waitForCondition } from './index.js';
+import { createTestId, waitForCondition } from './helpers.js';
 
 describe('@vaultstack/testing', () => {
   it('creates unique test ids', () => {

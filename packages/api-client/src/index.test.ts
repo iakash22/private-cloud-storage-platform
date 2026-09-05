@@ -5,12 +5,13 @@ describe('@vaultstack/api-client', () => {
   it('fetches health status', async () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({
-        status: 'ok',
-        service: 'api',
-        timestamp: new Date().toISOString(),
-        uptime: 1,
-      }),
+      json: () =>
+        Promise.resolve({
+          status: 'ok',
+          service: 'api',
+          timestamp: new Date().toISOString(),
+          uptime: 1,
+        }),
     });
 
     const client = new VaultStackApiClient({

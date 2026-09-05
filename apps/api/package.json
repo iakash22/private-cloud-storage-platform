@@ -8,24 +8,26 @@
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint src/ --ignore-pattern \"**/*.test.ts\" --ignore-pattern \"**/*.test.tsx\"",
-    "test": "vitest run",
-    "test:unit": "vitest run"
+    "lint": "eslint src/ --ignore-pattern \"**/*.test.ts\" --ignore-pattern \"**/*.test.tsx\" --ignore-pattern \"**/*.integration.test.ts\"",
+    "test": "vitest run --exclude src/integration/**",
+    "test:unit": "vitest run --exclude src/integration/**",
+    "test:integration": "vitest run src/integration"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.726.1",
+    "@vaultstack/auth": "workspace:*",
     "@vaultstack/config": "workspace:*",
+    "@vaultstack/database": "workspace:*",
     "@vaultstack/logger": "workspace:*",
     "@vaultstack/types": "workspace:*",
     "@vaultstack/validation": "workspace:*",
     "express": "^4.21.2",
     "ioredis": "^5.4.2",
-    "pg": "^8.13.1"
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
-    "@types/pg": "^8.11.10",
     "@types/supertest": "^6.0.2",
+    "@vaultstack/testing": "workspace:*",
     "supertest": "^7.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",

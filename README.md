@@ -4,14 +4,14 @@ Self-hosted private cloud storage management platform.
 
 VaultStack provides S3-compatible object storage, file management, CI artifact storage, backups, monitoring, RBAC, API keys, audit logging, and a unified React administration dashboard.
 
-**Phase 0** establishes the monorepo foundation only. Authentication, storage, backups, artifacts, and infrastructure management are not implemented yet.
+**Phase 1** adds the backend and database foundation: Prisma/PostgreSQL metadata, `/api/v1` auth, organizations, users, teams, roles, permissions, API keys, audit logs, and `can(user, permission, resource)`. The dashboard remains a shell. Storage, backups, artifacts, and MinIO usage are not implemented yet.
 
 ## Repository structure
 
 ```text
 apps/
   dashboard/          React + Vite admin dashboard shell
-  api/                Express API with health endpoints
+  api/                Express API with /health, /ready, and /api/v1 modules
 
 packages/
   ui/                 Shared UI components (shadcn-style primitives)
@@ -20,8 +20,9 @@ packages/
   api-client/         Typed API client
   config/             Environment validation
   logger/             Structured logging (Pino)
-  auth/               Auth placeholder (future phase)
-  testing/            Shared test utilities
+  auth/               Password hashing, JWT, API key hashing
+  database/           Prisma schema, client, migrations, seed
+  testing/            Shared test utilities and Testcontainers helpers
 
 services/
   backup-worker/      BullMQ worker skeleton
@@ -90,16 +91,19 @@ API: http://localhost:3000
 
 ## Scripts
 
-| Command | Description |
-|---------|-------------|
-| `pnpm dev` | Start all dev servers via Turborepo |
-| `pnpm build` | Build all packages and apps |
-| `pnpm lint` | Run ESLint |
-| `pnpm typecheck` | Run TypeScript checks |
-| `pnpm test` | Run unit tests |
-| `pnpm test:e2e` | Run Playwright E2E tests |
-| `pnpm docker:up` | Start development infrastructure |
-| `pnpm docker:down` | Stop development infrastructure |
+| Command                 | Description                          |
+| ----------------------- | ------------------------------------ |
+| `pnpm dev`              | Start all dev servers via Turborepo  |
+| `pnpm build`            | Build all packages and apps          |
+| `pnpm lint`             | Run ESLint                           |
+| `pnpm typecheck`        | Run TypeScript checks                |
+| `pnpm test`             | Run unit tests                       |
+| `pnpm test:integration` | Run Testcontainers integration tests |
+| `pnpm test:e2e`         | Run Playwright E2E tests             |
+| `pnpm db:migrate`       | Apply Prisma migrations              |
+| `pnpm db:seed`          | Seed permission catalog              |
+| `pnpm docker:up`        | Start development infrastructure     |
+| `pnpm docker:down`      | Stop development infrastructure      |
 
 ## Environment variables
 
@@ -118,8 +122,8 @@ Never commit `.env` or expose secrets to the browser. MinIO secret keys and data
 - Express.js + TypeScript backend (no NestJS)
 - PostgreSQL for metadata only; MinIO for object data
 - Long-running work uses BullMQ + Redis workers
-- Browser auth will use HTTP-only cookies (future phase)
-- File uploads/downloads will use presigned S3 URLs (future phase)
+- Phase 1 API auth uses JWT Bearer tokens and hashed API keys
+- Browser HTTP-only cookies and presigned S3 URLs remain future work
 
 See [`AGENTS.md`](AGENTS.md) for development rules.
 

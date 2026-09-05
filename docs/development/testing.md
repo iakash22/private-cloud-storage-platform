@@ -2,33 +2,37 @@
 
 VaultStack uses a layered testing strategy:
 
-| Layer | Tool | Scope |
-|-------|------|-------|
-| Unit | Vitest | Packages, API handlers, UI components |
-| API | Supertest + Vitest | Express routes |
-| E2E | Playwright | Dashboard + API smoke tests |
-| Integration | Testcontainers | Future phases (live PostgreSQL/Redis/MinIO) |
+| Layer       | Tool                    | Scope                                                   |
+| ----------- | ----------------------- | ------------------------------------------------------- |
+| Unit        | Vitest                  | Packages, authorization, validation, API handlers       |
+| API         | Supertest + Vitest      | Express routes with mocked dependencies                 |
+| Integration | Testcontainers + Vitest | Live PostgreSQL: migrations, orgs, users, RBAC, tenancy |
+| E2E         | Playwright              | Dashboard + API smoke tests                             |
 
-## Unit and API tests
-
-From the repository root:
+## Unit tests
 
 ```bash
 pnpm test
+pnpm test:unit
 ```
 
-Run tests for a single package:
+## Integration tests
+
+Requires Docker (Testcontainers starts PostgreSQL 16).
 
 ```bash
-pnpm --filter @vaultstack/api test
-pnpm --filter @vaultstack/dashboard test
+pnpm test:integration
 ```
 
-Watch mode (package-level):
+Coverage includes:
 
-```bash
-pnpm --filter @vaultstack/api exec vitest
-```
+- database connection
+- migrations and permission seed
+- organization creation
+- user creation
+- role assignment
+- `can(user, permission, resource)`
+- cross-organization access prevention
 
 ## Type checking and linting
 
@@ -38,55 +42,9 @@ pnpm lint
 pnpm format:check
 ```
 
-## Build verification
-
-```bash
-pnpm build
-```
-
-Turborepo builds packages in dependency order.
-
 ## E2E tests (Playwright)
-
-Playwright starts the API and dashboard dev servers automatically.
-
-Prerequisites:
-
-- Dependencies installed
-- Workspace built (`pnpm build`) so workspace packages resolve
-- Docker infrastructure running for full `/ready` checks (optional for basic E2E)
 
 ```bash
 pnpm exec playwright install chromium
 pnpm test:e2e
 ```
-
-E2E tests live in `tests/e2e/`.
-
-## CI-style local checklist
-
-```bash
-cp .env.example .env
-pnpm install
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm build
-pnpm docker:up
-pnpm --filter @vaultstack/api dev &
-sleep 3
-curl -f http://localhost:3000/health
-curl -f http://localhost:3000/ready
-```
-
-## Writing tests
-
-- Every new feature requires tests (see `AGENTS.md`)
-- Prefer testing behavior over implementation details
-- API routes: Supertest against `createApp()` with mocked dependencies where appropriate
-- UI: React Testing Library
-- Do not log secrets in test output
-
-## Future integration testing
-
-`@vaultstack/testing` will gain Testcontainers helpers when features require live PostgreSQL, Redis, or MinIO during integration tests.

@@ -3,6 +3,8 @@ import { dirname, join } from 'node:path';
 import { config as loadDotenv } from 'dotenv';
 import { z } from 'zod';
 
+const optionalMinio = z.string().min(1).optional();
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   API_HOST: z.string().default('0.0.0.0'),
@@ -10,15 +12,16 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   DATABASE_URL: z.string().min(1).startsWith('postgresql://'),
   REDIS_URL: z.string().min(1).startsWith('redis://'),
-  MINIO_ENDPOINT: z.string().min(1),
+  JWT_SECRET: z.string().min(32),
+  MINIO_ENDPOINT: optionalMinio,
   MINIO_PORT: z.coerce.number().int().positive().default(9000),
   MINIO_USE_SSL: z
     .enum(['true', 'false'])
     .default('false')
     .transform((value) => value === 'true'),
-  MINIO_ACCESS_KEY: z.string().min(1),
-  MINIO_SECRET_KEY: z.string().min(1),
-  MINIO_BUCKET: z.string().min(1),
+  MINIO_ACCESS_KEY: optionalMinio,
+  MINIO_SECRET_KEY: optionalMinio,
+  MINIO_BUCKET: optionalMinio,
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

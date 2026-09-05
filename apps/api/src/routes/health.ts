@@ -2,17 +2,11 @@ import type { Request, Response } from 'express';
 import type { HealthResponse, ReadinessResponse } from '@vaultstack/types';
 import { healthResponseSchema, readinessResponseSchema } from '@vaultstack/validation';
 import type { DependencyClients } from '../lib/dependencies.js';
-import {
-  checkMinio,
-  checkPostgres,
-  checkRedis,
-} from '../lib/dependencies.js';
-import type { EnvConfig } from '@vaultstack/config';
+import { checkPostgres, checkRedis } from '../lib/dependencies.js';
 
 export interface HealthRouterDeps {
   serviceName: string;
   startedAt: number;
-  config: EnvConfig;
   clients: DependencyClients;
 }
 
@@ -33,9 +27,8 @@ export function getHealthHandler(deps: Pick<HealthRouterDeps, 'serviceName' | 's
 export function getReadyHandler(deps: HealthRouterDeps) {
   return async (_req: Request, res: Response): Promise<void> => {
     const checks = await Promise.all([
-      checkPostgres(deps.clients.pgPool),
+      checkPostgres(deps.clients.prisma),
       checkRedis(deps.clients.redis),
-      checkMinio(deps.clients.s3, deps.config.MINIO_BUCKET),
     ]);
 
     const hasError = checks.some((check) => check.status === 'error');

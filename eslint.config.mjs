@@ -60,6 +60,12 @@ export default tseslint.config(
       '**/coverage/**',
       '**/playwright-report/**',
       '**/test-results/**',
+      '**/generated/**',
+      '**/*.config.js',
+      '**/*.config.ts',
+      '**/*.setup.ts',
+      '**/*.test.tsx',
+      'tests/e2e/**',
     ],
   },
 );

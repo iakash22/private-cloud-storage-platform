@@ -7,65 +7,68 @@ VaultStack is a self-hosted control plane for private cloud storage. It is desig
 ```text
 Browser
   ↓
-React Dashboard (apps/dashboard)
+React Dashboard (apps/dashboard) — UI not part of Phase 1
   ↓
-Express API (apps/api)
+Express API (apps/api) — /api/v1
   ↓
-PostgreSQL   Redis   MinIO
-  ↓            ↓
-metadata    BullMQ workers (services/*)
-              ↓
-            object/file data (MinIO)
+PostgreSQL (Prisma metadata)
+Redis (queues; workers remain skeletons)
 ```
+
+MinIO is provisioned in development Compose but is **not used in Phase 1**.
 
 ## Components
 
 ### Dashboard
 
-React + Vite + TypeScript frontend using shared UI components from `packages/ui`. TanStack libraries and full shadcn/ui integration will be expanded in later phases.
+React + Vite + TypeScript frontend shell. No Phase 1 UI work.
 
 ### API
 
-Express + TypeScript service. Phase 0 exposes:
+Express + TypeScript service.
 
-- `GET /health` — process liveness
-- `GET /ready` — dependency readiness (PostgreSQL, Redis, MinIO)
+Infrastructure:
 
-Business routes (auth, storage, backups, etc.) are not implemented yet.
+- `GET /health` and `GET /api/v1/health` — process liveness
+- `GET /ready` and `GET /api/v1/ready` — PostgreSQL + Redis
+
+Business modules under `apps/api/src/modules/`:
+
+- `auth/` — register, login, JWT, API keys, `can(user, permission, resource)`
+- `users/`
+- `organizations/`
+- `teams/`
+- `roles/`
+- `permissions/`
+- `audit/`
 
 ### Workers
 
-`services/backup-worker` and `services/artifact-worker` are BullMQ worker skeletons connected to Redis. Job processing logic will be added in future phases.
+`services/backup-worker` and `services/artifact-worker` remain BullMQ skeletons.
 
 ### Shared packages
 
-| Package | Purpose |
-|---------|---------|
-| `@vaultstack/types` | Shared TypeScript types |
-| `@vaultstack/validation` | Zod schemas |
-| `@vaultstack/config` | Environment validation |
-| `@vaultstack/logger` | Structured logging with secret redaction |
-| `@vaultstack/api-client` | Typed HTTP client |
-| `@vaultstack/ui` | Shared React UI primitives |
-| `@vaultstack/auth` | Auth placeholder |
-| `@vaultstack/testing` | Test helpers |
+| Package                  | Purpose                                     |
+| ------------------------ | ------------------------------------------- |
+| `@vaultstack/types`      | Shared TypeScript types and permission keys |
+| `@vaultstack/validation` | Zod schemas                                 |
+| `@vaultstack/config`     | Environment validation                      |
+| `@vaultstack/logger`     | Structured logging with secret redaction    |
+| `@vaultstack/api-client` | Typed HTTP client (health)                  |
+| `@vaultstack/ui`         | Shared React UI primitives                  |
+| `@vaultstack/auth`       | Password hashing, JWT, API key hashing      |
+| `@vaultstack/database`   | Prisma schema, client, migrations, seed     |
+| `@vaultstack/testing`    | Test helpers and Testcontainers PostgreSQL  |
 
 ## Data storage rules
 
-- **PostgreSQL** stores metadata only (users, organizations, file indexes, backup jobs, etc.)
-- **MinIO** stores object/file binaries via S3-compatible API
+- **PostgreSQL** stores metadata only (users, organizations, roles, API keys, audit logs)
 - File binaries must **never** be stored in PostgreSQL
+- Object storage (MinIO) is deferred past Phase 1
 
-## Security boundaries
+## Multi-tenancy
 
-- MinIO secret keys, database credentials, and Redis credentials stay server-side
-- The browser never receives S3 secret keys
-- Presigned URLs will be used for direct uploads/downloads (future phase)
-- MinIO admin/console must not be exposed publicly in production
-
-## Multi-tenancy (future)
-
-Organizations will own resources. `organizationId` will be derived server-side from authenticated identity — never trusted from client input.
+Organizations own resources. `organizationId` is taken from the authenticated membership + route and checked with `can()`. Client-supplied organization ids are not trusted for authorization.
 
 ## Monorepo tooling
 
@@ -73,7 +76,8 @@ Organizations will own resources. `organizationId` will be derived server-side f
 - **Turborepo** for task orchestration
 - **TypeScript** strict mode
 - **Vitest** for unit/integration tests
-- **Playwright** for E2E tests
+- **Playwright** for E2E smoke tests
+- **Prisma** for PostgreSQL migrations
 
 ## Infrastructure (development)
 
@@ -81,6 +85,4 @@ Docker Compose (`infrastructure/docker/docker-compose.dev.yml`) provides:
 
 - PostgreSQL 16
 - Redis 7
-- MinIO (+ bucket initialization)
-
-Production deployment (Caddy, Tailscale, Restic) is planned but not part of Phase 0.
+- MinIO (unused in Phase 1)
