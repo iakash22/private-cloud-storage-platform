@@ -5,11 +5,16 @@ import { defineConfig } from 'vitest/config';
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
-  root: rootDir,
   test: {
     environment: 'node',
     include: ['**/*.{test,spec}.{ts,tsx}'],
-    exclude: ['**/node_modules/**', '**/dist/**', 'tests/e2e/**'],
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      'tests/e2e/**',
+      '**/*.integration.test.ts',
+      '**/src/integration/**',
+    ],
     environmentMatchGlobs: [
       ['packages/ui/**', 'jsdom'],
       ['apps/dashboard/**', 'jsdom'],

@@ -9,9 +9,9 @@
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src/ --ignore-pattern \"**/*.test.ts\" --ignore-pattern \"**/*.test.tsx\" --ignore-pattern \"**/*.integration.test.ts\"",
-    "test": "vitest run --exclude src/integration/**",
-    "test:unit": "vitest run --exclude src/integration/**",
-    "test:integration": "vitest run src/integration"
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "@vaultstack/auth": "workspace:*",

@@ -16,13 +16,20 @@ pnpm test
 pnpm test:unit
 ```
 
+Use **Node 20+** inside WSL (`nvm use` reads `.nvmrc`). Node 18 can run the suite but is not the supported toolchain.
+
+`pnpm test` and `pnpm test:unit` stay on mocked/unit files. They do not start Testcontainers.
+
 ## Integration tests
 
-Requires Docker (Testcontainers starts PostgreSQL 16).
+Requires **Docker Desktop with WSL2 integration** enabled for your Ubuntu distro. Testcontainers starts PostgreSQL 16.
 
 ```bash
+docker info    # must work inside WSL
 pnpm test:integration
 ```
+
+If Testcontainers reports `Could not find a working container runtime strategy`, start Docker Desktop and confirm the Docker socket is available in WSL (`ls /var/run/docker.sock`). Do not run these tests from Windows PowerShell.
 
 Coverage includes:
 
