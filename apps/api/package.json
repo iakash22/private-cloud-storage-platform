@@ -18,6 +18,7 @@
     "@vaultstack/config": "workspace:*",
     "@vaultstack/database": "workspace:*",
     "@vaultstack/logger": "workspace:*",
+    "@vaultstack/startup": "workspace:*",
     "@vaultstack/types": "workspace:*",
     "@vaultstack/validation": "workspace:*",
     "express": "^4.21.2",

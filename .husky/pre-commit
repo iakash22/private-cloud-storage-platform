@@ -1,1 +1,15 @@
+#!/usr/bin/env sh
+set -e
+
+NODE_BIN="${HOME}/.nvm/versions/node/v22.23.2/bin"
+REPO="/home/akash22/projects/private-cloud-storage-platform"
+
+# Git for Windows on a WSL working tree uses Windows Node and breaks pnpm bins.
+if [ -n "${WINDIR:-}" ] || uname -s 2>/dev/null | grep -qiE 'mingw|msys|cygwin'; then
+  exec wsl.exe -d Ubuntu -- bash -lc "export PATH=${NODE_BIN}:/usr/bin:/bin; cd ${REPO}; pnpm exec lint-staged"
+fi
+
+# Ignore Windows Node/pnpm that WSL prepends via interop.
+export PATH="${NODE_BIN}:/usr/bin:/bin"
+cd "$(dirname "$0")/.."
 pnpm exec lint-staged

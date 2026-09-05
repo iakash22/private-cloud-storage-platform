@@ -1,0 +1,33 @@
+{
+  "name": "@vaultstack/startup",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Pretty CLI startup banner for VaultStack. figlet draws the server name, boxen frames the stats panel, chalk and gradient-string color status. Used only in Node server processes — never in browser code.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src/",
+    "test": "vitest run --config vitest.config.ts",
+    "test:unit": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "boxen": "^8.0.1",
+    "chalk": "^5.4.1",
+    "figlet": "^1.8.1",
+    "gradient-string": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/figlet": "^1.7.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
