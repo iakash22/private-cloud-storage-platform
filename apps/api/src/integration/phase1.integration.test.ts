@@ -1,33 +1,23 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { z } from 'zod';
-import type { EnvConfig } from '@vaultstack/config';
-import { PERMISSIONS } from '@vaultstack/types';
+import { PERMISSIONS, SYSTEM_ROLES } from '@vaultstack/types';
 import { startTestDatabase, type TestDatabase } from '@vaultstack/testing';
 import { apiErrorResponseSchema } from '@vaultstack/validation';
 import { createApp } from '../app.js';
 import type { DependencyClients } from '../lib/dependencies.js';
+import { createTestConfig } from '../lib/test-config.js';
 import {
   createAuthorizationService,
   createPrismaPermissionResolver,
 } from '../modules/auth/authorization.service.js';
-
-const testConfig: EnvConfig = {
-  NODE_ENV: 'test',
-  API_HOST: '127.0.0.1',
-  API_PORT: 3000,
-  LOG_LEVEL: 'error',
-  DATABASE_URL: 'postgresql://vaultstack:vaultstack_test@localhost:5432/vaultstack_test',
-  REDIS_URL: 'redis://localhost:6379',
-  JWT_SECRET: 'phase1-test-jwt-secret-value-32chars',
-  MINIO_PORT: 9000,
-  MINIO_USE_SSL: false,
-};
+import { authHeaders, responseBody } from './helpers.js';
 
 const publicUserSchema = z.object({
   id: z.string(),
   email: z.string(),
   name: z.string(),
+  disabled: z.boolean(),
 });
 
 const publicOrganizationSchema = z.object({
@@ -37,7 +27,7 @@ const publicOrganizationSchema = z.object({
 });
 
 const registerResponseSchema = z.object({
-  token: z.string(),
+  csrfToken: z.string(),
   user: publicUserSchema,
   organization: publicOrganizationSchema,
 });
@@ -78,7 +68,7 @@ describe('Phase 1 backend foundation', () => {
   beforeAll(async () => {
     db = await startTestDatabase();
     app = createApp({
-      config: { ...testConfig, DATABASE_URL: db.databaseUrl },
+      config: createTestConfig({ DATABASE_URL: db.databaseUrl }),
       logger: { error: vi.fn(), info: vi.fn() } as never,
       prisma: db.prisma,
       clients: {
@@ -108,10 +98,10 @@ describe('Phase 1 backend foundation', () => {
       SELECT tablename
       FROM pg_tables
       WHERE schemaname = 'public'
-        AND tablename IN ('User', 'Organization', 'Role', 'Permission', 'UserRole', 'ApiKey', 'AuditLog', 'Team')
+        AND tablename IN ('User', 'Organization', 'Role', 'Permission', 'UserRole', 'ApiKey', 'AuditLog', 'Team', 'Session')
     `;
 
-    expect(tables).toHaveLength(8);
+    expect(tables).toHaveLength(9);
     await expect(db.prisma.permission.count()).resolves.toBeGreaterThan(0);
   });
 
@@ -127,15 +117,16 @@ describe('Phase 1 backend foundation', () => {
       organizationName: 'Org Alpha',
     });
     const registeredA = registerResponseSchema.parse(registerA.body);
+    const headersA = authHeaders(registerA);
 
     expect(registerA.status).toBe(201);
-    expect(registeredA.token).toBeTruthy();
+    expect(responseBody<{ token?: string }>(registerA).token).toBeUndefined();
     expect(registeredA.user.email).toBe('owner-a@example.com');
     expect(registeredA.organization.name).toBe('Org Alpha');
 
     const createdUser = await request(app)
       .post(`/api/v1/organizations/${registeredA.organization.id}/users`)
-      .set('Authorization', `Bearer ${registeredA.token}`)
+      .set(headersA)
       .send({
         email: 'member-a@example.com',
         password: 'password123',
@@ -148,43 +139,39 @@ describe('Phase 1 backend foundation', () => {
 
     const rolesResponse = await request(app)
       .get(`/api/v1/organizations/${registeredA.organization.id}/roles`)
-      .set('Authorization', `Bearer ${registeredA.token}`);
+      .set('Cookie', headersA.Cookie);
     const roles = rolesResponseSchema.parse(rolesResponse.body);
-    const memberRole = roles.roles.find((role) => role.name === 'Member');
+    const viewerRole = roles.roles.find((role) => role.name === SYSTEM_ROLES.VIEWER);
 
     const customRoleResponse = await request(app)
       .post(`/api/v1/organizations/${registeredA.organization.id}/roles`)
-      .set('Authorization', `Bearer ${registeredA.token}`)
+      .set(headersA)
       .send({
         name: 'User Admin',
         description: 'Can create users',
-        permissions: [
-          PERMISSIONS.USERS_READ,
-          PERMISSIONS.USERS_CREATE,
-          PERMISSIONS.ORGANIZATIONS_READ,
-        ],
+        permissions: [PERMISSIONS.USERS_READ, PERMISSIONS.USERS_MANAGE, PERMISSIONS.AUDIT_READ],
       });
     const customRole = roleResponseSchema.parse(customRoleResponse.body);
 
     expect(customRoleResponse.status).toBe(201);
-    expect(memberRole).toBeDefined();
+    expect(viewerRole).toBeDefined();
 
     const assignRole = await request(app)
       .post(`/api/v1/organizations/${registeredA.organization.id}/users/${member.user.id}/roles`)
-      .set('Authorization', `Bearer ${registeredA.token}`)
+      .set(headersA)
       .send({ roleId: customRole.role.id });
 
     expect(assignRole.status).toBe(204);
 
     const authorization = createAuthorizationService(createPrismaPermissionResolver(db.prisma));
     await expect(
-      authorization.can({ id: registeredA.user.id }, PERMISSIONS.USERS_CREATE, {
+      authorization.can({ id: registeredA.user.id }, PERMISSIONS.USERS_MANAGE, {
         type: 'organization',
         organizationId: registeredA.organization.id,
       }),
     ).resolves.toBe(true);
     await expect(
-      authorization.can({ id: member.user.id }, PERMISSIONS.USERS_CREATE, {
+      authorization.can({ id: member.user.id }, PERMISSIONS.USERS_MANAGE, {
         type: 'organization',
         organizationId: registeredA.organization.id,
       }),
@@ -197,21 +184,22 @@ describe('Phase 1 backend foundation', () => {
       organizationName: 'Org Beta',
     });
     const registeredB = registerResponseSchema.parse(registerB.body);
+    const headersB = authHeaders(registerB);
 
     expect(registerB.status).toBe(201);
 
     const crossRead = await request(app)
       .get(`/api/v1/organizations/${registeredA.organization.id}`)
-      .set('Authorization', `Bearer ${registeredB.token}`);
-    const forbidden = apiErrorResponseSchema.parse(crossRead.body);
+      .set('Cookie', headersB.Cookie);
+    const forbiddenBody = apiErrorResponseSchema.parse(crossRead.body);
 
     expect(crossRead.status).toBe(403);
-    expect(forbidden.error.code).toBe('FORBIDDEN');
-    expect(forbidden.requestId).toBeTruthy();
+    expect(forbiddenBody.error.code).toBe('FORBIDDEN');
+    expect(forbiddenBody.requestId).toBeTruthy();
 
     const crossCreate = await request(app)
       .post(`/api/v1/organizations/${registeredA.organization.id}/users`)
-      .set('Authorization', `Bearer ${registeredB.token}`)
+      .set(headersB)
       .send({
         email: 'intruder@example.com',
         password: 'password123',
@@ -221,7 +209,7 @@ describe('Phase 1 backend foundation', () => {
     expect(crossCreate.status).toBe(403);
 
     await expect(
-      authorization.can({ id: registeredB.user.id }, PERMISSIONS.USERS_CREATE, {
+      authorization.can({ id: registeredB.user.id }, PERMISSIONS.USERS_MANAGE, {
         type: 'organization',
         organizationId: registeredA.organization.id,
       }),
@@ -229,14 +217,14 @@ describe('Phase 1 backend foundation', () => {
 
     const ownRead = await request(app)
       .get(`/api/v1/organizations/${registeredB.organization.id}`)
-      .set('Authorization', `Bearer ${registeredB.token}`);
+      .set('Cookie', headersB.Cookie);
     const ownOrganization = organizationResponseSchema.parse(ownRead.body);
     expect(ownRead.status).toBe(200);
     expect(ownOrganization.organization.id).toBe(registeredB.organization.id);
 
     const auditLogs = await request(app)
       .get(`/api/v1/organizations/${registeredA.organization.id}/audit-logs`)
-      .set('Authorization', `Bearer ${registeredA.token}`);
+      .set('Cookie', headersA.Cookie);
     const logs = auditLogsResponseSchema.parse(auditLogs.body);
     expect(auditLogs.status).toBe(200);
     expect(logs.auditLogs.length).toBeGreaterThan(0);

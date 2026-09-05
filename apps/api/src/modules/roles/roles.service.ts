@@ -1,7 +1,11 @@
 import type { PrismaClient } from '@vaultstack/database';
-import { conflict, notFound, validationError } from '../../lib/errors.js';
+import { ALL_SYSTEM_ROLES } from '@vaultstack/types';
+import { conflict, forbidden, notFound, validationError } from '../../lib/errors.js';
 import { writeAuditLog } from '../../lib/audit.js';
 import { serializeRole } from '../../lib/serializers.js';
+import { createPrismaPermissionResolver } from '../auth/authorization.service.js';
+import { countSuperAdmins, isOrganizationSuperAdmin } from '../auth/organization-roles.js';
+import { canAssignSystemRole, canGrantPermissions, isSuperAdminRole } from '../auth/rbac.js';
 
 const roleInclude = {
   permissions: {
@@ -37,6 +41,10 @@ export function createRolesService(prisma: PrismaClient) {
       actorUserId: string,
       meta: { ipAddress?: string | null; userAgent?: string | null },
     ) {
+      if ((ALL_SYSTEM_ROLES as readonly string[]).includes(input.name)) {
+        throw forbidden('System role names are reserved');
+      }
+
       const existing = await prisma.role.findFirst({
         where: { organizationId, name: input.name },
       });
@@ -49,6 +57,15 @@ export function createRolesService(prisma: PrismaClient) {
       });
       if (permissionRecords.length !== input.permissions.length) {
         throw validationError('One or more permissions are invalid');
+      }
+
+      const actorPermissions = await createPrismaPermissionResolver(prisma).getPermissionKeys(
+        actorUserId,
+        organizationId,
+      );
+      const actorIsSuperAdmin = await isOrganizationSuperAdmin(prisma, actorUserId, organizationId);
+      if (!canGrantPermissions(actorPermissions, actorIsSuperAdmin, input.permissions)) {
+        throw forbidden('You cannot grant permissions you do not have');
       }
 
       const role = await prisma.role.create({
@@ -85,7 +102,10 @@ export function createRolesService(prisma: PrismaClient) {
       meta: { ipAddress?: string | null; userAgent?: string | null },
     ) {
       const [role, user] = await Promise.all([
-        prisma.role.findFirst({ where: { id: roleId, organizationId } }),
+        prisma.role.findFirst({
+          where: { id: roleId, organizationId },
+          include: roleInclude,
+        }),
         prisma.user.findUnique({ where: { id: userId } }),
       ]);
 
@@ -94,6 +114,20 @@ export function createRolesService(prisma: PrismaClient) {
       }
       if (!user) {
         throw notFound('User not found');
+      }
+
+      const actorPermissions = await createPrismaPermissionResolver(prisma).getPermissionKeys(
+        actorUserId,
+        organizationId,
+      );
+      const actorIsSuperAdmin = await isOrganizationSuperAdmin(prisma, actorUserId, organizationId);
+      const targetPermissions = role.permissions.map((item) => item.permission.key);
+
+      if (
+        !canAssignSystemRole(actorIsSuperAdmin, role.name, role.isSystem) ||
+        !canGrantPermissions(actorPermissions, actorIsSuperAdmin, targetPermissions)
+      ) {
+        throw forbidden('You cannot assign a role with greater privileges');
       }
 
       const existing = await prisma.userRole.findUnique({
@@ -132,9 +166,24 @@ export function createRolesService(prisma: PrismaClient) {
         where: {
           userId_roleId_organizationId: { userId, roleId, organizationId },
         },
+        include: { role: true },
       });
       if (!existing) {
         throw notFound('Role assignment not found');
+      }
+
+      if (isSuperAdminRole(existing.role.name, existing.role.isSystem)) {
+        const actorIsSuperAdmin = await isOrganizationSuperAdmin(
+          prisma,
+          actorUserId,
+          organizationId,
+        );
+        if (!actorIsSuperAdmin) {
+          throw forbidden('Only SUPER_ADMIN can remove SUPER_ADMIN');
+        }
+        if ((await countSuperAdmins(prisma, organizationId)) <= 1) {
+          throw forbidden('Cannot remove the last SUPER_ADMIN');
+        }
       }
 
       await prisma.userRole.delete({ where: { id: existing.id } });

@@ -7,7 +7,7 @@ VaultStack is a self-hosted control plane for private cloud storage. It is desig
 ```text
 Browser
   ↓
-React Dashboard (apps/dashboard) — UI not part of Phase 1
+React Dashboard (apps/dashboard) — UI not part of Phase 2
   ↓
 Express API (apps/api) — /api/v1
   ↓
@@ -34,7 +34,7 @@ Infrastructure:
 
 Business modules under `apps/api/src/modules/`:
 
-- `auth/` — register, login, JWT, API keys, `can(user, permission, resource)`
+- `auth/` — register, login, logout, HTTP-only sessions, CSRF, API keys, `can(user, permission, resource)`
 - `users/`
 - `organizations/`
 - `teams/`
@@ -48,21 +48,21 @@ Business modules under `apps/api/src/modules/`:
 
 ### Shared packages
 
-| Package                  | Purpose                                     |
-| ------------------------ | ------------------------------------------- |
-| `@vaultstack/types`      | Shared TypeScript types and permission keys |
-| `@vaultstack/validation` | Zod schemas                                 |
-| `@vaultstack/config`     | Environment validation                      |
-| `@vaultstack/logger`     | Structured logging with secret redaction    |
-| `@vaultstack/api-client` | Typed HTTP client (health)                  |
-| `@vaultstack/ui`         | Shared React UI primitives                  |
-| `@vaultstack/auth`       | Password hashing, JWT, API key hashing      |
-| `@vaultstack/database`   | Prisma schema, client, migrations, seed     |
-| `@vaultstack/testing`    | Test helpers and Testcontainers PostgreSQL  |
+| Package                  | Purpose                                                       |
+| ------------------------ | ------------------------------------------------------------- |
+| `@vaultstack/types`      | Shared TypeScript types and permission keys                   |
+| `@vaultstack/validation` | Zod schemas                                                   |
+| `@vaultstack/config`     | Environment validation                                        |
+| `@vaultstack/logger`     | Structured logging with secret redaction                      |
+| `@vaultstack/api-client` | Typed HTTP client (health)                                    |
+| `@vaultstack/ui`         | Shared React UI primitives                                    |
+| `@vaultstack/auth`       | Password hashing, session/CSRF tokens, cookies, JWT, API keys |
+| `@vaultstack/database`   | Prisma schema, client, migrations, seed                       |
+| `@vaultstack/testing`    | Test helpers and Testcontainers PostgreSQL                    |
 
 ## Data storage rules
 
-- **PostgreSQL** stores metadata only (users, organizations, roles, API keys, audit logs)
+- **PostgreSQL** stores metadata only (users, organizations, roles, API keys, sessions, audit logs)
 - File binaries must **never** be stored in PostgreSQL
 - Object storage (MinIO) is deferred past Phase 1
 

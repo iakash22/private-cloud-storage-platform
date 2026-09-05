@@ -4,7 +4,7 @@ Self-hosted private cloud storage management platform.
 
 VaultStack provides S3-compatible object storage, file management, CI artifact storage, backups, monitoring, RBAC, API keys, audit logging, and a unified React administration dashboard.
 
-**Phase 1** adds the backend and database foundation: Prisma/PostgreSQL metadata, `/api/v1` auth, organizations, users, teams, roles, permissions, API keys, audit logs, and `can(user, permission, resource)`. The dashboard remains a shell. Storage, backups, artifacts, and MinIO usage are not implemented yet.
+**Phase 2** adds production authentication and RBAC: HTTP-only session cookies (not `localStorage`), logout, CSRF, rate-limited login, disabled users, and system roles (`SUPER_ADMIN` through `VIEWER`) with `can(user, permission, resource)`. The dashboard remains a shell. Storage, backups, artifacts, and MinIO usage are not implemented yet.
 
 ## Repository structure
 
@@ -122,8 +122,8 @@ Never commit `.env` or expose secrets to the browser. MinIO secret keys and data
 - Express.js + TypeScript backend (no NestJS)
 - PostgreSQL for metadata only; MinIO for object data
 - Long-running work uses BullMQ + Redis workers
-- Phase 1 API auth uses JWT Bearer tokens and hashed API keys
-- Browser HTTP-only cookies and presigned S3 URLs remain future work
+- Phase 2 browser auth uses HTTP-only session cookies and CSRF tokens
+- Hashed API keys remain for automation; passwords, tokens, and cookies are never logged
 
 See [`AGENTS.md`](AGENTS.md) for development rules.
 

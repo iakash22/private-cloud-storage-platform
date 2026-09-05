@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
-import type { EnvConfig } from '@vaultstack/config';
 import type { PrismaClient } from '@vaultstack/database';
 import {
   apiErrorResponseSchema,
@@ -9,18 +8,11 @@ import {
 } from '@vaultstack/validation';
 import { createApp } from '../app.js';
 import type { DependencyClients } from '../lib/dependencies.js';
+import { createTestConfig } from '../lib/test-config.js';
 
-const testConfig: EnvConfig = {
-  NODE_ENV: 'test',
-  API_HOST: '127.0.0.1',
-  API_PORT: 3000,
-  LOG_LEVEL: 'error',
+const testConfig = createTestConfig({
   DATABASE_URL: 'postgresql://vaultstack:vaultstack_dev@localhost:5432/vaultstack',
-  REDIS_URL: 'redis://localhost:6379',
-  JWT_SECRET: 'phase1-test-jwt-secret-value-32chars',
-  MINIO_PORT: 9000,
-  MINIO_USE_SSL: false,
-};
+});
 
 function createMockClients() {
   const queryRaw = vi.fn().mockResolvedValue([{ '?column?': 1 }]);

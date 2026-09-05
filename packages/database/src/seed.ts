@@ -14,6 +14,10 @@ export async function seedPermissions(prisma: PrismaClient): Promise<void> {
       },
     });
   }
+
+  await prisma.permission.deleteMany({
+    where: { key: { notIn: [...ALL_PERMISSIONS] } },
+  });
 }
 
 export async function seedDatabase(prisma: PrismaClient): Promise<void> {

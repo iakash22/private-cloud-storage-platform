@@ -42,14 +42,21 @@ describe('@vaultstack/validation', () => {
       expect(valid.data.email).toBe('owner@example.com');
     }
 
-    const invalid = registerBodySchema.safeParse({
+    const tooShort = registerBodySchema.safeParse({
       email: 'owner@example.com',
       password: 'short',
       name: 'Owner',
       organizationName: 'Acme',
     });
+    expect(tooShort.success).toBe(false);
 
-    expect(invalid.success).toBe(false);
+    const lettersOnly = registerBodySchema.safeParse({
+      email: 'owner@example.com',
+      password: 'passwordonly',
+      name: 'Owner',
+      organizationName: 'Acme',
+    });
+    expect(lettersOnly.success).toBe(false);
   });
 
   it('validates API error envelope with requestId', () => {

@@ -6,14 +6,14 @@ describe('authorization service', () => {
     const service = createAuthorizationService({
       getPermissionKeys: (userId, organizationId) => {
         if (userId === 'user-1' && organizationId === 'org-1') {
-          return Promise.resolve(['users:create']);
+          return Promise.resolve(['users.manage']);
         }
         return Promise.resolve([]);
       },
     });
 
     await expect(
-      service.can({ id: 'user-1' }, 'users:create', {
+      service.can({ id: 'user-1' }, 'users.manage', {
         type: 'organization',
         organizationId: 'org-1',
       }),
@@ -24,21 +24,21 @@ describe('authorization service', () => {
     const service = createAuthorizationService({
       getPermissionKeys: (userId, organizationId) => {
         if (userId === 'user-1' && organizationId === 'org-1') {
-          return Promise.resolve(['users:read']);
+          return Promise.resolve(['users.read']);
         }
         return Promise.resolve([]);
       },
     });
 
     await expect(
-      service.can({ id: 'user-1' }, 'users:create', {
+      service.can({ id: 'user-1' }, 'users.manage', {
         type: 'organization',
         organizationId: 'org-1',
       }),
     ).resolves.toBe(false);
 
     await expect(
-      service.can({ id: 'user-1' }, 'users:read', {
+      service.can({ id: 'user-1' }, 'users.read', {
         type: 'organization',
         organizationId: 'org-2',
       }),

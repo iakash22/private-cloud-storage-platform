@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   generateApiKey,
+  generateCsrfToken,
+  generateSessionToken,
   hashApiKey,
   hashPassword,
+  hashToken,
   isApiKeyToken,
+  parseCookieHeader,
+  serializeCookie,
   signAccessToken,
   verifyAccessToken,
   verifyPassword,
@@ -38,5 +43,30 @@ describe('@vaultstack/auth', () => {
     expect(key.hash).toBe(hashApiKey(key.plaintext));
     expect(key.hash).not.toBe(key.plaintext);
     expect(key.prefix).toBe(key.plaintext.slice(0, 12));
+  });
+
+  it('serializes httpOnly session cookies and parses them back', () => {
+    const token = generateSessionToken();
+    const header = serializeCookie({
+      name: 'vs_session',
+      value: token,
+      maxAgeSeconds: 3600,
+      httpOnly: true,
+      secure: true,
+      sameSite: 'Lax',
+    });
+
+    expect(header).toContain('HttpOnly');
+    expect(header).toContain('Secure');
+    expect(header).toContain('SameSite=Lax');
+    expect(header).not.toContain('localStorage');
+
+    const csrf = generateCsrfToken();
+    const parsed = parseCookieHeader(
+      `vs_session=${encodeURIComponent(token)}; vs_csrf=${encodeURIComponent(csrf)}`,
+    );
+    expect(parsed.vs_session).toBe(token);
+    expect(parsed.vs_csrf).toBe(csrf);
+    expect(hashToken(token)).not.toBe(token);
   });
 });

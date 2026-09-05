@@ -47,7 +47,7 @@ export function createOrganizationsService(prisma: PrismaClient) {
         await tx.userRole.create({
           data: {
             userId,
-            roleId: roles.ownerRoleId,
+            roleId: roles.SUPER_ADMIN,
             organizationId: created.id,
           },
         });

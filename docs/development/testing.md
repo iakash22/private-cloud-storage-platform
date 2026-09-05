@@ -40,6 +40,13 @@ Coverage includes:
 - role assignment
 - `can(user, permission, resource)`
 - cross-organization access prevention
+- login success and invalid password
+- disabled user
+- logout and session expiry
+- session fixation (session rotation on login)
+- CSRF on cookie-authenticated mutations
+- privilege escalation attempts
+- login rate limiting
 
 ## Type checking and linting
 

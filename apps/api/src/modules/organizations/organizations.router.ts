@@ -61,7 +61,7 @@ export function createOrganizationsRouter(services: AppServices): Router {
   router.get(
     '/:organizationId',
     validateParams(organizationIdParamsSchema),
-    allow(PERMISSIONS.ORGANIZATIONS_READ),
+    allow(PERMISSIONS.USERS_READ),
     asyncHandler(async (req, res) => {
       const organization = await services.organizations.getById(routeParam(req, 'organizationId'));
       res.status(200).json({ organization });
@@ -72,7 +72,7 @@ export function createOrganizationsRouter(services: AppServices): Router {
     '/:organizationId',
     validateParams(organizationIdParamsSchema),
     validateBody(updateOrganizationBodySchema),
-    allow(PERMISSIONS.ORGANIZATIONS_UPDATE),
+    allow(PERMISSIONS.USERS_MANAGE),
     asyncHandler(async (req, res) => {
       const auth = requireAuth(req);
       const organization = await services.organizations.update(
@@ -99,7 +99,7 @@ export function createOrganizationsRouter(services: AppServices): Router {
     '/:organizationId/users',
     validateParams(organizationIdParamsSchema),
     validateBody(createUserBodySchema),
-    allow(PERMISSIONS.USERS_CREATE),
+    allow(PERMISSIONS.USERS_MANAGE),
     asyncHandler(async (req, res) => {
       const auth = requireAuth(req);
       const user = await services.users.create(
@@ -129,7 +129,7 @@ export function createOrganizationsRouter(services: AppServices): Router {
     '/:organizationId/users/:userId',
     validateParams(organizationUserParamsSchema),
     validateBody(updateUserBodySchema),
-    allow(PERMISSIONS.USERS_UPDATE),
+    allow(PERMISSIONS.USERS_MANAGE),
     asyncHandler(async (req, res) => {
       const auth = requireAuth(req);
       const user = await services.users.update(
@@ -147,7 +147,7 @@ export function createOrganizationsRouter(services: AppServices): Router {
     '/:organizationId/users/:userId/roles',
     validateParams(organizationUserParamsSchema),
     validateBody(assignRoleBodySchema),
-    allow(PERMISSIONS.ROLES_ASSIGN),
+    allow(PERMISSIONS.USERS_MANAGE),
     asyncHandler(async (req, res) => {
       const auth = requireAuth(req);
       await services.roles.assign(
@@ -164,7 +164,7 @@ export function createOrganizationsRouter(services: AppServices): Router {
   router.delete(
     '/:organizationId/users/:userId/roles/:roleId',
     validateParams(userRoleParamsSchema),
-    allow(PERMISSIONS.ROLES_ASSIGN),
+    allow(PERMISSIONS.USERS_MANAGE),
     asyncHandler(async (req, res) => {
       const auth = requireAuth(req);
       await services.roles.unassign(
@@ -181,7 +181,7 @@ export function createOrganizationsRouter(services: AppServices): Router {
   router.get(
     '/:organizationId/teams',
     validateParams(organizationIdParamsSchema),
-    allow(PERMISSIONS.TEAMS_READ),
+    allow(PERMISSIONS.USERS_READ),
     asyncHandler(async (req, res) => {
       const teams = await services.teams.list(routeParam(req, 'organizationId'));
       res.status(200).json({ teams });
@@ -192,7 +192,7 @@ export function createOrganizationsRouter(services: AppServices): Router {
     '/:organizationId/teams',
     validateParams(organizationIdParamsSchema),
     validateBody(createTeamBodySchema),
-    allow(PERMISSIONS.TEAMS_CREATE),
+    allow(PERMISSIONS.USERS_MANAGE),
     asyncHandler(async (req, res) => {
       const auth = requireAuth(req);
       const team = await services.teams.create(
@@ -208,7 +208,7 @@ export function createOrganizationsRouter(services: AppServices): Router {
   router.get(
     '/:organizationId/teams/:teamId',
     validateParams(organizationTeamParamsSchema),
-    allow(PERMISSIONS.TEAMS_READ),
+    allow(PERMISSIONS.USERS_READ),
     asyncHandler(async (req, res) => {
       const team = await services.teams.get(
         routeParam(req, 'organizationId'),
@@ -222,7 +222,7 @@ export function createOrganizationsRouter(services: AppServices): Router {
     '/:organizationId/teams/:teamId',
     validateParams(organizationTeamParamsSchema),
     validateBody(updateTeamBodySchema),
-    allow(PERMISSIONS.TEAMS_UPDATE),
+    allow(PERMISSIONS.USERS_MANAGE),
     asyncHandler(async (req, res) => {
       const auth = requireAuth(req);
       const team = await services.teams.update(
@@ -239,7 +239,7 @@ export function createOrganizationsRouter(services: AppServices): Router {
   router.delete(
     '/:organizationId/teams/:teamId',
     validateParams(organizationTeamParamsSchema),
-    allow(PERMISSIONS.TEAMS_DELETE),
+    allow(PERMISSIONS.USERS_MANAGE),
     asyncHandler(async (req, res) => {
       const auth = requireAuth(req);
       await services.teams.remove(
@@ -255,7 +255,7 @@ export function createOrganizationsRouter(services: AppServices): Router {
   router.get(
     '/:organizationId/roles',
     validateParams(organizationIdParamsSchema),
-    allow(PERMISSIONS.ROLES_READ),
+    allow(PERMISSIONS.USERS_READ),
     asyncHandler(async (req, res) => {
       const roles = await services.roles.list(routeParam(req, 'organizationId'));
       res.status(200).json({ roles });
@@ -266,7 +266,7 @@ export function createOrganizationsRouter(services: AppServices): Router {
     '/:organizationId/roles',
     validateParams(organizationIdParamsSchema),
     validateBody(createRoleBodySchema),
-    allow(PERMISSIONS.ROLES_CREATE),
+    allow(PERMISSIONS.USERS_MANAGE),
     asyncHandler(async (req, res) => {
       const auth = requireAuth(req);
       const role = await services.roles.create(
@@ -282,7 +282,7 @@ export function createOrganizationsRouter(services: AppServices): Router {
   router.get(
     '/:organizationId/roles/:roleId',
     validateParams(organizationRoleParamsSchema),
-    allow(PERMISSIONS.ROLES_READ),
+    allow(PERMISSIONS.USERS_READ),
     asyncHandler(async (req, res) => {
       const role = await services.roles.get(
         routeParam(req, 'organizationId'),
@@ -295,7 +295,7 @@ export function createOrganizationsRouter(services: AppServices): Router {
   router.get(
     '/:organizationId/api-keys',
     validateParams(organizationIdParamsSchema),
-    allow(PERMISSIONS.API_KEYS_READ),
+    allow(PERMISSIONS.USERS_MANAGE),
     asyncHandler(async (req, res) => {
       const apiKeys = await services.apiKeys.list(routeParam(req, 'organizationId'));
       res.status(200).json({ apiKeys });
@@ -306,7 +306,7 @@ export function createOrganizationsRouter(services: AppServices): Router {
     '/:organizationId/api-keys',
     validateParams(organizationIdParamsSchema),
     validateBody(createApiKeyBodySchema),
-    allow(PERMISSIONS.API_KEYS_CREATE),
+    allow(PERMISSIONS.USERS_MANAGE),
     asyncHandler(async (req, res) => {
       const auth = requireAuth(req);
       const apiKey = await services.apiKeys.create(
@@ -322,7 +322,7 @@ export function createOrganizationsRouter(services: AppServices): Router {
   router.delete(
     '/:organizationId/api-keys/:apiKeyId',
     validateParams(apiKeyIdParamsSchema),
-    allow(PERMISSIONS.API_KEYS_REVOKE),
+    allow(PERMISSIONS.USERS_MANAGE),
     asyncHandler(async (req, res) => {
       const auth = requireAuth(req);
       const apiKey = await services.apiKeys.revoke(

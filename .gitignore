@@ -37,3 +37,7 @@ Thumbs.db
 
 # Docker volumes (local data)
 infrastructure/docker/data/
+
+# Local object storage root (STORAGE_LOCAL_ROOT default). Object data must
+# never be committed.
+.vaultstack/

@@ -73,11 +73,12 @@ pnpm --filter @vaultstack/dashboard dev
 ```bash
 curl http://localhost:3000/health
 curl http://localhost:3000/ready
-curl -X POST http://localhost:3000/api/v1/auth/register \
+curl -c cookies.txt -X POST http://localhost:3000/api/v1/auth/register \
   -H 'content-type: application/json' \
   -d '{"email":"owner@example.com","password":"password123","name":"Owner","organizationName":"Acme"}'
+curl -b cookies.txt http://localhost:3000/api/v1/auth/me
 ```
 
 ## Next steps
 
-Phase 1 does not include dashboard UI, MinIO uploads, backups, or artifacts. See [testing.md](./testing.md) and [../api/README.md](../api/README.md).
+Phase 2 does not include dashboard UI, MinIO uploads, backups, or artifacts. Auth uses HTTP-only cookies. See [testing.md](./testing.md), [../api/README.md](../api/README.md), and [../security/README.md](../security/README.md).

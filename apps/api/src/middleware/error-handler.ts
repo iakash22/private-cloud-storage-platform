@@ -16,6 +16,9 @@ export function createErrorHandler(logger: Logger) {
     const requestId = req.requestId;
 
     if (error instanceof AppError) {
+      if (error.retryAfterSeconds) {
+        res.setHeader('Retry-After', String(error.retryAfterSeconds));
+      }
       const payload: ApiErrorResponse = {
         error: { code: error.code, message: error.message },
         requestId,

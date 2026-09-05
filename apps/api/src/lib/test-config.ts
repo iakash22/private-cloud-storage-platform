@@ -1,0 +1,34 @@
+import type { EnvConfig } from '@vaultstack/config';
+
+export function createTestConfig(overrides: Partial<EnvConfig> = {}): EnvConfig {
+  return {
+    NODE_ENV: 'test',
+    API_HOST: '127.0.0.1',
+    API_PORT: 3000,
+    LOG_LEVEL: 'error',
+    DATABASE_URL: 'postgresql://vaultstack:vaultstack_test@localhost:5432/vaultstack_test',
+    REDIS_URL: 'redis://localhost:6379',
+    JWT_SECRET: 'phase1-test-jwt-secret-value-32chars',
+    SESSION_TTL_SECONDS: 43_200,
+    LOGIN_RATE_LIMIT_MAX: 5,
+    LOGIN_RATE_LIMIT_WINDOW_SECONDS: 900,
+    API_RATE_LIMIT_MAX: 1_000,
+    API_RATE_LIMIT_WINDOW_SECONDS: 60,
+    MINIO_PORT: 9000,
+    MINIO_USE_SSL: false,
+    STORAGE_DRIVER: 'local',
+    STORAGE_LOCAL_ROOT: '/tmp/vaultstack-test-storage',
+    STORAGE_MAX_OBJECT_SIZE_BYTES: 5 * 1024 * 1024 * 1024,
+    STORAGE_MAX_REQUEST_SIZE_BYTES: 64 * 1024 * 1024,
+    STORAGE_MULTIPART_MIN_PART_SIZE_BYTES: 5 * 1024 * 1024,
+    STORAGE_MULTIPART_MAX_PARTS: 10_000,
+    STORAGE_MAX_METADATA_BYTES: 2048,
+    STORAGE_MAX_KEY_LENGTH: 1024,
+    STORAGE_PRESIGNED_URL_TTL_SECONDS: 900,
+    STORAGE_UPLOAD_TTL_SECONDS: 3600,
+    S3_REGION: 'us-east-1',
+    S3_FORCE_PATH_STYLE: true,
+    S3_GATEWAY_ENABLED: false,
+    ...overrides,
+  };
+}

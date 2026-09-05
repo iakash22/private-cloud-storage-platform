@@ -1,12 +1,26 @@
 # Security
 
-Phase 1 authorization is server-side only.
+Phase 2 authentication is cookie-based. Authorization remains server-side.
 
 ## Authentication
 
-- User access tokens are JWTs signed with `JWT_SECRET` (never sent to the browser as a secret).
-- API keys are shown once at creation. Only a SHA-256 hash is stored.
-- Passwords are hashed with bcrypt. Passwords, tokens, and key hashes are redacted from logs.
+Browser sessions use a random token stored only in an **HTTP-only**, `SameSite=Lax` cookie named `vs_session`. The raw token is hashed (SHA-256) in PostgreSQL. It is never returned in JSON and must not be stored in `localStorage`.
+
+A companion `vs_csrf` cookie (readable by JavaScript) plus the `x-csrf-token` header protect cookie-authenticated `POST`/`PATCH`/`PUT`/`DELETE` requests (double-submit CSRF). Bearer JWT and API keys skip CSRF because they are not sent automatically by the browser.
+
+On login the previous session token, if any, is revoked and a new session is issued (session fixation protection). Logout revokes the session and clears both cookies. Expired or revoked sessions cannot call `/api/v1/auth/me`.
+
+Passwords are hashed with bcrypt. New passwords must be 10–128 characters and include a letter and a number. Disabled users (`User.disabledAt`) cannot log in; their sessions are revoked when they are disabled.
+
+API keys remain available for automation. Only a SHA-256 hash is stored. Keys are shown once at creation.
+
+Passwords, session tokens, CSRF tokens, cookies, and key hashes are redacted from logs.
+
+## Rate limiting
+
+Login is limited per IP + email and per IP (Redis in production, in-memory in tests) to slow brute-force attempts. `/api/v1` also has a general per-IP limit. Limited responses use `429` with `RATE_LIMITED` and a `Retry-After` header.
+
+No extra npm packages were added for cookies or rate limiting: hashing and cookie serialization live in `@vaultstack/auth`, and the limiter is a small Redis/`Map` helper in the API.
 
 ## Authorization
 
@@ -14,7 +28,26 @@ Phase 1 authorization is server-side only.
 
 Cross-organization access is denied even if the same user has that permission in a different organization.
 
-Destructive operations (team delete, API key revoke, role unassign) require the matching permission.
+System roles and their default permissions:
+
+| Role          | Access                                   |
+| ------------- | ---------------------------------------- |
+| SUPER_ADMIN   | Every permission                         |
+| ADMIN         | User management, audit, and read access  |
+| STORAGE_ADMIN | Storage write/share plus artifact read   |
+| BACKUP_ADMIN  | Backup create/restore/delete             |
+| DEVELOPER     | Storage and artifact upload, backup read |
+| VIEWER        | Read-only                                |
+
+Privilege escalation is blocked in the service layer:
+
+- Actors cannot grant permissions they do not have (SUPER_ADMIN excepted).
+- Only SUPER_ADMIN can assign or remove SUPER_ADMIN.
+- The last SUPER_ADMIN cannot be removed or disabled.
+- Users cannot disable themselves.
+- System role names are reserved.
+
+Destructive operations require `users.manage` or `audit.read` as appropriate.
 
 ## Tenancy
 
@@ -22,4 +55,4 @@ Every organization-owned row has `organizationId`. Lookups always filter by that
 
 ## Audit
 
-Register, organization/user/team/role/API-key changes, and role assignment write `AuditLog` rows.
+Register, login, logout, organization/user/team/role/API-key changes, role assignment, and user disable write `AuditLog` rows. Failed logins are not audited (avoids user enumeration in logs); they are rate limited instead.

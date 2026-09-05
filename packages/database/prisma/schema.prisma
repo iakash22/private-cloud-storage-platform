@@ -8,16 +8,36 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
+  id           String    @id @default(cuid())
+  email        String    @unique
   passwordHash String
   name         String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  disabledAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   userRoles UserRole[]
   apiKeys   ApiKey[]
   auditLogs AuditLog[]
+  sessions  Session[]
+}
+
+model Session {
+  id            String    @id @default(cuid())
+  userId        String
+  tokenHash     String    @unique
+  csrfHash      String
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  lastSeenAt    DateTime  @default(now())
+  ipAddress     String?
+  userAgent     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 model Organization {
@@ -32,6 +52,15 @@ model Organization {
   userRoles UserRole[]
   apiKeys   ApiKey[]
   auditLogs AuditLog[]
+
+  storageProviders StorageProvider[]
+  buckets          Bucket[]
+  storageObjects   StorageObject[]
+  objectVersions   ObjectVersion[]
+  uploads          Upload[]
+  multipartUploads MultipartUpload[]
+  storagePolicies  StoragePolicy[]
+  shareLinks       ShareLink[]
 }
 
 model Team {
@@ -136,4 +165,334 @@ model AuditLog {
 
   @@index([organizationId, createdAt])
   @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Storage engine (Phase 3)
+//
+// PostgreSQL holds metadata only. Object bytes live in a StorageProvider
+// (local filesystem by default, or any S3-compatible endpoint).
+//
+// The model is named StorageObject rather than Object because the generated
+// Prisma client would otherwise export a type that shadows the TypeScript
+// `Object` global.
+// ---------------------------------------------------------------------------
+
+enum StorageProviderType {
+  LOCAL_FILESYSTEM
+  S3_COMPATIBLE
+}
+
+enum StorageProviderStatus {
+  ACTIVE
+  DEGRADED
+  DISABLED
+}
+
+enum BucketVersioningStatus {
+  UNVERSIONED
+  ENABLED
+  SUSPENDED
+}
+
+enum ChecksumAlgorithm {
+  NONE
+  MD5
+  SHA256
+  CRC32
+}
+
+enum UploadStatus {
+  PENDING
+  UPLOADING
+  COMPLETING
+  COMPLETED
+  FAILED
+  ABORTED
+  EXPIRED
+}
+
+enum MultipartUploadStatus {
+  INITIATED
+  UPLOADING
+  COMPLETING
+  COMPLETED
+  ABORTED
+  EXPIRED
+}
+
+enum StoragePolicyEffect {
+  ALLOW
+  DENY
+}
+
+model StorageProvider {
+  id             String                @id @default(cuid())
+  organizationId String
+  name           String
+  type           StorageProviderType
+  status         StorageProviderStatus @default(ACTIVE)
+  isDefault      Boolean               @default(false)
+
+  /// Non-secret provider settings only (endpoint, region, path style, root key).
+  /// Credentials are never stored here.
+  config Json @default("{}")
+
+  /// Names the credential set resolved from server-side configuration, so that
+  /// access keys and secret keys stay out of the database entirely.
+  credentialRef String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  buckets          Bucket[]
+  storageObjects   StorageObject[]
+  objectVersions   ObjectVersion[]
+  multipartUploads MultipartUpload[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+model Bucket {
+  id                String                 @id @default(cuid())
+  organizationId    String
+  storageProviderId String
+  name              String
+  region            String?
+  versioning        BucketVersioningStatus @default(UNVERSIONED)
+
+  /// Server-generated physical namespace. Never derived from user input and
+  /// never returned to clients.
+  physicalPrefix String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  storageProvider  StorageProvider   @relation(fields: [storageProviderId], references: [id], onDelete: Restrict)
+  objects          StorageObject[]
+  objectVersions   ObjectVersion[]
+  uploads          Upload[]
+  multipartUploads MultipartUpload[]
+  policies         StoragePolicy[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@index([storageProviderId])
+}
+
+model StorageObject {
+  id                String @id @default(cuid())
+  organizationId    String
+  bucketId          String
+  storageProviderId String
+
+  /// User-controlled object key. Metadata only: it is never used to build a
+  /// filesystem path.
+  key String
+
+  size              BigInt
+  contentType       String            @default("application/octet-stream")
+  etag              String
+  checksumAlgorithm ChecksumAlgorithm @default(SHA256)
+  checksum          String?
+
+  /// Soft pointer to the current ObjectVersion. Kept relation-free to avoid a
+  /// circular foreign key; ObjectVersion.isCurrent is the authoritative flag.
+  currentVersionId String?
+
+  /// Server-generated physical location relative to the provider root.
+  physicalKey String
+
+  metadata Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bucket          Bucket          @relation(fields: [bucketId], references: [id], onDelete: Cascade)
+  storageProvider StorageProvider @relation(fields: [storageProviderId], references: [id], onDelete: Restrict)
+  versions        ObjectVersion[]
+  shareLinks      ShareLink[]
+
+  @@unique([bucketId, key])
+  @@index([organizationId])
+  @@index([bucketId, key])
+  @@index([organizationId, createdAt])
+}
+
+model ObjectVersion {
+  id                String @id @default(cuid())
+  organizationId    String
+  objectId          String
+  bucketId          String
+  storageProviderId String
+
+  /// Provider version identifier where supported, otherwise server-generated.
+  versionId String
+
+  size              BigInt
+  contentType       String            @default("application/octet-stream")
+  etag              String
+  checksumAlgorithm ChecksumAlgorithm @default(SHA256)
+  checksum          String?
+  physicalKey       String
+  isCurrent         Boolean           @default(false)
+  metadata          Json?
+
+  createdAt DateTime @default(now())
+
+  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  object          StorageObject   @relation(fields: [objectId], references: [id], onDelete: Cascade)
+  bucket          Bucket          @relation(fields: [bucketId], references: [id], onDelete: Cascade)
+  storageProvider StorageProvider @relation(fields: [storageProviderId], references: [id], onDelete: Restrict)
+
+  @@unique([objectId, versionId])
+  @@index([organizationId])
+  @@index([objectId, isCurrent])
+}
+
+model Upload {
+  id             String       @id @default(cuid())
+  organizationId String
+  bucketId       String
+  userId         String?
+  key            String
+  status         UploadStatus @default(PENDING)
+
+  contentType  String?
+  declaredSize BigInt?
+
+  /// SHA-256 of the single-use upload token. The plaintext token is returned
+  /// once and never persisted.
+  tokenHash String @unique
+
+  /// Server-generated staging location, relative to the provider root.
+  stagingKey String
+
+  /// Populated for S3-compatible providers that hand out presigned uploads.
+  providerUploadId String?
+
+  receivedSize BigInt?
+  checksum     String?
+  objectId     String?
+  failureCode  String?
+
+  expiresAt   DateTime
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bucket       Bucket       @relation(fields: [bucketId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([bucketId])
+  @@index([status, expiresAt])
+}
+
+model MultipartUpload {
+  id                String                @id @default(cuid())
+  organizationId    String
+  bucketId          String
+  storageProviderId String
+  userId            String?
+  key               String
+  status            MultipartUploadStatus @default(INITIATED)
+
+  contentType String?
+  metadata    Json?
+
+  /// Upload id issued by the underlying provider (S3 upload id, or a
+  /// server-generated id for the local filesystem provider).
+  providerUploadId String
+
+  /// Server-generated staging directory for accumulated parts.
+  stagingKey String
+
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bucket          Bucket          @relation(fields: [bucketId], references: [id], onDelete: Cascade)
+  storageProvider StorageProvider @relation(fields: [storageProviderId], references: [id], onDelete: Restrict)
+  parts           MultipartPart[]
+
+  @@unique([bucketId, providerUploadId])
+  @@index([organizationId])
+  @@index([status, expiresAt])
+}
+
+model MultipartPart {
+  id                String @id @default(cuid())
+  multipartUploadId String
+  partNumber        Int
+  size              BigInt
+  etag              String
+  checksum          String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  multipartUpload MultipartUpload @relation(fields: [multipartUploadId], references: [id], onDelete: Cascade)
+
+  @@unique([multipartUploadId, partNumber])
+  @@index([multipartUploadId])
+}
+
+/// Authorization foundation for later phases. Phase 3 authorizes storage
+/// operations through the existing RBAC permission system; these rows are not
+/// yet consulted at request time.
+model StoragePolicy {
+  id             String              @id @default(cuid())
+  organizationId String
+  bucketId       String?
+  name           String
+  effect         StoragePolicyEffect @default(ALLOW)
+
+  /// Permission keys such as storage.read or storage.upload.
+  actions String[]
+
+  /// Optional object key prefix the policy applies to.
+  keyPrefix String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bucket       Bucket?      @relation(fields: [bucketId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@index([bucketId])
+}
+
+/// Sharing foundation for Phase 8. Intentionally has no anonymous read path in
+/// Phase 3: no route resolves these rows yet.
+model ShareLink {
+  id             String @id @default(cuid())
+  organizationId String
+  objectId       String
+  createdByUserId String?
+
+  /// SHA-256 of the share token. Plaintext tokens are never persisted.
+  tokenHash String @unique
+
+  allowDownload Boolean   @default(true)
+  expiresAt     DateTime?
+  revokedAt     DateTime?
+  lastAccessAt  DateTime?
+  accessCount   Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  object       StorageObject @relation(fields: [objectId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([objectId])
 }

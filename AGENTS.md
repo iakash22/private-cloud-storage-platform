@@ -5,7 +5,7 @@
 3. Backend framework is Express.js.
 4. Do not introduce NestJS.
 5. Use PostgreSQL only for metadata.
-6. Actual files belong in MinIO/S3.
+6. Actual files belong in a StorageProvider (local filesystem or S3-compatible), never in PostgreSQL. Local Linux filesystem storage is the primary production backend; MinIO/S3 are integrations, not requirements.
 7. Never store file binaries in PostgreSQL.
 8. Never expose MinIO admin credentials to frontend.
 9. Never expose S3 secret keys to browser code.
