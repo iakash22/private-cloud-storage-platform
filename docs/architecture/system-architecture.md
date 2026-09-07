@@ -4,18 +4,24 @@ VaultStack is a self-hosted control plane for private cloud storage. It is desig
 
 ## High-level flow
 
-```text
-Browser
-  ↓
-React Dashboard (apps/dashboard) — UI not part of Phase 2
-  ↓
-Express API (apps/api) — /api/v1
-  ↓
-PostgreSQL (Prisma metadata)
-Redis (queues; workers remain skeletons)
+```mermaid
+flowchart TB
+    Browser["Browser"]
+    Dashboard["React Dashboard<br/>(apps/dashboard)"]
+    API["Express API<br/>(apps/api) /api/v1"]
+    PG["PostgreSQL<br/>(Prisma metadata)"]
+    Redis["Redis<br/>(queues)"]
+    Storage["StorageProvider<br/>(local filesystem / S3-compatible)"]
+
+    Browser --> Dashboard
+    Browser --> API
+    Dashboard --> API
+    API --> PG
+    API --> Redis
+    API --> Storage
 ```
 
-MinIO is provisioned in development Compose but is **not used in Phase 1**.
+MinIO may run in development Compose as an optional S3-compatible backend; production defaults to the local filesystem provider.
 
 ## Components
 
@@ -31,6 +37,8 @@ Infrastructure:
 
 - `GET /health` and `GET /api/v1/health` — process liveness
 - `GET /ready` and `GET /api/v1/ready` — PostgreSQL + Redis
+- `GET /api/docs` — Swagger UI (OpenAPI 3)
+- `GET /api/openapi.json` — machine-readable OpenAPI document
 
 Business modules under `apps/api/src/modules/`:
 
@@ -41,6 +49,9 @@ Business modules under `apps/api/src/modules/`:
 - `roles/`
 - `permissions/`
 - `audit/`
+- `storage/` — buckets, objects, uploads, multipart (Phase 3)
+
+See [database schema diagram](./database-schema.md) for the full ER model and [../api/README.md](../api/README.md) for REST endpoints.
 
 ### Workers
 
@@ -52,6 +63,7 @@ Business modules under `apps/api/src/modules/`:
 | ------------------------ | ------------------------------------------------------------- |
 | `@vaultstack/types`      | Shared TypeScript types and permission keys                   |
 | `@vaultstack/validation` | Zod schemas                                                   |
+| `@vaultstack/openapi`    | OpenAPI 3 spec loader for Swagger UI                          |
 | `@vaultstack/config`     | Environment validation                                        |
 | `@vaultstack/logger`     | Structured logging with secret redaction                      |
 | `@vaultstack/api-client` | Typed HTTP client (health)                                    |
@@ -62,9 +74,11 @@ Business modules under `apps/api/src/modules/`:
 
 ## Data storage rules
 
-- **PostgreSQL** stores metadata only (users, organizations, roles, API keys, sessions, audit logs)
+- **PostgreSQL** stores metadata only (users, organizations, roles, API keys, sessions, audit logs, storage metadata)
 - File binaries must **never** be stored in PostgreSQL
-- Object storage (MinIO) is deferred past Phase 1
+- Object bytes live in a **StorageProvider** (local filesystem primary; S3-compatible optional)
+
+See [database-schema.md](./database-schema.md) for entity relationships.
 
 ## Multi-tenancy
 

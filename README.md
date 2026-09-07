@@ -17,6 +17,7 @@ packages/
   ui/                 Shared UI components (shadcn-style primitives)
   types/              Shared TypeScript types
   validation/         Zod schemas
+  openapi/              OpenAPI spec and loader (@vaultstack/openapi)
   api-client/         Typed API client
   config/             Environment validation
   logger/             Structured logging (Pino)
@@ -87,7 +88,8 @@ curl http://localhost:3000/ready
 ```
 
 Dashboard: http://localhost:5173  
-API: http://localhost:3000
+API: http://localhost:3000  
+API docs (Swagger UI): http://localhost:3000/api/docs
 
 ## Scripts
 
@@ -114,6 +116,8 @@ Never commit `.env` or expose secrets to the browser. MinIO secret keys and data
 ## Documentation
 
 - [System architecture](docs/architecture/system-architecture.md)
+- [Database schema diagram](docs/architecture/database-schema.md)
+- [API reference (Markdown)](docs/api/README.md) — also at [http://localhost:3000/api/docs](http://localhost:3000/api/docs) when the API is running
 - [Development setup](docs/development/setup.md)
 - [Testing](docs/development/testing.md)
 

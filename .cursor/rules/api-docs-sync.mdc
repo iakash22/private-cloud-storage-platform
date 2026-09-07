@@ -1,0 +1,42 @@
+---
+description: Keep API docs, OpenAPI spec, and database schema diagram in sync with code changes
+globs: apps/api/**/*.ts,packages/validation/**/*.ts,packages/database/prisma/**/*
+alwaysApply: false
+---
+
+# Documentation and diagram sync
+
+When you add, remove, or change API or database behavior, update the matching documentation in the **same change**.
+
+## API changes
+
+Touch these files together:
+
+| Change | Update |
+| --- | --- |
+| New/changed route in `apps/api/src/modules/**` | `packages/openapi/spec/openapi.yaml` (path, method, params, schemas, security) |
+| New/changed Zod schema in `@vaultstack/validation` used by an API | Matching `components/schemas` in `openapi.yaml` |
+| Auth, CSRF, or org-context behavior | `openapi.yaml` security schemes + `docs/api/README.md` Authentication section |
+| New error codes | `openapi.yaml` `ApiError` enum + `docs/api/README.md` error section |
+
+After editing the spec, verify:
+
+- `pnpm --filter @vaultstack/openapi test`
+- Interactive docs still load at `http://localhost:3000/api/docs` when the API is running
+
+## Database schema changes
+
+When editing `packages/database/prisma/schema.prisma`:
+
+1. Add or update the Prisma migration.
+2. Update `docs/architecture/database-schema.md`:
+   - Mermaid `erDiagram` entities and relationships
+   - Domain groups table if a new model domain appears
+   - Cascade notes if `onDelete` behavior changes
+
+## Checklist before finishing
+
+- [ ] OpenAPI paths match registered Express routes
+- [ ] Markdown API reference (`docs/api/README.md`) matches OpenAPI where both exist
+- [ ] ER diagram reflects every FK relation in `schema.prisma`
+- [ ] New npm deps documented in `docs/development/dependencies.md`

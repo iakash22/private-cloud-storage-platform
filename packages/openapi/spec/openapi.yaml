@@ -1,0 +1,1333 @@
+openapi: 3.0.3
+info:
+  title: VaultStack API
+  version: 0.3.0
+  description: |
+    Self-hosted private cloud storage management platform.
+
+    Business APIs are served under `/api/v1`. Infrastructure probes are at `/health` and `/ready`.
+
+    **Browser clients** use HTTP-only session cookies (`vs_session`, `vs_csrf`). Mutating requests must send `x-csrf-token`.
+
+    **Programmatic clients** may use `Authorization: Bearer <api-key>`.
+
+    **Organization context** for storage routes is resolved server-side from API key membership, the `vs_org` cookie, or `x-vaultstack-organization` header.
+
+    Markdown reference: [docs/api/README.md](../../../docs/api/README.md)
+  contact:
+    name: VaultStack
+  license:
+    name: Proprietary
+
+servers:
+  - url: http://localhost:3000
+    description: Local development
+
+tags:
+  - name: Health
+    description: Liveness and readiness probes
+  - name: Auth
+    description: Registration, login, sessions, organization selector
+  - name: Organizations
+    description: Organization CRUD
+  - name: Users
+    description: Organization user management
+  - name: Roles
+    description: RBAC roles and assignments
+  - name: Teams
+    description: Organization teams
+  - name: Permissions
+    description: Global permission catalog
+  - name: API Keys
+    description: Hashed automation keys
+  - name: Audit
+    description: Organization audit logs
+  - name: Storage
+    description: Buckets, objects, uploads (metadata control plane)
+  - name: Storage Transfer
+    description: Byte upload/download via scoped tokens
+  - name: S3 Gateway
+    description: Inbound S3-compatible API (when enabled)
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Process liveness
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /ready:
+    get:
+      tags: [Health]
+      summary: Dependency readiness
+      operationId: getReady
+      responses:
+        '200':
+          description: Dependencies healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+        '503':
+          description: One or more dependencies unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+
+  /api/v1/health:
+    get:
+      tags: [Health]
+      summary: Process liveness (v1 mirror)
+      operationId: getHealthV1
+      responses:
+        '200':
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/v1/ready:
+    get:
+      tags: [Health]
+      summary: Dependency readiness (v1 mirror)
+      operationId: getReadyV1
+      responses:
+        '200':
+          description: Dependencies healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+
+  /api/v1/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register SUPER_ADMIN user and organization
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterBody'
+      responses:
+        '201':
+          description: User and organization created; session cookies set
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Start session
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginBody'
+      responses:
+        '200':
+          description: Session cookies set
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitedError'
+
+  /api/v1/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Revoke current session
+      operationId: logout
+      security:
+        - sessionCookie: []
+      responses:
+        '204':
+          description: Session revoked
+
+  /api/v1/auth/me:
+    get:
+      tags: [Auth]
+      summary: Current user and memberships
+      operationId: getMe
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Authenticated user profile
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /api/v1/auth/organization:
+    post:
+      tags: [Auth]
+      summary: Set active organization selector cookie
+      operationId: selectOrganization
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SelectOrganizationBody'
+      responses:
+        '200':
+          description: Organization selector updated
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+  /api/v1/organizations:
+    get:
+      tags: [Organizations]
+      summary: List organizations for current user
+      operationId: listOrganizations
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Organization list
+    post:
+      tags: [Organizations]
+      summary: Create organization
+      operationId: createOrganization
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrganizationBody'
+      responses:
+        '201':
+          description: Organization created
+
+  /api/v1/organizations/{organizationId}:
+    parameters:
+      - $ref: '#/components/parameters/organizationId'
+    get:
+      tags: [Organizations]
+      summary: Get organization
+      operationId: getOrganization
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Organization details
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+    patch:
+      tags: [Organizations]
+      summary: Update organization
+      operationId: updateOrganization
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOrganizationBody'
+      responses:
+        '200':
+          description: Organization updated
+
+  /api/v1/organizations/{organizationId}/users:
+    parameters:
+      - $ref: '#/components/parameters/organizationId'
+    get:
+      tags: [Users]
+      summary: List users
+      operationId: listUsers
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: User list
+    post:
+      tags: [Users]
+      summary: Create user
+      operationId: createUser
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserBody'
+      responses:
+        '201':
+          description: User created
+
+  /api/v1/organizations/{organizationId}/users/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/organizationId'
+      - $ref: '#/components/parameters/userId'
+    get:
+      tags: [Users]
+      summary: Get user
+      operationId: getUser
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: User details
+    patch:
+      tags: [Users]
+      summary: Update user
+      operationId: updateUser
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserBody'
+      responses:
+        '200':
+          description: User updated
+
+  /api/v1/organizations/{organizationId}/roles:
+    parameters:
+      - $ref: '#/components/parameters/organizationId'
+    get:
+      tags: [Roles]
+      summary: List roles
+      operationId: listRoles
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Role list
+    post:
+      tags: [Roles]
+      summary: Create role
+      operationId: createRole
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoleBody'
+      responses:
+        '201':
+          description: Role created
+
+  /api/v1/organizations/{organizationId}/roles/{roleId}:
+    parameters:
+      - $ref: '#/components/parameters/organizationId'
+      - $ref: '#/components/parameters/roleId'
+    get:
+      tags: [Roles]
+      summary: Get role
+      operationId: getRole
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Role details
+
+  /api/v1/organizations/{organizationId}/users/{userId}/roles:
+    parameters:
+      - $ref: '#/components/parameters/organizationId'
+      - $ref: '#/components/parameters/userId'
+    post:
+      tags: [Roles]
+      summary: Assign role to user
+      operationId: assignRole
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignRoleBody'
+      responses:
+        '201':
+          description: Role assigned
+
+  /api/v1/organizations/{organizationId}/users/{userId}/roles/{roleId}:
+    parameters:
+      - $ref: '#/components/parameters/organizationId'
+      - $ref: '#/components/parameters/userId'
+      - $ref: '#/components/parameters/roleId'
+    delete:
+      tags: [Roles]
+      summary: Remove role from user
+      operationId: removeRole
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      responses:
+        '204':
+          description: Role removed
+
+  /api/v1/organizations/{organizationId}/teams:
+    parameters:
+      - $ref: '#/components/parameters/organizationId'
+    get:
+      tags: [Teams]
+      summary: List teams
+      operationId: listTeams
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Team list
+    post:
+      tags: [Teams]
+      summary: Create team
+      operationId: createTeam
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTeamBody'
+      responses:
+        '201':
+          description: Team created
+
+  /api/v1/organizations/{organizationId}/teams/{teamId}:
+    parameters:
+      - $ref: '#/components/parameters/organizationId'
+      - $ref: '#/components/parameters/teamId'
+    get:
+      tags: [Teams]
+      summary: Get team
+      operationId: getTeam
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Team details
+    patch:
+      tags: [Teams]
+      summary: Update team
+      operationId: updateTeam
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTeamBody'
+      responses:
+        '200':
+          description: Team updated
+    delete:
+      tags: [Teams]
+      summary: Delete team
+      operationId: deleteTeam
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      responses:
+        '204':
+          description: Team deleted
+
+  /api/v1/permissions:
+    get:
+      tags: [Permissions]
+      summary: List permission catalog
+      operationId: listPermissions
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Permission list
+
+  /api/v1/organizations/{organizationId}/api-keys:
+    parameters:
+      - $ref: '#/components/parameters/organizationId'
+    get:
+      tags: [API Keys]
+      summary: List API keys
+      operationId: listApiKeys
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: API key list (secrets never returned)
+    post:
+      tags: [API Keys]
+      summary: Create API key
+      operationId: createApiKey
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateApiKeyBody'
+      responses:
+        '201':
+          description: API key created; plaintext shown once
+
+  /api/v1/organizations/{organizationId}/api-keys/{apiKeyId}:
+    parameters:
+      - $ref: '#/components/parameters/organizationId'
+      - $ref: '#/components/parameters/apiKeyId'
+    delete:
+      tags: [API Keys]
+      summary: Revoke API key
+      operationId: revokeApiKey
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      responses:
+        '204':
+          description: API key revoked
+
+  /api/v1/organizations/{organizationId}/audit-logs:
+    parameters:
+      - $ref: '#/components/parameters/organizationId'
+    get:
+      tags: [Audit]
+      summary: List audit logs
+      operationId: listAuditLogs
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: Audit log page
+
+  /api/v1/storage/buckets:
+    get:
+      tags: [Storage]
+      summary: List buckets
+      operationId: listBuckets
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Bucket list
+    post:
+      tags: [Storage]
+      summary: Create bucket
+      operationId: createBucket
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBucketBody'
+      responses:
+        '201':
+          description: Bucket created
+
+  /api/v1/storage/buckets/{bucketId}:
+    parameters:
+      - $ref: '#/components/parameters/bucketId'
+    get:
+      tags: [Storage]
+      summary: Get bucket
+      operationId: getBucket
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Bucket metadata
+    delete:
+      tags: [Storage]
+      summary: Delete empty bucket
+      operationId: deleteBucket
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      responses:
+        '204':
+          description: Bucket deleted
+
+  /api/v1/storage/buckets/{bucketId}/objects:
+    parameters:
+      - $ref: '#/components/parameters/bucketId'
+    get:
+      tags: [Storage]
+      summary: List objects in bucket
+      operationId: listObjects
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      parameters:
+        - name: prefix
+          in: query
+          schema:
+            type: string
+        - name: delimiter
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Object listing
+
+  /api/v1/storage/objects/{objectId}:
+    parameters:
+      - $ref: '#/components/parameters/objectId'
+    get:
+      tags: [Storage]
+      summary: Get object metadata
+      operationId: getObject
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Object metadata (no physical keys)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageObject'
+    delete:
+      tags: [Storage]
+      summary: Delete object
+      operationId: deleteObject
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      responses:
+        '204':
+          description: Object deleted
+
+  /api/v1/storage/objects/{objectId}/download-url:
+    parameters:
+      - $ref: '#/components/parameters/objectId'
+    post:
+      tags: [Storage]
+      summary: Create scoped download URL
+      operationId: createDownloadUrl
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Short-lived download URL with token
+
+  /api/v1/storage/objects/{objectId}/copy:
+    parameters:
+      - $ref: '#/components/parameters/objectId'
+    post:
+      tags: [Storage]
+      summary: Copy object
+      operationId: copyObject
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ObjectDestinationBody'
+      responses:
+        '201':
+          description: Object copied
+
+  /api/v1/storage/objects/{objectId}/move:
+    parameters:
+      - $ref: '#/components/parameters/objectId'
+    post:
+      tags: [Storage]
+      summary: Move object
+      operationId: moveObject
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ObjectDestinationBody'
+      responses:
+        '200':
+          description: Object moved
+
+  /api/v1/storage/uploads/initiate:
+    post:
+      tags: [Storage]
+      summary: Initiate single-part upload
+      operationId: initiateUpload
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InitiateUploadBody'
+      responses:
+        '201':
+          description: Upload initiated with scoped token
+
+  /api/v1/storage/uploads/{uploadId}/complete:
+    parameters:
+      - $ref: '#/components/parameters/uploadId'
+    post:
+      tags: [Storage]
+      summary: Complete upload
+      operationId: completeUpload
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteUploadBody'
+      responses:
+        '200':
+          description: Upload finalized as object
+
+  /api/v1/storage/uploads/{uploadId}:
+    parameters:
+      - $ref: '#/components/parameters/uploadId'
+    delete:
+      tags: [Storage]
+      summary: Abort upload
+      operationId: abortUpload
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      responses:
+        '204':
+          description: Upload aborted
+
+  /api/v1/storage/multipart-uploads:
+    post:
+      tags: [Storage]
+      summary: Initiate multipart upload
+      operationId: initiateMultipartUpload
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InitiateMultipartBody'
+      responses:
+        '201':
+          description: Multipart upload initiated
+
+  /api/v1/storage/multipart-uploads/{uploadId}/parts:
+    parameters:
+      - $ref: '#/components/parameters/uploadId'
+      - name: partNumber
+        in: query
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 10000
+    put:
+      tags: [Storage]
+      summary: Upload multipart part bytes
+      operationId: uploadMultipartPart
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Part stored
+
+  /api/v1/storage/multipart-uploads/{uploadId}/complete:
+    parameters:
+      - $ref: '#/components/parameters/uploadId'
+    post:
+      tags: [Storage]
+      summary: Complete multipart upload
+      operationId: completeMultipartUpload
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteMultipartBody'
+      responses:
+        '200':
+          description: Multipart upload finalized
+
+  /api/v1/storage/multipart-uploads/{uploadId}:
+    parameters:
+      - $ref: '#/components/parameters/uploadId'
+    delete:
+      tags: [Storage]
+      summary: Abort multipart upload
+      operationId: abortMultipartUpload
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      responses:
+        '204':
+          description: Multipart upload aborted
+
+  /api/v1/storage/objects/{objectId}/content:
+    parameters:
+      - $ref: '#/components/parameters/objectId'
+      - name: token
+        in: query
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Storage Transfer]
+      summary: Download object bytes
+      operationId: downloadObjectContent
+      description: Authorized by scoped token, not session cookie.
+      responses:
+        '200':
+          description: Object bytes
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '206':
+          description: Partial content (Range supported)
+
+  /api/v1/storage/uploads/{uploadId}/content:
+    parameters:
+      - $ref: '#/components/parameters/uploadId'
+      - name: token
+        in: query
+        required: true
+        schema:
+          type: string
+    put:
+      tags: [Storage Transfer]
+      summary: Upload object bytes
+      operationId: uploadObjectContent
+      description: Authorized by scoped token, not session cookie.
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Bytes received
+
+  /api/v1/s3/{proxy+}:
+    parameters:
+      - name: proxy
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [S3 Gateway]
+      summary: S3 GET operations (when gateway enabled)
+      operationId: s3Get
+      responses:
+        '501':
+          description: Not implemented in current phase
+    put:
+      tags: [S3 Gateway]
+      summary: S3 PUT operations
+      operationId: s3Put
+      responses:
+        '501':
+          description: Not implemented in current phase
+    post:
+      tags: [S3 Gateway]
+      summary: S3 POST operations
+      operationId: s3Post
+      responses:
+        '501':
+          description: Not implemented in current phase
+    delete:
+      tags: [S3 Gateway]
+      summary: S3 DELETE operations
+      operationId: s3Delete
+      responses:
+        '501':
+          description: Not implemented in current phase
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: vs_session
+      description: HTTP-only session cookie set by login/register
+    csrfHeader:
+      type: apiKey
+      in: header
+      name: x-csrf-token
+      description: Required on mutating cookie-authenticated requests
+    bearerApiKey:
+      type: http
+      scheme: bearer
+      bearerFormat: API key
+      description: Organization-scoped automation key
+    organizationHeader:
+      type: apiKey
+      in: header
+      name: x-vaultstack-organization
+      description: Optional organization selector for multi-org session users
+
+  parameters:
+    organizationId:
+      name: organizationId
+      in: path
+      required: true
+      schema:
+        type: string
+    userId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+    roleId:
+      name: roleId
+      in: path
+      required: true
+      schema:
+        type: string
+    teamId:
+      name: teamId
+      in: path
+      required: true
+      schema:
+        type: string
+    apiKeyId:
+      name: apiKeyId
+      in: path
+      required: true
+      schema:
+        type: string
+    bucketId:
+      name: bucketId
+      in: path
+      required: true
+      schema:
+        type: string
+    objectId:
+      name: objectId
+      in: path
+      required: true
+      schema:
+        type: string
+    uploadId:
+      name: uploadId
+      in: path
+      required: true
+      schema:
+        type: string
+
+  responses:
+    ValidationError:
+      description: Request failed Zod validation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    UnauthorizedError:
+      description: Missing or invalid credentials
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    ForbiddenError:
+      description: Authenticated but not permitted
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    ConflictError:
+      description: Resource conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    RateLimitedError:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+
+  schemas:
+    ApiError:
+      type: object
+      required: [error, requestId]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - VALIDATION_ERROR
+                - UNAUTHORIZED
+                - FORBIDDEN
+                - NOT_FOUND
+                - CONFLICT
+                - RATE_LIMITED
+                - INTERNAL_ERROR
+                - STORAGE_BUCKET_NOT_FOUND
+                - STORAGE_OBJECT_NOT_FOUND
+                - STORAGE_ACCESS_DENIED
+            message:
+              type: string
+        requestId:
+          type: string
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, error]
+        service:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        uptime:
+          type: number
+
+    ReadinessResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, error]
+        service:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        checks:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              status:
+                type: string
+                enum: [ok, degraded, error]
+              message:
+                type: string
+
+    RegisterBody:
+      type: object
+      required: [email, password, name, organizationName]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 10
+          maxLength: 128
+        name:
+          type: string
+        organizationName:
+          type: string
+
+    LoginBody:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    SelectOrganizationBody:
+      type: object
+      required: [organizationId]
+      properties:
+        organizationId:
+          type: string
+
+    CreateOrganizationBody:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+
+    UpdateOrganizationBody:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+
+    CreateUserBody:
+      type: object
+      required: [email, password, name]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        name:
+          type: string
+        roleId:
+          type: string
+
+    UpdateUserBody:
+      type: object
+      properties:
+        name:
+          type: string
+        password:
+          type: string
+        disabled:
+          type: boolean
+
+    CreateTeamBody:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+
+    UpdateTeamBody:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+
+    CreateRoleBody:
+      type: object
+      required: [name, permissions]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+          minItems: 1
+
+    AssignRoleBody:
+      type: object
+      required: [roleId]
+      properties:
+        roleId:
+          type: string
+
+    CreateApiKeyBody:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+
+    CreateBucketBody:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 63
+        region:
+          type: string
+        versioning:
+          type: string
+          enum: [UNVERSIONED, ENABLED]
+
+    StorageObject:
+      type: object
+      properties:
+        id:
+          type: string
+        bucketId:
+          type: string
+        key:
+          type: string
+        size:
+          type: integer
+          format: int64
+        contentType:
+          type: string
+        etag:
+          type: string
+        checksum:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    InitiateUploadBody:
+      type: object
+      required: [bucketId, key]
+      properties:
+        bucketId:
+          type: string
+        key:
+          type: string
+        contentType:
+          type: string
+        size:
+          type: integer
+
+    CompleteUploadBody:
+      type: object
+      properties:
+        checksumSha256:
+          type: string
+          pattern: '^[a-fA-F0-9]{64}$'
+
+    ObjectDestinationBody:
+      type: object
+      required: [destinationBucketId, destinationKey]
+      properties:
+        destinationBucketId:
+          type: string
+        destinationKey:
+          type: string
+
+    InitiateMultipartBody:
+      type: object
+      required: [bucketId, key]
+      properties:
+        bucketId:
+          type: string
+        key:
+          type: string
+        contentType:
+          type: string
+
+    CompleteMultipartBody:
+      type: object
+      required: [parts]
+      properties:
+        parts:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [partNumber, etag]
+            properties:
+              partNumber:
+                type: integer
+              etag:
+                type: string

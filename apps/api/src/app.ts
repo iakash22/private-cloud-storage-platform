@@ -12,6 +12,7 @@ import {
   type RateLimiter,
 } from './lib/rate-limit.js';
 import { getHealthHandler, getReadyHandler } from './routes/health.js';
+import { createOpenApiRouter } from './routes/openapi.js';
 import { createV1Router } from './routes/v1.js';
 
 export interface CreateAppOptions {
@@ -65,6 +66,8 @@ export function createApp(options: CreateAppOptions): Express {
   app.get('/ready', readyHandler);
   app.get('/api/v1/health', healthHandler);
   app.get('/api/v1/ready', readyHandler);
+
+  app.use('/api', createOpenApiRouter());
 
   app.use('/api/v1', createV1Router(options.prisma, options.config, rateLimiter, options.logger));
 

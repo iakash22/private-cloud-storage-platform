@@ -4,6 +4,17 @@ All business APIs are served under `/api/v1`.
 
 Infrastructure probes remain at `/health` and `/ready` (also mirrored at `/api/v1/health` and `/api/v1/ready`).
 
+## Interactive docs (OpenAPI / Swagger)
+
+When the API is running:
+
+| URL | Description |
+| --- | --- |
+| [http://localhost:3000/api/docs](http://localhost:3000/api/docs) | Swagger UI — browse and try endpoints |
+| [http://localhost:3000/api/openapi.json](http://localhost:3000/api/openapi.json) | OpenAPI 3.0 JSON document |
+
+The machine-readable spec lives at [`packages/openapi/spec/openapi.yaml`](../../packages/openapi/spec/openapi.yaml). Keep it in sync with routes and Zod schemas (see [`AGENTS.md`](../../AGENTS.md) rules 21–22).
+
 ## Error envelope
 
 Every error includes a request id:

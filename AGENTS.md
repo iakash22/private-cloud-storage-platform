@@ -20,3 +20,18 @@
 18. All APIs require validation using Zod.
 19. Do not bypass TypeScript with any unless justified.
 20. Do not introduce new dependencies without documenting why.
+21. When changing API routes, request/response shapes, or auth behavior, update `packages/openapi/spec/openapi.yaml`, `docs/api/README.md`, and any affected examples in the same change.
+22. When changing `packages/database/prisma/schema.prisma` (models, fields, or relations), update `docs/architecture/database-schema.md` in the same change.
+21. READ /Goal.md
+
+VaultStack Storage Engine
+        │
+        ├── LocalFilesystemStorageProvider  ← PRIMARY
+        │
+        └── S3CompatibleStorageProvider
+                ├── MinIO
+                ├── AWS S3
+                ├── Cloudflare R2
+                ├── Backblaze B2
+                ├── Wasabi
+                └── other S3-compatible systems
