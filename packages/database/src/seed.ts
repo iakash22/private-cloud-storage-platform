@@ -1,3 +1,6 @@
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { loadRootEnv } from './load-root-env.js';
 import { ALL_PERMISSIONS } from '@vaultstack/types';
 import { PrismaClient } from '@prisma/client';
 import { createPrismaClient } from './client.js';
@@ -25,6 +28,7 @@ export async function seedDatabase(prisma: PrismaClient): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  loadRootEnv(join(dirname(fileURLToPath(import.meta.url)), '..'));
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
     throw new Error('DATABASE_URL is required to seed the database');

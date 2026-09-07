@@ -94,8 +94,15 @@ function findEnvFile(startDir: string = process.cwd()): string {
   }
 }
 
-export function loadEnv(options: { path?: string } = {}): EnvConfig {
-  const envPath = options.path ?? findEnvFile();
+/** Load `.env` into `process.env` without validation (for tools that only need raw vars). */
+export function loadEnvFile(options: { startDir?: string; path?: string } = {}): string {
+  const envPath = options.path ?? findEnvFile(options.startDir ?? process.cwd());
+  loadDotenv({ path: envPath });
+  return envPath;
+}
+
+export function loadEnv(options: { path?: string; startDir?: string } = {}): EnvConfig {
+  const envPath = options.path ?? findEnvFile(options.startDir ?? process.cwd());
   loadDotenv({ path: envPath });
 
   const result = envSchema.safeParse(process.env);
@@ -111,4 +118,4 @@ export function loadEnv(options: { path?: string } = {}): EnvConfig {
   return result.data;
 }
 
-export { envSchema };
+export { envSchema, findEnvFile };

@@ -11,6 +11,8 @@ fi
 
 pnpm install
 pnpm docker:up
+pnpm db:migrate
+pnpm db:seed
 
-echo "VaultStack development infrastructure is starting."
-echo "Run 'pnpm dev' after Docker services are healthy."
+echo "VaultStack development infrastructure is ready."
+echo "Run 'pnpm build' then 'pnpm dev' to start the API and dashboard."

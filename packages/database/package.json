@@ -23,10 +23,6 @@
     "migrate:dev": "prisma migrate dev",
     "seed": "tsx src/seed.ts"
   },
-  "prisma": {
-    "schema": "prisma/schema.prisma",
-    "seed": "tsx src/seed.ts"
-  },
   "dependencies": {
     "@prisma/client": "^6.1.0",
     "@vaultstack/types": "workspace:*"

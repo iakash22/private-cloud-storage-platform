@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { loadEnv } from './index.js';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { loadEnv, loadEnvFile } from './index.js';
 
 const originalEnv = { ...process.env };
 
@@ -30,5 +33,15 @@ describe('@vaultstack/config', () => {
     };
 
     expect(() => loadEnv({ path: '.env.missing' })).toThrow(/Invalid environment configuration/);
+  });
+
+  it('loadEnvFile walks up to a monorepo root .env', () => {
+    const root = mkdtempSync(join(tmpdir(), 'vaultstack-config-env-'));
+    const nested = join(root, 'apps', 'api');
+    writeFileSync(join(root, '.env'), 'DATABASE_URL=postgresql://from-root\n', 'utf8');
+
+    delete process.env.DATABASE_URL;
+    expect(loadEnvFile({ startDir: nested })).toBe(join(root, '.env'));
+    expect(process.env.DATABASE_URL).toBe('postgresql://from-root');
   });
 });
