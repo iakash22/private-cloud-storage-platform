@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   apiErrorResponseSchema,
+  completeMultipartBodySchema,
+  confirmMultipartPartBodySchema,
   healthResponseSchema,
+  initiateMultipartBodySchema,
+  listMultipartSessionsQuerySchema,
+  multipartPartParamsSchema,
+  multipartPartQuerySchema,
   readinessResponseSchema,
   registerBodySchema,
 } from './index.js';
@@ -66,5 +72,74 @@ describe('@vaultstack/validation', () => {
     });
 
     expect(result.success).toBe(true);
+  });
+
+  it('requires a nonnegative declared size for multipart initiation', () => {
+    expect(
+      initiateMultipartBodySchema.safeParse({
+        bucketId: 'bucket-1',
+        key: 'archive.tar',
+      }).success,
+    ).toBe(false);
+    expect(
+      initiateMultipartBodySchema.safeParse({
+        bucketId: 'bucket-1',
+        key: 'archive.tar',
+        size: -1,
+      }).success,
+    ).toBe(false);
+    expect(
+      initiateMultipartBodySchema.safeParse({
+        bucketId: 'bucket-1',
+        key: 'empty',
+        size: 0,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('validates multipart part addressing and direct confirmation', () => {
+    expect(
+      multipartPartParamsSchema.parse({ uploadId: 'upload-1', partNumber: '2' }),
+    ).toEqual({ uploadId: 'upload-1', partNumber: 2 });
+    expect(multipartPartQuerySchema.safeParse({ partNumber: 10_001 }).success).toBe(false);
+
+    const checksumSha256 = 'a'.repeat(64);
+    expect(
+      confirmMultipartPartBodySchema.safeParse({
+        etag: 'part-etag',
+        size: 1024,
+        checksumSha256,
+      }).success,
+    ).toBe(true);
+    expect(
+      confirmMultipartPartBodySchema.safeParse({
+        etag: 'part-etag',
+        size: 1024,
+        checksumSha256: 'not-a-sha256',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('keeps multipart completion compatible and validates session listing', () => {
+    expect(
+      completeMultipartBodySchema.safeParse({
+        parts: [{ partNumber: 1, etag: 'part-etag' }],
+      }).success,
+    ).toBe(true);
+
+    expect(
+      listMultipartSessionsQuerySchema.parse({
+        status: 'UPLOADING',
+        limit: '25',
+        cursor: 'session-25',
+      }),
+    ).toEqual({
+      status: 'UPLOADING',
+      limit: 25,
+      cursor: 'session-25',
+    });
+    expect(
+      listMultipartSessionsQuerySchema.safeParse({ status: 'FAILED' }).success,
+    ).toBe(false);
   });
 });

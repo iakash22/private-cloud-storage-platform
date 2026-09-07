@@ -353,6 +353,7 @@ export class S3CompatibleStorageProvider implements StorageProvider {
       partNumber: input.partNumber,
       size: totals.size,
       etag: normalizeEtag(response.ETag ?? totals.md5),
+      checksum: totals.sha256,
     };
   }
 

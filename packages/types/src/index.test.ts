@@ -6,6 +6,8 @@ import {
   SYSTEM_ROLE_PERMISSIONS,
   SYSTEM_ROLES,
   type HealthResponse,
+  type MultipartPartTransferDescriptor,
+  type PublicMultipartSessionDetail,
 } from './index.js';
 
 describe('@vaultstack/types', () => {
@@ -38,5 +40,45 @@ describe('@vaultstack/types', () => {
     ]);
     expect(SYSTEM_ROLE_PERMISSIONS.SUPER_ADMIN).toEqual(ALL_PERMISSIONS);
     expect(SYSTEM_ROLE_PERMISSIONS.VIEWER).not.toContain(PERMISSIONS.USERS_MANAGE);
+  });
+
+  it('exposes browser-safe multipart session contracts', () => {
+    const transfer: MultipartPartTransferDescriptor = {
+      transport: 'DIRECT',
+      url: 'https://storage.example.test/presigned-part',
+      method: 'PUT',
+      headers: { 'x-checksum-sha256': 'a'.repeat(64) },
+      expiresAt: '2026-09-08T02:00:00.000Z',
+      partNumber: 1,
+    };
+    const session: PublicMultipartSessionDetail = {
+      id: 'upload-1',
+      organizationId: 'organization-1',
+      bucketId: 'bucket-1',
+      key: 'archive.tar',
+      status: 'UPLOADING',
+      contentType: 'application/x-tar',
+      declaredSize: 1024,
+      expiresAt: '2026-09-09T00:00:00.000Z',
+      lastActivityAt: '2026-09-08T01:30:00.000Z',
+      completedAt: null,
+      failureCode: null,
+      createdAt: '2026-09-08T01:00:00.000Z',
+      updatedAt: '2026-09-08T01:30:00.000Z',
+      parts: [
+        {
+          partNumber: 1,
+          size: 1024,
+          etag: 'part-etag',
+          checksumSha256: 'a'.repeat(64),
+          createdAt: '2026-09-08T01:30:00.000Z',
+          updatedAt: '2026-09-08T01:30:00.000Z',
+        },
+      ],
+    };
+
+    expect(transfer).not.toHaveProperty('credentials');
+    expect(transfer.method).toBe('PUT');
+    expect(session.parts[0]?.partNumber).toBe(1);
   });
 });

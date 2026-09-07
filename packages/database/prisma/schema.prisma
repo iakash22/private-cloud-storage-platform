@@ -404,8 +404,9 @@ model MultipartUpload {
   key               String
   status            MultipartUploadStatus @default(INITIATED)
 
-  contentType String?
-  metadata    Json?
+  contentType  String?
+  declaredSize BigInt?
+  metadata     Json?
 
   /// Upload id issued by the underlying provider (S3 upload id, or a
   /// server-generated id for the local filesystem provider).
@@ -414,9 +415,12 @@ model MultipartUpload {
   /// Server-generated staging directory for accumulated parts.
   stagingKey String
 
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  expiresAt      DateTime
+  lastActivityAt DateTime  @default(now())
+  completedAt    DateTime?
+  failureCode    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   bucket          Bucket          @relation(fields: [bucketId], references: [id], onDelete: Cascade)
@@ -425,6 +429,7 @@ model MultipartUpload {
 
   @@unique([bucketId, providerUploadId])
   @@index([organizationId])
+  @@index([organizationId, status, lastActivityAt])
   @@index([status, expiresAt])
 }
 

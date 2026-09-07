@@ -261,6 +261,26 @@ export const UPLOAD_STATUSES = {
 
 export type UploadStatusName = (typeof UPLOAD_STATUSES)[keyof typeof UPLOAD_STATUSES];
 
+export const MULTIPART_UPLOAD_STATUSES = {
+  INITIATED: 'INITIATED',
+  UPLOADING: 'UPLOADING',
+  COMPLETING: 'COMPLETING',
+  COMPLETED: 'COMPLETED',
+  ABORTED: 'ABORTED',
+  EXPIRED: 'EXPIRED',
+} as const;
+
+export type MultipartUploadStatusName =
+  (typeof MULTIPART_UPLOAD_STATUSES)[keyof typeof MULTIPART_UPLOAD_STATUSES];
+
+export const MULTIPART_TRANSFER_TRANSPORTS = {
+  DIRECT: 'DIRECT',
+  VAULTSTACK: 'VAULTSTACK',
+} as const;
+
+export type MultipartTransferTransport =
+  (typeof MULTIPART_TRANSFER_TRANSPORTS)[keyof typeof MULTIPART_TRANSFER_TRANSPORTS];
+
 /**
  * Provider metadata safe to serialize to a browser. Credentials and physical
  * filesystem locations are deliberately absent.
@@ -334,6 +354,54 @@ export interface InitiatedUpload {
   method: 'PUT';
   expiresAt: string;
   headers?: Record<string, string>;
+}
+
+/**
+ * Browser-safe instructions for transferring one multipart part. A DIRECT
+ * descriptor may contain a short-lived presigned URL, but never provider
+ * credentials. VAULTSTACK sends the bytes through the API.
+ */
+export interface MultipartPartTransferDescriptor {
+  transport: MultipartTransferTransport;
+  url: string;
+  method: 'PUT';
+  headers: Record<string, string>;
+  expiresAt: string;
+  partNumber: number;
+}
+
+export interface PublicMultipartPart {
+  partNumber: number;
+  size: number;
+  etag: string;
+  checksumSha256: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PublicMultipartSession {
+  id: string;
+  organizationId: string;
+  bucketId: string;
+  key: string;
+  status: MultipartUploadStatusName;
+  contentType: string | null;
+  declaredSize: number | null;
+  expiresAt: string;
+  lastActivityAt: string;
+  completedAt: string | null;
+  failureCode: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PublicMultipartSessionDetail extends PublicMultipartSession {
+  parts: PublicMultipartPart[];
+}
+
+export interface PublicMultipartSessionListPage {
+  sessions: PublicMultipartSession[];
+  nextCursor: string | null;
 }
 
 export interface AuthSessionPayload {

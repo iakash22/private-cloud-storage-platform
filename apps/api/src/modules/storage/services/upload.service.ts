@@ -2,7 +2,12 @@ import type { Readable } from 'node:stream';
 import { hashToken } from '@vaultstack/auth';
 import { MultipartUploadStatus, UploadStatus, type PrismaClient } from '@vaultstack/database';
 import type { Logger } from '@vaultstack/logger';
-import type { PublicStorageObject, PublicUpload } from '@vaultstack/types';
+import type {
+  PublicMultipartPart,
+  PublicMultipartSessionDetail,
+  PublicStorageObject,
+  PublicUpload,
+} from '@vaultstack/types';
 import { writeAuditLog } from '../../../lib/audit.js';
 import {
   AppError,
@@ -18,7 +23,12 @@ import {
   storageUploadNotFound,
   validationError,
 } from '../../../lib/errors.js';
-import { serializeStorageObject, serializeUpload } from '../mappers/storage.mapper.js';
+import {
+  serializeMultipartPart,
+  serializeMultipartSessionDetail,
+  serializeStorageObject,
+  serializeUpload,
+} from '../mappers/storage.mapper.js';
 import { ObjectTooLargeError } from '../domain/integrity.js';
 import { assertValidObjectKey } from '../domain/object-key.js';
 import type { UploadRepository } from '../repositories/upload.repository.js';
@@ -53,6 +63,8 @@ export interface InitiateMultipartInput {
   bucketId: string;
   key: string;
   contentType?: string;
+  /** Required by browser APIs; omitted only by the S3-compatible gateway. */
+  declaredSize?: number;
   userId: string;
   meta: RequestMeta;
 }
@@ -83,6 +95,7 @@ export interface UploadService {
   uploadPart(input: {
     organizationId: string;
     uploadId: string;
+    userId: string;
     partNumber: number;
     body: Readable;
     signal?: AbortSignal;
@@ -91,7 +104,7 @@ export interface UploadService {
     organizationId: string;
     uploadId: string;
     userId: string;
-    parts: { partNumber: number; etag: string }[];
+    parts: { partNumber: number; etag: string; checksumSha256?: string }[];
     meta: RequestMeta;
   }): Promise<PublicStorageObject>;
   abortMultipart(input: {
@@ -105,6 +118,16 @@ export interface UploadService {
     bucketId: string;
     providerUploadId: string;
   }): Promise<string>;
+  getMultipartSession(input: {
+    organizationId: string;
+    uploadId: string;
+    userId: string;
+  }): Promise<PublicMultipartSessionDetail>;
+  listMultipartParts(input: {
+    organizationId: string;
+    uploadId: string;
+    userId: string;
+  }): Promise<PublicMultipartPart[]>;
 
   /** Expires abandoned uploads and reclaims their staged bytes. */
   cleanupExpired(): Promise<{ uploads: number; multipart: number }>;
@@ -467,6 +490,12 @@ export function createUploadService(deps: {
 
     async initiateMultipart(input) {
       const key = assertValidObjectKey(input.key, limits.maxKeyLength);
+      if (
+        input.declaredSize !== undefined &&
+        input.declaredSize > limits.maxObjectSizeBytes
+      ) {
+        throw storageObjectTooLarge(limits.maxObjectSizeBytes);
+      }
       const resolved = await storage.resolveBucket(input.organizationId, input.bucketId);
 
       const existing = await objects.findByKey(input.organizationId, input.bucketId, key);
@@ -490,6 +519,8 @@ export function createUploadService(deps: {
         userId: input.userId,
         key,
         contentType: input.contentType ?? null,
+        declaredSize:
+          input.declaredSize === undefined ? null : BigInt(input.declaredSize),
         providerUploadId: initiated.providerUploadId,
         stagingKey,
         expiresAt: new Date(Date.now() + limits.uploadTtlSeconds * 1000),
@@ -521,7 +552,15 @@ export function createUploadService(deps: {
         throw storageMultipartNotFound();
       }
 
+      requireMultipartActor(row, input.userId);
+
       if (row.expiresAt.getTime() <= Date.now()) {
+        await uploads.setMultipartStatus(
+          row.organizationId,
+          row.id,
+          MultipartUploadStatus.EXPIRED,
+          'expired',
+        );
         throw storageUploadExpired();
       }
 
@@ -539,17 +578,28 @@ export function createUploadService(deps: {
       // maximum size combine into an object N times over the limit. The
       // remaining budget is handed to the provider so the stream is aborted
       // mid-flight rather than after the bytes have already landed.
-      const storedParts = await uploads.listParts(row.id);
+      const storedParts = await uploads.listParts(row.organizationId, row.id);
       const otherPartBytes = storedParts
         .filter((part) => part.partNumber !== input.partNumber)
         .reduce((total, part) => total + Number(part.size), 0);
-      const remainingBytes = limits.maxObjectSizeBytes - otherPartBytes;
+      const declaredLimit =
+        row.declaredSize === null ? limits.maxObjectSizeBytes : Number(row.declaredSize);
+      const remainingBytes = Math.min(
+        limits.maxRequestSizeBytes,
+        limits.maxObjectSizeBytes - otherPartBytes,
+        declaredLimit - otherPartBytes,
+      );
 
-      if (remainingBytes <= 0) {
+      if (remainingBytes < 0 || (remainingBytes === 0 && row.declaredSize !== BigInt(0))) {
         throw storageObjectTooLarge(limits.maxObjectSizeBytes);
       }
 
-      await uploads.setMultipartStatus(row.id, MultipartUploadStatus.UPLOADING);
+      await uploads.setMultipartStatus(
+        row.organizationId,
+        row.id,
+        MultipartUploadStatus.UPLOADING,
+        null,
+      );
 
       let result;
       try {
@@ -576,8 +626,9 @@ export function createUploadService(deps: {
         partNumber: result.partNumber,
         size: BigInt(result.size),
         etag: result.etag,
-        checksum: null,
+        checksum: result.checksum ?? null,
       });
+      await uploads.touchMultipart(row.organizationId, row.id);
 
       return { partNumber: result.partNumber, etag: result.etag, size: result.size };
     },
@@ -588,29 +639,64 @@ export function createUploadService(deps: {
         throw storageMultipartNotFound();
       }
 
+      requireMultipartActor(row, input.userId);
+
       if (row.status === MultipartUploadStatus.COMPLETED) {
         throw storageUploadInvalidState('Multipart upload is already completed');
       }
 
-      const stored = await uploads.listParts(row.id);
+      if (
+        row.status !== MultipartUploadStatus.INITIATED &&
+        row.status !== MultipartUploadStatus.UPLOADING
+      ) {
+        throw storageUploadInvalidState(`Multipart upload is ${row.status.toLowerCase()}`);
+      }
+
+      if (row.expiresAt.getTime() <= Date.now()) {
+        await uploads.setMultipartStatus(
+          row.organizationId,
+          row.id,
+          MultipartUploadStatus.EXPIRED,
+          'expired',
+        );
+        throw storageUploadExpired();
+      }
+
+      const stored = await uploads.listParts(row.organizationId, row.id);
       if (stored.length === 0) {
         throw storageMultipartInvalidPart('No parts have been uploaded');
       }
 
-      // Every part the client claims must match a part the server actually
-      // stored, so completion cannot be steered with forged part etags.
+      if (input.parts.length !== stored.length) {
+        throw storageMultipartInvalidPart('Completion must include every uploaded part');
+      }
+
       const storedByNumber = new Map(stored.map((part) => [part.partNumber, part]));
-      for (const part of input.parts) {
+      for (const [index, part] of input.parts.entries()) {
+        if (index > 0 && part.partNumber <= input.parts[index - 1]!.partNumber) {
+          throw storageMultipartInvalidPart(
+            'Completion parts must be unique and ordered by part number',
+          );
+        }
         const match = storedByNumber.get(part.partNumber);
         if (!match) {
           throw storageMultipartInvalidPart(`Unknown part number ${part.partNumber}`);
         }
-        if (match.etag !== part.etag.replace(/"/g, '')) {
+        if (normalizeEtag(match.etag) !== normalizeEtag(part.etag)) {
           throw storageMultipartInvalidPart(`Part ${part.partNumber} etag does not match`);
+        }
+        if (
+          part.checksumSha256 &&
+          (!match.checksum ||
+            match.checksum.toLowerCase() !== part.checksumSha256.toLowerCase())
+        ) {
+          throw storageMultipartInvalidPart(
+            `Part ${part.partNumber} checksum does not match`,
+          );
         }
       }
 
-      const ordered = [...input.parts].sort((left, right) => left.partNumber - right.partNumber);
+      const ordered = input.parts;
 
       // All parts except the last must meet the minimum part size.
       for (const part of ordered.slice(0, -1)) {
@@ -632,21 +718,44 @@ export function createUploadService(deps: {
       if (totalBytes > limits.maxObjectSizeBytes) {
         throw storageObjectTooLarge(limits.maxObjectSizeBytes);
       }
+      if (row.declaredSize !== null && totalBytes !== Number(row.declaredSize)) {
+        throw storageSizeMismatch();
+      }
 
       const resolved = await storage.resolveBucket(row.organizationId, row.bucketId);
       const location = storage.locationFor(resolved.bucket, row.stagingKey);
 
-      await uploads.setMultipartStatus(row.id, MultipartUploadStatus.COMPLETING);
+      await uploads.setMultipartStatus(
+        row.organizationId,
+        row.id,
+        MultipartUploadStatus.COMPLETING,
+        null,
+      );
 
-      const result = await resolved.provider.completeMultipartUpload({
-        ...location,
-        providerUploadId: row.providerUploadId,
-        parts: ordered.map((part) => ({
-          partNumber: part.partNumber,
-          etag: storedByNumber.get(part.partNumber)?.etag ?? part.etag,
-        })),
-        contentType: row.contentType ?? undefined,
-      });
+      let result;
+      try {
+        result = await resolved.provider.completeMultipartUpload({
+          ...location,
+          providerUploadId: row.providerUploadId,
+          parts: ordered.map((part) => ({
+            partNumber: part.partNumber,
+            etag: storedByNumber.get(part.partNumber)?.etag ?? part.etag,
+          })),
+          contentType: row.contentType ?? undefined,
+        });
+      } catch (error) {
+        await uploads.setMultipartStatus(
+          row.organizationId,
+          row.id,
+          MultipartUploadStatus.ABORTED,
+          'provider_complete_failed',
+        );
+        metrics.providerError({
+          providerType: resolved.provider.type,
+          operation: 'completeMultipartUpload',
+        });
+        throw error;
+      }
 
       const existing = await objects.findByKey(row.organizationId, row.bucketId, row.key);
       const objectId = existing?.id ?? deriveObjectId(row.stagingKey);
@@ -669,12 +778,17 @@ export function createUploadService(deps: {
           checksum: result.checksum.algorithm === 'SHA256' ? result.checksum.value : null,
         });
       } catch (error) {
-        await uploads.setMultipartStatus(row.id, MultipartUploadStatus.ABORTED);
+        await uploads.setMultipartStatus(
+          row.organizationId,
+          row.id,
+          MultipartUploadStatus.ABORTED,
+          'metadata_write_failed',
+        );
         await resolved.provider.deleteObject(location).catch(() => undefined);
         throw error;
       }
 
-      await uploads.setMultipartStatus(row.id, MultipartUploadStatus.COMPLETED);
+      await uploads.markMultipartCompleted(row.organizationId, row.id);
 
       metrics.multipartCompleted({
         organizationId: row.organizationId,

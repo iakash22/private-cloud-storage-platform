@@ -1,5 +1,8 @@
 import type {
   PublicBucket,
+  PublicMultipartPart,
+  PublicMultipartSession,
+  PublicMultipartSessionDetail,
   PublicStorageObject,
   PublicStorageProvider,
   PublicUpload,
@@ -103,6 +106,67 @@ export function serializeUpload(upload: {
     expiresAt: upload.expiresAt.toISOString(),
     createdAt: upload.createdAt.toISOString(),
     updatedAt: upload.updatedAt.toISOString(),
+  };
+}
+
+export function serializeMultipartPart(part: {
+  partNumber: number;
+  size: bigint;
+  etag: string;
+  checksum: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): PublicMultipartPart {
+  return {
+    partNumber: part.partNumber,
+    size: Number(part.size),
+    etag: part.etag,
+    checksumSha256: part.checksum,
+    createdAt: part.createdAt.toISOString(),
+    updatedAt: part.updatedAt.toISOString(),
+  };
+}
+
+export function serializeMultipartSession(session: {
+  id: string;
+  organizationId: string;
+  bucketId: string;
+  key: string;
+  status: string;
+  contentType: string | null;
+  declaredSize: bigint | null;
+  expiresAt: Date;
+  lastActivityAt: Date;
+  completedAt: Date | null;
+  failureCode: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): PublicMultipartSession {
+  return {
+    id: session.id,
+    organizationId: session.organizationId,
+    bucketId: session.bucketId,
+    key: session.key,
+    status: session.status as PublicMultipartSession['status'],
+    contentType: session.contentType,
+    declaredSize: session.declaredSize === null ? null : Number(session.declaredSize),
+    expiresAt: session.expiresAt.toISOString(),
+    lastActivityAt: session.lastActivityAt.toISOString(),
+    completedAt: session.completedAt?.toISOString() ?? null,
+    failureCode: session.failureCode,
+    createdAt: session.createdAt.toISOString(),
+    updatedAt: session.updatedAt.toISOString(),
+  };
+}
+
+export function serializeMultipartSessionDetail(
+  session: Parameters<typeof serializeMultipartSession>[0] & {
+    parts: Parameters<typeof serializeMultipartPart>[0][];
+  },
+): PublicMultipartSessionDetail {
+  return {
+    ...serializeMultipartSession(session),
+    parts: session.parts.map(serializeMultipartPart),
   };
 }
 

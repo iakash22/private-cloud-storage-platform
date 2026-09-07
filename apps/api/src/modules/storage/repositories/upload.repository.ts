@@ -27,10 +27,13 @@ export interface CreateMultipartRecord {
   userId: string | null;
   key: string;
   contentType: string | null;
+  declaredSize: bigint | null;
   providerUploadId: string;
   stagingKey: string;
   expiresAt: Date;
 }
+
+export type MultipartUploadWithParts = MultipartUpload & { parts: MultipartPart[] };
 
 /** Persistence for single-shot uploads and multipart upload sessions. */
 export interface UploadRepository {
@@ -48,12 +51,23 @@ export interface UploadRepository {
 
   createMultipart(input: CreateMultipartRecord): Promise<MultipartUpload>;
   findMultipartById(organizationId: string, id: string): Promise<MultipartUpload | null>;
+  findMultipartWithParts(
+    organizationId: string,
+    id: string,
+  ): Promise<MultipartUploadWithParts | null>;
   findMultipartByProviderUploadId(
     organizationId: string,
     bucketId: string,
     providerUploadId: string,
   ): Promise<MultipartUpload | null>;
-  setMultipartStatus(id: string, status: MultipartUploadStatus): Promise<MultipartUpload>;
+  setMultipartStatus(
+    organizationId: string,
+    id: string,
+    status: MultipartUploadStatus,
+    failureCode?: string | null,
+  ): Promise<MultipartUpload>;
+  touchMultipart(organizationId: string, id: string): Promise<MultipartUpload>;
+  markMultipartCompleted(organizationId: string, id: string): Promise<MultipartUpload>;
   upsertPart(input: {
     multipartUploadId: string;
     partNumber: number;
@@ -61,8 +75,9 @@ export interface UploadRepository {
     etag: string;
     checksum: string | null;
   }): Promise<MultipartPart>;
-  listParts(multipartUploadId: string): Promise<MultipartPart[]>;
+  listParts(organizationId: string, multipartUploadId: string): Promise<MultipartPart[]>;
   deleteMultipart(id: string): Promise<void>;
+  findStaleUploads(now: Date): Promise<Upload[]>;
   findStaleMultipart(now: Date): Promise<MultipartUpload[]>;
 }
 
@@ -120,14 +135,47 @@ export function createUploadRepository(prisma: PrismaClient): UploadRepository {
       return prisma.multipartUpload.findFirst({ where: { id, organizationId } });
     },
 
+    async findMultipartWithParts(organizationId, id) {
+      return prisma.multipartUpload.findFirst({
+        where: { id, organizationId },
+        include: { parts: { orderBy: { partNumber: 'asc' } } },
+      });
+    },
+
     async findMultipartByProviderUploadId(organizationId, bucketId, providerUploadId) {
       return prisma.multipartUpload.findFirst({
         where: { organizationId, bucketId, providerUploadId },
       });
     },
 
-    async setMultipartStatus(id, status) {
-      return prisma.multipartUpload.update({ where: { id }, data: { status } });
+    async setMultipartStatus(organizationId, id, status, failureCode) {
+      return prisma.multipartUpload.update({
+        where: { id, organizationId },
+        data: {
+          status,
+          lastActivityAt: new Date(),
+          ...(failureCode !== undefined ? { failureCode } : {}),
+        },
+      });
+    },
+
+    async touchMultipart(organizationId, id) {
+      return prisma.multipartUpload.update({
+        where: { id, organizationId },
+        data: { lastActivityAt: new Date() },
+      });
+    },
+
+    async markMultipartCompleted(organizationId, id) {
+      return prisma.multipartUpload.update({
+        where: { id, organizationId },
+        data: {
+          status: MultipartUploadStatus.COMPLETED,
+          completedAt: new Date(),
+          failureCode: null,
+          lastActivityAt: new Date(),
+        },
+      });
     },
 
     async upsertPart(input) {
@@ -143,15 +191,25 @@ export function createUploadRepository(prisma: PrismaClient): UploadRepository {
       });
     },
 
-    async listParts(multipartUploadId) {
+    async listParts(organizationId, multipartUploadId) {
       return prisma.multipartPart.findMany({
-        where: { multipartUploadId },
+        where: { multipartUploadId, multipartUpload: { organizationId } },
         orderBy: { partNumber: 'asc' },
       });
     },
 
     async deleteMultipart(id) {
       await prisma.multipartUpload.delete({ where: { id } });
+    },
+
+    async findStaleUploads(now) {
+      return prisma.upload.findMany({
+        where: {
+          expiresAt: { lt: now },
+          status: { in: [UploadStatus.PENDING, UploadStatus.UPLOADING] },
+        },
+        take: 100,
+      });
     },
 
     async findStaleMultipart(now) {

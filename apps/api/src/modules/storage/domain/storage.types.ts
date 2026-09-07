@@ -132,6 +132,8 @@ export interface UploadPartResult {
   partNumber: number;
   size: number;
   etag: string;
+  /** SHA-256 calculated while streaming, when the provider can supply it. */
+  checksum?: string;
 }
 
 export interface CompletedPart {

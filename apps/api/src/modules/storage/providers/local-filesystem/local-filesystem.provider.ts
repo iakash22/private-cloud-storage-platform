@@ -441,7 +441,12 @@ export class LocalFilesystemStorageProvider implements StorageProvider {
     const totals = meter.totals();
     await writeFile(`${partPath}.md5`, totals.md5, 'utf8');
 
-    return { partNumber: input.partNumber, size: totals.size, etag: totals.md5 };
+    return {
+      partNumber: input.partNumber,
+      size: totals.size,
+      etag: totals.md5,
+      checksum: totals.sha256,
+    };
   }
 
   async completeMultipartUpload(input: CompleteMultipartInput): Promise<PutObjectResult> {
