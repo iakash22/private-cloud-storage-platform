@@ -11,6 +11,8 @@ const devEnv = {
   DATABASE_URL: 'postgresql://vaultstack:vaultstack_dev@localhost:5432/vaultstack',
   REDIS_URL: 'redis://localhost:6379',
   JWT_SECRET: 'phase1-test-jwt-secret-value-32chars',
+  STORAGE_DRIVER: 'local',
+  STORAGE_LOCAL_ROOT: '/tmp/vaultstack-playwright-storage',
   MINIO_ENDPOINT: 'localhost',
   MINIO_PORT: '9000',
   MINIO_USE_SSL: 'false',

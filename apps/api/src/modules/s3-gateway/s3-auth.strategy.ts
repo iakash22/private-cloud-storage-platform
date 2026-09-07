@@ -11,9 +11,12 @@ import { storageAccessDenied } from '../../lib/errors.js';
  */
 export interface S3Principal {
   organizationId: string;
-  /** User or service-account id used for authorization and audit records. */
+  /** Service account id used for authorization and audit records. */
   principalId: string;
+  credentialId: string;
   accessKeyId: string;
+  permissions: string[];
+  allowedBucketNames: string[];
 }
 
 /**

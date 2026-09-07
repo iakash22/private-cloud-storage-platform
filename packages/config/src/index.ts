@@ -72,6 +72,7 @@ const envSchema = z.object({
   // Enables the S3-compatible gateway. Disabled by default because gateway
   // credential signing lands in a later phase.
   S3_GATEWAY_ENABLED: booleanFromString.default('false'),
+  S3_GATEWAY_REGION: z.string().min(1).default('vaultstack'),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

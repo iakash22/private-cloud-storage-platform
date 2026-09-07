@@ -1,13 +1,23 @@
 import type { Request, Response } from 'express';
 import { AppError } from '../../../lib/errors.js';
-import { createUnconfiguredS3AuthStrategy, type S3AuthStrategy } from '../s3-auth.strategy.js';
+import { asyncHandler, type AsyncRouteHandler } from '../../../lib/async-handler.js';
+import type { StorageModule } from '../../storage/storage.module.js';
+import type { S3AuthStrategy } from '../s3-auth.strategy.js';
 import { resolveS3Operation } from '../s3-operations.js';
 import { renderS3Xml } from '../s3-xml.js';
+import { S3GatewayHandlers } from '../s3-handlers.js';
 
 export class S3GatewayController {
-  constructor(private readonly auth: S3AuthStrategy) {}
+  private readonly handlers: S3GatewayHandlers;
 
-  handle = (req: Request, res: Response): void => {
+  constructor(
+    private readonly auth: S3AuthStrategy,
+    storage: StorageModule,
+  ) {
+    this.handlers = new S3GatewayHandlers(storage);
+  }
+
+  handle: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const target = resolveS3Operation(req);
 
     if (!target) {
@@ -21,22 +31,14 @@ export class S3GatewayController {
       return;
     }
 
-    this.auth
-      .authenticate(req)
-      .then(() => {
-        this.sendError(
-          req,
-          res,
-          501,
-          'NotImplemented',
-          `${target.operation} is recognized but not yet served by the gateway`,
-        );
-      })
-      .catch((error: unknown) => {
-        const status = error instanceof AppError ? error.statusCode : 403;
-        this.sendError(req, res, status, s3ErrorCode(error), s3ErrorMessage(error), target.bucket);
-      });
-  };
+    try {
+      const principal = await this.auth.authenticate(req);
+      await this.handlers.handle(principal, target, req, res);
+    } catch (error: unknown) {
+      const status = error instanceof AppError ? error.statusCode : 403;
+      this.sendError(req, res, status, s3ErrorCode(error), s3ErrorMessage(error), target.bucket);
+    }
+  });
 
   private sendError(
     req: Request,
@@ -89,6 +91,8 @@ function s3ErrorCode(error: unknown): string {
       return 'NotImplemented';
     case 'UNAUTHORIZED':
       return 'InvalidAccessKeyId';
+    case 'FORBIDDEN':
+      return 'AccessDenied';
     default:
       return 'AccessDenied';
   }

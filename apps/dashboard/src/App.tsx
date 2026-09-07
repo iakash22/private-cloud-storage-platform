@@ -1,27 +1,33 @@
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle } from '@vaultstack/ui';
+import { Navigate, Route, Routes } from 'react-router-dom';
+import { AuthProvider } from './context/auth-context.js';
+import { LoginPage } from './pages/login-page.js';
+import { ProtectedRoute } from './pages/protected-route.js';
+import { BucketsPage } from './pages/storage/buckets-page.js';
+import { FilesPage } from './pages/storage/files-page.js';
+import { SharesPage } from './pages/storage/shares-page.js';
+import { StorageLayout } from './pages/storage/storage-layout.js';
+import { StorageOverviewPage } from './pages/storage/storage-overview-page.js';
+import { TrashPage } from './pages/storage/trash-page.js';
+import { UsagePage } from './pages/storage/usage-page.js';
 
 export function App() {
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl items-center px-6 py-12">
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle>VaultStack</CardTitle>
-          <CardDescription>
-            Self-hosted private cloud storage management platform — Phase 0 foundation.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-slate-600">
-            The dashboard shell is running. Business features such as authentication, storage,
-            backups, and monitoring will be added in later phases.
-          </p>
-          <Button onClick={() => window.open(`${apiUrl}/health`, '_blank')}>
-            Check API health
-          </Button>
-        </CardContent>
-      </Card>
-    </main>
+    <AuthProvider>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route element={<ProtectedRoute />}>
+          <Route path="/" element={<Navigate to="/storage" replace />} />
+          <Route path="/storage" element={<StorageLayout />}>
+            <Route index element={<StorageOverviewPage />} />
+            <Route path="files" element={<FilesPage />} />
+            <Route path="buckets" element={<BucketsPage />} />
+            <Route path="shares" element={<SharesPage />} />
+            <Route path="usage" element={<UsagePage />} />
+            <Route path="trash" element={<TrashPage />} />
+          </Route>
+        </Route>
+        <Route path="*" element={<Navigate to="/storage" replace />} />
+      </Routes>
+    </AuthProvider>
   );
 }

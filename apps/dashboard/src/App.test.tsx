@@ -1,10 +1,36 @@
+import type { ReactNode } from 'react';
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
+import { describe, expect, it, vi } from 'vitest';
 import { App } from './App.js';
 
-describe('Dashboard App', () => {
-  it('renders the VaultStack heading', () => {
-    render(<App />);
-    expect(screen.getByText('VaultStack')).toBeInTheDocument();
+vi.mock('./context/auth-context.js', () => ({
+  AuthProvider: ({ children }: { children: ReactNode }) => children,
+  useAuth: () => ({
+    user: null,
+    organizations: [],
+    memberships: [],
+    activeOrganizationId: null,
+    permissions: [],
+    loading: false,
+    error: null,
+    login: vi.fn(),
+    register: vi.fn(),
+    logout: vi.fn(),
+    refresh: vi.fn(),
+    selectOrganization: vi.fn(),
+  }),
+}));
+
+describe('App routing', () => {
+  it('renders the login page by default for anonymous users', () => {
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('heading', { name: 'VaultStack' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
   });
 });

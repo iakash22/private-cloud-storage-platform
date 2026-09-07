@@ -57,6 +57,7 @@ export interface ObjectService {
     options: ListOptions,
   ): Promise<PublicObjectListPage>;
   get(organizationId: string, objectId: string): Promise<PublicStorageObject>;
+  findByKey(organizationId: string, bucketId: string, key: string): Promise<PublicStorageObject>;
   put(options: PutObjectOptions): Promise<PublicStorageObject>;
   openDownload(
     organizationId: string,
@@ -147,6 +148,15 @@ export function createObjectService(deps: {
 
     async get(organizationId, objectId) {
       const { object } = await requireObject(organizationId, objectId);
+      return serializeStorageObject(object);
+    },
+
+    async findByKey(organizationId, bucketId, key) {
+      const normalizedKey = assertValidObjectKey(key, limits.maxKeyLength);
+      const object = await objects.findByKey(organizationId, bucketId, normalizedKey);
+      if (!object) {
+        throw storageObjectNotFound();
+      }
       return serializeStorageObject(object);
     },
 

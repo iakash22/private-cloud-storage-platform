@@ -29,6 +29,7 @@ export function createTestConfig(overrides: Partial<EnvConfig> = {}): EnvConfig 
     S3_REGION: 'us-east-1',
     S3_FORCE_PATH_STYLE: true,
     S3_GATEWAY_ENABLED: false,
+    S3_GATEWAY_REGION: 'vaultstack',
     ...overrides,
   };
 }

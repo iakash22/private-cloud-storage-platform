@@ -1,14 +1,12 @@
 import { Router } from 'express';
-import { createUnconfiguredS3AuthStrategy, type S3AuthStrategy } from './s3-auth.strategy.js';
+import type { AppContainer } from '../../container/app-container.js';
+import { createSigV4S3AuthStrategy } from './sigv4-auth.strategy.js';
 import { S3GatewayController } from './controllers/s3-gateway.controller.js';
 
-/**
- * S3-compatible gateway (protocol foundation — operation handlers not yet wired).
- */
-export function createS3GatewayRouter(options?: { auth?: S3AuthStrategy }): Router {
+export function createS3GatewayRouter(container: AppContainer): Router {
   const router = Router();
-  const auth = options?.auth ?? createUnconfiguredS3AuthStrategy();
-  const controller = new S3GatewayController(auth);
+  const auth = createSigV4S3AuthStrategy(container.s3Credentials, container.config);
+  const controller = new S3GatewayController(auth, container.storage);
 
   router.all(/.*/, controller.handle);
 

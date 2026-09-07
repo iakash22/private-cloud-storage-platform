@@ -50,7 +50,7 @@ export function createV1Router(
   router.use('/storage', authenticate, createStorageRouter(container));
 
   if (config.S3_GATEWAY_ENABLED) {
-    router.use('/s3', createS3GatewayRouter());
+    router.use('/s3', createS3GatewayRouter(container));
   }
 
   return router;

@@ -48,6 +48,11 @@ export interface UploadRepository {
 
   createMultipart(input: CreateMultipartRecord): Promise<MultipartUpload>;
   findMultipartById(organizationId: string, id: string): Promise<MultipartUpload | null>;
+  findMultipartByProviderUploadId(
+    organizationId: string,
+    bucketId: string,
+    providerUploadId: string,
+  ): Promise<MultipartUpload | null>;
   setMultipartStatus(id: string, status: MultipartUploadStatus): Promise<MultipartUpload>;
   upsertPart(input: {
     multipartUploadId: string;
@@ -113,6 +118,12 @@ export function createUploadRepository(prisma: PrismaClient): UploadRepository {
 
     async findMultipartById(organizationId, id) {
       return prisma.multipartUpload.findFirst({ where: { id, organizationId } });
+    },
+
+    async findMultipartByProviderUploadId(organizationId, bucketId, providerUploadId) {
+      return prisma.multipartUpload.findFirst({
+        where: { organizationId, bucketId, providerUploadId },
+      });
     },
 
     async setMultipartStatus(id, status) {

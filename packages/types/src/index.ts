@@ -328,6 +328,52 @@ export interface PublicPresignedUrl {
   headers?: Record<string, string>;
 }
 
+export interface InitiatedUpload {
+  upload: PublicUpload;
+  uploadUrl: string;
+  method: 'PUT';
+  expiresAt: string;
+  headers?: Record<string, string>;
+}
+
+export interface AuthSessionPayload {
+  user: PublicUser;
+  organizations: PublicOrganization[];
+  memberships: PublicMembership[];
+  csrfToken: string;
+  organization?: PublicOrganization;
+  activeOrganizationId?: string | null;
+}
+
+export interface PublicServiceAccount {
+  id: string;
+  organizationId: string;
+  name: string;
+  description: string | null;
+  disabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PublicS3AccessCredential {
+  id: string;
+  organizationId: string;
+  serviceAccountId: string;
+  serviceAccountName: string;
+  accessKeyId: string;
+  permissions: string[];
+  allowedBucketNames: string[];
+  expiresAt: string | null;
+  revokedAt: string | null;
+  lastUsedAt: string | null;
+  rotatedFromId: string | null;
+  createdAt: string;
+}
+
+export interface CreatedS3AccessCredential extends PublicS3AccessCredential {
+  secretAccessKey: string;
+}
+
 export type {
   ApiResult,
   HttpStatus,

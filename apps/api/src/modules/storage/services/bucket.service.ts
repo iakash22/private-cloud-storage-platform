@@ -21,6 +21,7 @@ export interface CreateBucketOptions {
 export interface BucketService {
   list(organizationId: string): Promise<PublicBucket[]>;
   get(organizationId: string, bucketId: string): Promise<PublicBucket>;
+  getByName(organizationId: string, name: string): Promise<PublicBucket>;
   create(
     organizationId: string,
     userId: string,
@@ -50,6 +51,14 @@ export function createBucketService(deps: {
 
     async get(organizationId, bucketId) {
       const bucket = await buckets.findById(organizationId, bucketId);
+      if (!bucket) {
+        throw storageBucketNotFound();
+      }
+      return serializeBucket(bucket);
+    },
+
+    async getByName(organizationId, name) {
+      const bucket = await buckets.findByName(organizationId, assertValidBucketName(name));
       if (!bucket) {
         throw storageBucketNotFound();
       }

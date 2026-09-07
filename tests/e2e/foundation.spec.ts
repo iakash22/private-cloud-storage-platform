@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('VaultStack foundation', () => {
-  test('dashboard renders VaultStack title', async ({ page }) => {
+  test('dashboard redirects anonymous users to login', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'VaultStack' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
   });
 
   test('api health endpoint responds', async ({ request }) => {

@@ -14,6 +14,10 @@ import {
 import { AuthenticationService } from '../modules/auth/services/authentication.service.js';
 import { SessionManager } from '../modules/auth/services/session.manager.js';
 import { StorageModule } from '../modules/storage/storage.module.js';
+import {
+  createS3CredentialService,
+  S3CredentialService,
+} from '../modules/s3-gateway/services/s3-credential.service.js';
 import type { EnvConfig } from '@vaultstack/config';
 import type { PrismaClient } from '@vaultstack/database';
 import type { Logger } from '@vaultstack/logger';
@@ -32,6 +36,7 @@ export interface AppServices {
   apiKeys: ApiKeysService;
   audit: AuditService;
   storage: StorageModule;
+  s3Credentials: S3CredentialService;
 }
 
 /**
@@ -39,6 +44,7 @@ export interface AppServices {
  */
 export class AppContainer {
   readonly cookies: CookieManager;
+  readonly config: EnvConfig;
   readonly sessions: SessionManager;
   readonly authentication: AuthenticationService;
   readonly authorization: AuthorizationService;
@@ -51,12 +57,14 @@ export class AppContainer {
   readonly apiKeys: ApiKeysService;
   readonly audit: AuditService;
   readonly storage: StorageModule;
+  readonly s3Credentials: S3CredentialService;
 
   constructor(
     private readonly prisma: PrismaClient,
-    private readonly config: EnvConfig,
+    config: EnvConfig,
     private readonly logger: Logger,
   ) {
+    this.config = config;
     this.cookies = new CookieManager(config);
     bindCookieManager(this.cookies);
 
@@ -82,6 +90,7 @@ export class AppContainer {
       logger,
       authorization: this.authorization,
     });
+    this.s3Credentials = createS3CredentialService(prisma, config.JWT_SECRET);
   }
 }
 
@@ -100,6 +109,7 @@ export function createServices(prisma: PrismaClient, config: EnvConfig, logger: 
     apiKeys: container.apiKeys,
     audit: container.audit,
     storage: container.storage,
+    s3Credentials: container.s3Credentials,
   };
 }
 

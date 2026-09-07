@@ -8,6 +8,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@vaultstack/ui': path.resolve(__dirname, '../../packages/ui/src/index.ts'),
+      '@vaultstack/api-client': path.resolve(__dirname, '../../packages/api-client/src/index.ts'),
     },
   },
   server: {

@@ -79,7 +79,7 @@ export interface UploadService {
     meta: RequestMeta;
   }): Promise<void>;
 
-  initiateMultipart(input: InitiateMultipartInput): Promise<{ uploadId: string; key: string }>;
+  initiateMultipart(input: InitiateMultipartInput): Promise<{ uploadId: string; providerUploadId: string; key: string }>;
   uploadPart(input: {
     organizationId: string;
     uploadId: string;
@@ -100,6 +100,11 @@ export interface UploadService {
     userId: string;
     meta: RequestMeta;
   }): Promise<void>;
+  resolveMultipartUploadId(input: {
+    organizationId: string;
+    bucketId: string;
+    providerUploadId: string;
+  }): Promise<string>;
 
   /** Expires abandoned uploads and reclaims their staged bytes. */
   cleanupExpired(): Promise<{ uploads: number; multipart: number }>;
@@ -501,7 +506,7 @@ export function createUploadService(deps: {
         userAgent: input.meta.userAgent,
       });
 
-      return { uploadId: row.id, key };
+      return { uploadId: row.id, providerUploadId: row.providerUploadId, key };
     },
 
     async uploadPart(input) {
@@ -718,6 +723,18 @@ export function createUploadService(deps: {
         ipAddress: input.meta.ipAddress,
         userAgent: input.meta.userAgent,
       });
+    },
+
+    async resolveMultipartUploadId(input) {
+      const row = await uploads.findMultipartByProviderUploadId(
+        input.organizationId,
+        input.bucketId,
+        input.providerUploadId,
+      );
+      if (!row) {
+        throw storageMultipartNotFound();
+      }
+      return row.id;
     },
 
     /**

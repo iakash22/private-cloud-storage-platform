@@ -61,6 +61,8 @@ model Organization {
   multipartUploads MultipartUpload[]
   storagePolicies  StoragePolicy[]
   shareLinks       ShareLink[]
+  serviceAccounts  ServiceAccount[]
+  s3Credentials    S3AccessCredential[]
 }
 
 model Team {
@@ -495,4 +497,45 @@ model ShareLink {
 
   @@index([organizationId])
   @@index([objectId])
+}
+
+/// Programmatic identity for S3 gateway access. Separate from browser users.
+model ServiceAccount {
+  id             String    @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  disabledAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  credentials  S3AccessCredential[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+/// SigV4 signing credentials for the VaultStack S3 gateway. Secrets are stored
+/// encrypted at rest; plaintext is returned only once at creation/rotation.
+model S3AccessCredential {
+  id                 String    @id @default(cuid())
+  organizationId     String
+  serviceAccountId   String
+  accessKeyId        String    @unique
+  secretCiphertext   String
+  secretNonce        String
+  permissions        String[]
+  allowedBucketNames String[]  @default([])
+  expiresAt          DateTime?
+  revokedAt          DateTime?
+  lastUsedAt         DateTime?
+  rotatedFromId      String?
+  createdAt          DateTime  @default(now())
+
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  serviceAccount ServiceAccount @relation(fields: [serviceAccountId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([serviceAccountId])
 }
