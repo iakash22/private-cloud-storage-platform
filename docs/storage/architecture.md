@@ -56,7 +56,7 @@ backend means one new `StorageProvider` implementation and one registry entry.
 | `modules/storage/providers/provider-registry.ts` | Builds and caches providers from database rows                                 |
 | `modules/storage/repositories/`                  | Organization-scoped Prisma access                                              |
 | `modules/storage/services/`                      | Bucket, object, upload, token, metrics services                                |
-| `modules/storage/routes/`                        | REST routes (session-authorized) and content routes (token-authorized)         |
+| `modules/storage/controllers/` + `*.router.ts`   | REST routes (session-authorized) and content routes (token-authorized)         |
 | `integrations/minio/`                            | S3 client construction, connection config, health probe                        |
 | `modules/s3-gateway/`                            | S3 protocol foundation: operation routing, XML, auth seam                      |
 

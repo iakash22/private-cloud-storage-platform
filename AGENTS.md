@@ -22,7 +22,8 @@
 20. Do not introduce new dependencies without documenting why.
 21. When changing API routes, request/response shapes, or auth behavior, update `packages/openapi/spec/openapi.yaml`, `docs/api/README.md`, and any affected examples in the same change.
 22. When changing `packages/database/prisma/schema.prisma` (models, fields, or relations), update `docs/architecture/database-schema.md` in the same change.
-21. READ /Goal.md
+23. READ `/Goal.md`.
+24. Follow `docs/architecture/api-modules.md` for all API module work: class-based controllers/services, `AppContainer` wiring, Zod validation in `@vaultstack/validation`, security via `@vaultstack/auth` and `AuthenticationService` — do not add ad-hoc crypto or fat routers.
 
 VaultStack Storage Engine
         │

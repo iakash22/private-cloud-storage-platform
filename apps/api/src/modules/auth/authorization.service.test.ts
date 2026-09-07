@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createAuthorizationService } from './authorization.service.js';
+import { createAuthorizationService } from './services/authorization.service.js';
 
 describe('authorization service', () => {
   it('can(user, permission, resource) allows matching org permissions', async () => {

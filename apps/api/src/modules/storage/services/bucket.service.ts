@@ -2,7 +2,7 @@ import { BucketVersioningStatus, type Bucket, type PrismaClient } from '@vaultst
 import type { PublicBucket } from '@vaultstack/types';
 import { writeAuditLog } from '../../../lib/audit.js';
 import { conflict, storageBucketNotEmpty, storageBucketNotFound } from '../../../lib/errors.js';
-import { serializeBucket } from '../../../lib/serializers.js';
+import { serializeBucket } from '../mappers/storage.mapper.js';
 import { assertValidBucketName } from '../domain/object-key.js';
 import type { BucketRepository } from '../repositories/bucket.repository.js';
 import type { StorageService } from './storage.service.js';

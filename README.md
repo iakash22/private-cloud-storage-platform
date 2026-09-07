@@ -116,6 +116,7 @@ Never commit `.env` or expose secrets to the browser. MinIO secret keys and data
 ## Documentation
 
 - [System architecture](docs/architecture/system-architecture.md)
+- [API module architecture](docs/architecture/api-modules.md)
 - [Database schema diagram](docs/architecture/database-schema.md)
 - [API reference (Markdown)](docs/api/README.md) — also at [http://localhost:3000/api/docs](http://localhost:3000/api/docs) when the API is running
 - [Development setup](docs/development/setup.md)

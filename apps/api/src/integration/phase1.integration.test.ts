@@ -10,7 +10,7 @@ import { createTestConfig } from '../lib/test-config.js';
 import {
   createAuthorizationService,
   createPrismaPermissionResolver,
-} from '../modules/auth/authorization.service.js';
+} from '../modules/auth/services/authorization.service.js';
 import { authHeaders, responseBody } from './helpers.js';
 
 const publicUserSchema = z.object({

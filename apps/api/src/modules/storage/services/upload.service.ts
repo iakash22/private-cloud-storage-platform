@@ -18,7 +18,7 @@ import {
   storageUploadNotFound,
   validationError,
 } from '../../../lib/errors.js';
-import { serializeStorageObject, serializeUpload } from '../../../lib/serializers.js';
+import { serializeStorageObject, serializeUpload } from '../mappers/storage.mapper.js';
 import { ObjectTooLargeError } from '../domain/integrity.js';
 import { assertValidObjectKey } from '../domain/object-key.js';
 import type { UploadRepository } from '../repositories/upload.repository.js';

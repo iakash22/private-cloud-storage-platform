@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { forbidden } from '../lib/errors.js';
 import { routeParam } from '../lib/route-param.js';
-import type { AuthorizationService } from '../modules/auth/authorization.service.js';
+import type { AuthorizationService } from '../modules/auth/services/authorization.service.js';
 import { requireAuth } from './authenticate.js';
 import { currentOrganizationId } from './organization-context.js';
 

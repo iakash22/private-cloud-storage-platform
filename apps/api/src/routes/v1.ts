@@ -1,19 +1,19 @@
 import { Router } from 'express';
 import type { EnvConfig } from '@vaultstack/config';
-import type { PrismaClient } from '@vaultstack/database';
 import type { Logger } from '@vaultstack/logger';
+import type { PrismaClient } from '@vaultstack/database';
 import { createAuthenticateMiddleware } from '../middleware/authenticate.js';
 import {
   createApiRateLimitMiddleware,
   createLoginRateLimitMiddleware,
 } from '../middleware/rate-limit.js';
+import { createAppContainer } from '../container/app-container.js';
 import { createAuthRouter } from '../modules/auth/auth.router.js';
 import { createOrganizationsRouter } from '../modules/organizations/organizations.router.js';
 import { createPermissionsRouter } from '../modules/permissions/permissions.router.js';
-import { createServices } from '../modules/services.js';
-import { createS3GatewayRouter } from '../modules/s3-gateway/s3-gateway.routes.js';
-import { createStorageContentRouter } from '../modules/storage/routes/storage-content.routes.js';
-import { createStorageRouter } from '../modules/storage/routes/storage.routes.js';
+import { createS3GatewayRouter } from '../modules/s3-gateway/s3-gateway.router.js';
+import { createStorageContentRouter } from '../modules/storage/storage-content.router.js';
+import { createStorageRouter } from '../modules/storage/storage.router.js';
 import type { RateLimiter } from '../lib/rate-limit.js';
 
 export function createV1Router(
@@ -23,8 +23,8 @@ export function createV1Router(
   logger: Logger,
 ): Router {
   const router = Router();
-  const services = createServices(prisma, config, logger);
-  const authenticate = createAuthenticateMiddleware(prisma, config, services.sessions);
+  const container = createAppContainer(prisma, config, logger);
+  const authenticate = createAuthenticateMiddleware(container.authentication);
   const loginRateLimit = createLoginRateLimitMiddleware(limiter, config);
 
   router.use(createApiRateLimitMiddleware(limiter, config));
@@ -40,24 +40,14 @@ export function createV1Router(
     }
     void authenticate(req, res, next);
   });
-  router.use('/auth', createAuthRouter(services, config));
+  router.use('/auth', createAuthRouter(container));
 
-  router.use('/organizations', authenticate, createOrganizationsRouter(services));
-  router.use('/permissions', authenticate, createPermissionsRouter(services));
+  router.use('/organizations', authenticate, createOrganizationsRouter(container));
+  router.use('/permissions', authenticate, createPermissionsRouter(container));
 
-  // Byte transfer authorized by scoped storage tokens rather than a session,
-  // so it is mounted ahead of (and outside) the authenticated storage router.
-  router.use(
-    '/storage',
-    createStorageContentRouter({
-      objects: services.storage.objects,
-      uploads: services.storage.uploads,
-      tokens: services.storage.tokens,
-      metrics: services.storage.metrics,
-    }),
-  );
+  router.use('/storage', createStorageContentRouter(container));
 
-  router.use('/storage', authenticate, createStorageRouter(services.storage));
+  router.use('/storage', authenticate, createStorageRouter(container));
 
   if (config.S3_GATEWAY_ENABLED) {
     router.use('/s3', createS3GatewayRouter());

@@ -1,19 +1,12 @@
 import { Router } from 'express';
-import { asyncHandler } from '../../lib/async-handler.js';
-import { requireAuth } from '../../middleware/authenticate.js';
-import type { AppServices } from '../services.js';
+import type { AppContainer } from '../../container/app-container.js';
+import { PermissionsController } from './controllers/permissions.controller.js';
 
-export function createPermissionsRouter(services: AppServices): Router {
+export function createPermissionsRouter(container: AppContainer): Router {
   const router = Router();
+  const controller = new PermissionsController(container);
 
-  router.get(
-    '/',
-    asyncHandler(async (req, res) => {
-      requireAuth(req);
-      const permissions = await services.permissions.list();
-      res.status(200).json({ permissions });
-    }),
-  );
+  router.get('/', controller.list);
 
   return router;
 }

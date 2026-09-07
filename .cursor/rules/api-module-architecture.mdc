@@ -1,0 +1,44 @@
+---
+description: API module layering, class-based services, typing, and security conventions
+globs: apps/api/**/*.ts,packages/auth/**/*.ts,packages/validation/**/*.ts
+alwaysApply: false
+---
+
+# API module architecture
+
+Follow `docs/architecture/api-modules.md` for all API work.
+
+## Structure
+
+- Wire dependencies in `AppContainer` (`apps/api/src/container/app-container.ts`).
+- Routers are thin; HTTP handlers live in `controllers/` classes extending `BaseController` or `OrganizationScopedController`.
+- Business logic in `services/` **classes** with constructor injection.
+- Use `repositories/` when Prisma logic is shared or complex (see `modules/storage/`).
+- Do not add business logic to `routes/v1.ts` or middleware beyond cross-cutting concerns.
+
+## Naming
+
+- Files: `*.router.ts`, `*.controller.ts`, `*.service.ts`, `*.repository.ts`
+- Classes: `AuthController`, `AuthService`, `SessionManager`, `CookieManager`
+- Prefer `new ClassName(deps)` registered on `AppContainer` over new standalone `createX()` factories.
+
+## Types and validation
+
+- Request/params/query: Zod in `@vaultstack/validation` + `validateBody` / `validateParams` / `validateQuery`.
+- Public responses: `@vaultstack/types` (`Public*`).
+- Request metadata: `RequestMeta` from `@vaultstack/types`.
+- No `any`; no duplicate validation in controllers.
+
+## Security (mandatory)
+
+- Crypto/tokens/passwords only via `@vaultstack/auth` classes or `SessionManager` / `AuthenticationService` / `StorageTokenManager`.
+- Never log secrets, tokens, or password material.
+- Never store file binaries or raw tokens in PostgreSQL.
+- Check permissions server-side before destructive operations.
+- Cookie auth: HTTP-only session cookie + CSRF header on mutations.
+
+## Before finishing
+
+- [ ] New services registered on `AppContainer`
+- [ ] Tests for behavior changes
+- [ ] API docs/OpenAPI sync if routes or shapes changed (see `api-docs-sync.mdc`)

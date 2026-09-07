@@ -327,3 +327,11 @@ export interface PublicPresignedUrl {
   expiresAt: string;
   headers?: Record<string, string>;
 }
+
+export type {
+  ApiResult,
+  HttpStatus,
+  RequestCookies,
+  RequestHeaders,
+  RequestMeta,
+} from './http.js';

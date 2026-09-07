@@ -19,7 +19,7 @@ import {
   storageSizeMismatch,
   validationError,
 } from '../../../lib/errors.js';
-import { serializeStorageObject } from '../../../lib/serializers.js';
+import { serializeStorageObject } from '../mappers/storage.mapper.js';
 import { ObjectTooLargeError } from '../domain/integrity.js';
 import { assertValidKeyPrefix, assertValidObjectKey } from '../domain/object-key.js';
 import type { GetObjectResult } from '../domain/storage.types.js';
