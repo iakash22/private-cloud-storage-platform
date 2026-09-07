@@ -1,7 +1,7 @@
 import bcrypt from 'bcryptjs';
 
 export class PasswordService {
-  constructor(private readonly nodeEnv: string = 'production') {}
+  constructor(private readonly nodeEnv = 'production') {}
 
   getRounds(): number {
     return this.nodeEnv === 'test' ? 4 : 10;

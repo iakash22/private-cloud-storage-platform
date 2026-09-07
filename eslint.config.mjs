@@ -52,6 +52,14 @@ export default tseslint.config(
     },
   },
   {
+    files: ['packages/api-client/src/**/*.ts'],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+      },
+    },
+  },
+  {
     ignores: [
       '**/dist/**',
       '**/build/**',

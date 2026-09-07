@@ -5,23 +5,18 @@ import {
 import type { Request, Response } from 'express';
 import { PERMISSIONS } from '@vaultstack/types';
 import { requestMeta } from '../../../lib/audit.js';
-import { asyncHandler } from '../../../lib/async-handler.js';
+import { asyncHandler, type AsyncRouteHandler } from '../../../lib/async-handler.js';
 import { routeParam } from '../../../lib/route-param.js';
 import { readBody } from '../../../middleware/validate.js';
 import { OrganizationScopedController } from '../../../http/organization-scoped.controller.js';
-import type { AppContainer } from '../../../container/app-container.js';
 
 export class TeamsController extends OrganizationScopedController {
-  constructor(container: AppContainer) {
-    super(container);
-  }
-
-  list = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  list: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const teams = await this.container.teams.list(routeParam(req, 'organizationId'));
     this.ok(res, { teams });
   });
 
-  create = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  create: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const auth = this.requireAuth(req);
     const team = await this.container.teams.create(
       routeParam(req, 'organizationId'),
@@ -32,7 +27,7 @@ export class TeamsController extends OrganizationScopedController {
     this.created(res, { team });
   });
 
-  get = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  get: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const team = await this.container.teams.get(
       routeParam(req, 'organizationId'),
       routeParam(req, 'teamId'),
@@ -40,7 +35,7 @@ export class TeamsController extends OrganizationScopedController {
     this.ok(res, { team });
   });
 
-  update = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  update: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const auth = this.requireAuth(req);
     const team = await this.container.teams.update(
       routeParam(req, 'organizationId'),
@@ -52,7 +47,7 @@ export class TeamsController extends OrganizationScopedController {
     this.ok(res, { team });
   });
 
-  remove = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  remove: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const auth = this.requireAuth(req);
     await this.container.teams.remove(
       routeParam(req, 'organizationId'),

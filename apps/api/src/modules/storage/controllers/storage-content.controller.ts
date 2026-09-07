@@ -2,14 +2,14 @@ import { pipeline } from 'node:stream/promises';
 import { uploadContentQuerySchema } from '@vaultstack/validation';
 import type { Request, Response } from 'express';
 import type { AppContainer } from '../../../container/app-container.js';
-import { asyncHandler } from '../../../lib/async-handler.js';
+import { asyncHandler, type AsyncRouteHandler } from '../../../lib/async-handler.js';
 import { storageAccessDenied } from '../../../lib/errors.js';
 import { routeParam } from '../../../lib/route-param.js';
 
 export class StorageContentController {
   constructor(private readonly container: AppContainer) {}
 
-  downloadContent = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  downloadContent: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const objectId = routeParam(req, 'objectId');
     const { token } = uploadContentQuerySchema.parse(req.query);
     const { storage } = this.container;
@@ -60,7 +60,7 @@ export class StorageContentController {
     }
   });
 
-  uploadContent = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  uploadContent: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { token } = uploadContentQuerySchema.parse(req.query);
     const controller = new AbortController();
     const onClose = (): void => {

@@ -3,7 +3,24 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 
-export type OpenApiDocument = Record<string, unknown>;
+export interface OpenApiInfo {
+  title: string;
+  version: string;
+  [key: string]: unknown;
+}
+
+export interface OpenApiComponents {
+  securitySchemes?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface OpenApiDocument {
+  openapi?: string;
+  info?: OpenApiInfo;
+  paths?: Record<string, unknown>;
+  components?: OpenApiComponents;
+  [key: string]: unknown;
+}
 
 let cachedDocument: OpenApiDocument | undefined;
 

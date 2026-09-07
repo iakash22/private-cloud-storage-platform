@@ -5,7 +5,7 @@ import { AuthenticatedController } from './base.controller.js';
 
 /** Base for routes scoped under `/organizations/:organizationId`. */
 export abstract class OrganizationScopedController extends AuthenticatedController {
-  protected allow(permission: PermissionKey | string): RequestHandler {
+  allow(permission: PermissionKey): RequestHandler {
     return createRequirePermission(this.container.authorization, permission);
   }
 }

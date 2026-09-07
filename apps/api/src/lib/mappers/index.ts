@@ -11,4 +11,4 @@ export {
   serializeTeam,
   serializeUpload,
   serializeUser,
-} from '../lib/serializers.js';
+} from '../serializers.js';

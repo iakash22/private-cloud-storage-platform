@@ -10,24 +10,19 @@ import {
   uploadPartQuerySchema,
 } from '@vaultstack/validation';
 import type { Request, Response } from 'express';
-import type { AppContainer } from '../../../container/app-container.js';
 import { requestMeta } from '../../../lib/audit.js';
-import { asyncHandler } from '../../../lib/async-handler.js';
+import { asyncHandler, type AsyncRouteHandler } from '../../../lib/async-handler.js';
 import { routeParam } from '../../../lib/route-param.js';
 import { StorageScopedController } from '../../../http/storage-scoped.controller.js';
 import { readBody } from '../../../middleware/validate.js';
 
 export class StorageController extends StorageScopedController {
-  constructor(container: AppContainer) {
-    super(container);
-  }
-
-  listBuckets = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  listBuckets: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const buckets = await this.container.storage.buckets.list(this.organizationId(req));
     this.ok(res, { buckets });
   });
 
-  createBucket = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  createBucket: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const auth = this.requireAuth(req);
     const body = readBody(req, createBucketBodySchema);
     const bucket = await this.container.storage.buckets.create(
@@ -39,7 +34,7 @@ export class StorageController extends StorageScopedController {
     this.created(res, { bucket });
   });
 
-  getBucket = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  getBucket: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const bucket = await this.container.storage.buckets.get(
       this.organizationId(req),
       routeParam(req, 'bucketId'),
@@ -47,7 +42,7 @@ export class StorageController extends StorageScopedController {
     this.ok(res, { bucket });
   });
 
-  removeBucket = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  removeBucket: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const auth = this.requireAuth(req);
     await this.container.storage.buckets.remove(
       this.organizationId(req),
@@ -58,7 +53,7 @@ export class StorageController extends StorageScopedController {
     this.noContent(res);
   });
 
-  listObjects = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  listObjects: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const query = listObjectsQuerySchema.parse(req.query);
     const page = await this.container.storage.objects.list(
       this.organizationId(req),
@@ -73,7 +68,7 @@ export class StorageController extends StorageScopedController {
     this.ok(res, page);
   });
 
-  getObject = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  getObject: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const object = await this.container.storage.objects.get(
       this.organizationId(req),
       routeParam(req, 'objectId'),
@@ -81,7 +76,7 @@ export class StorageController extends StorageScopedController {
     this.ok(res, { object });
   });
 
-  createDownloadUrl = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  createDownloadUrl: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const url = await this.container.storage.objects.createDownloadUrl(
       this.organizationId(req),
       routeParam(req, 'objectId'),
@@ -90,7 +85,7 @@ export class StorageController extends StorageScopedController {
     this.ok(res, { download: url });
   });
 
-  removeObject = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  removeObject: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const auth = this.requireAuth(req);
     await this.container.storage.objects.remove(
       this.organizationId(req),
@@ -101,7 +96,7 @@ export class StorageController extends StorageScopedController {
     this.noContent(res);
   });
 
-  copyObject = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  copyObject: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const auth = this.requireAuth(req);
     const body = readBody(req, objectDestinationBodySchema);
     const object = await this.container.storage.objects.copy({
@@ -115,7 +110,7 @@ export class StorageController extends StorageScopedController {
     this.created(res, { object });
   });
 
-  moveObject = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  moveObject: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const auth = this.requireAuth(req);
     const body = readBody(req, objectDestinationBodySchema);
     const object = await this.container.storage.objects.move({
@@ -129,7 +124,7 @@ export class StorageController extends StorageScopedController {
     this.ok(res, { object });
   });
 
-  initiateUpload = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  initiateUpload: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const auth = this.requireAuth(req);
     const body = readBody(req, initiateUploadBodySchema);
     const result = await this.container.storage.uploads.initiate({
@@ -145,7 +140,7 @@ export class StorageController extends StorageScopedController {
     this.created(res, result);
   });
 
-  completeUpload = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  completeUpload: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const auth = this.requireAuth(req);
     const body = readBody(req, completeUploadBodySchema);
     const object = await this.container.storage.uploads.complete({
@@ -158,7 +153,7 @@ export class StorageController extends StorageScopedController {
     this.created(res, { object });
   });
 
-  abortUpload = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  abortUpload: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const auth = this.requireAuth(req);
     await this.container.storage.uploads.abort({
       organizationId: this.organizationId(req),
@@ -169,7 +164,7 @@ export class StorageController extends StorageScopedController {
     this.noContent(res);
   });
 
-  initiateMultipart = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  initiateMultipart: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const auth = this.requireAuth(req);
     const body = readBody(req, initiateMultipartBodySchema);
     const result = await this.container.storage.uploads.initiateMultipart({
@@ -183,7 +178,7 @@ export class StorageController extends StorageScopedController {
     this.created(res, result);
   });
 
-  uploadPart = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  uploadPart: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { partNumber } = uploadPartQuerySchema.parse(req.query);
     const controller = new AbortController();
     const onClose = (): void => {
@@ -209,7 +204,7 @@ export class StorageController extends StorageScopedController {
     }
   });
 
-  completeMultipart = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  completeMultipart: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const auth = this.requireAuth(req);
     const body = readBody(req, completeMultipartBodySchema);
     const object = await this.container.storage.uploads.completeMultipart({
@@ -222,7 +217,7 @@ export class StorageController extends StorageScopedController {
     this.created(res, { object });
   });
 
-  abortMultipart = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  abortMultipart: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const auth = this.requireAuth(req);
     await this.container.storage.uploads.abortMultipart({
       organizationId: this.organizationId(req),

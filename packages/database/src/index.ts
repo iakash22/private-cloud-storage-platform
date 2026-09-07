@@ -25,6 +25,8 @@ export type {
   Organization,
   Permission,
   Role,
+  S3AccessCredential,
+  ServiceAccount,
   Session,
   ShareLink,
   StorageObject,

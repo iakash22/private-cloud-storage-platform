@@ -4,23 +4,18 @@ import {
 import type { Request, Response } from 'express';
 import { PERMISSIONS } from '@vaultstack/types';
 import { requestMeta } from '../../../lib/audit.js';
-import { asyncHandler } from '../../../lib/async-handler.js';
+import { asyncHandler, type AsyncRouteHandler } from '../../../lib/async-handler.js';
 import { routeParam } from '../../../lib/route-param.js';
 import { readBody } from '../../../middleware/validate.js';
 import { OrganizationScopedController } from '../../../http/organization-scoped.controller.js';
-import type { AppContainer } from '../../../container/app-container.js';
 
 export class RolesController extends OrganizationScopedController {
-  constructor(container: AppContainer) {
-    super(container);
-  }
-
-  list = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  list: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const roles = await this.container.roles.list(routeParam(req, 'organizationId'));
     this.ok(res, { roles });
   });
 
-  create = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  create: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const auth = this.requireAuth(req);
     const role = await this.container.roles.create(
       routeParam(req, 'organizationId'),
@@ -31,7 +26,7 @@ export class RolesController extends OrganizationScopedController {
     this.created(res, { role });
   });
 
-  get = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  get: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const role = await this.container.roles.get(
       routeParam(req, 'organizationId'),
       routeParam(req, 'roleId'),

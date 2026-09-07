@@ -23,7 +23,7 @@ export class TypedRequest<
   }
 
   get cookies(): RequestCookies {
-    return readCookies(this.req) as RequestCookies;
+    return readCookies(this.req);
   }
 
   meta(): RequestMeta {
@@ -35,11 +35,12 @@ export class TypedRequest<
   }
 }
 
-export function fromValidated<
-  P extends z.ZodTypeAny,
-  B extends z.ZodTypeAny,
-  Q extends z.ZodTypeAny,
->(req: Request, paramsSchema: P, bodySchema: B, querySchema: Q) {
+export function fromValidated(
+  req: Request,
+  paramsSchema: z.ZodTypeAny,
+  bodySchema: z.ZodTypeAny,
+  querySchema: z.ZodTypeAny,
+) {
   return new TypedRequest(
     req,
     paramsSchema.parse(req.params),

@@ -201,7 +201,7 @@ function harness(
         subjectId: 'object-1',
         expiresAt: future(),
       })),
-    },
+    } as never,
     metrics: {
       uploadStarted: vi.fn(),
       uploadFailed: vi.fn(),

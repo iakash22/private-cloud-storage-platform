@@ -1,18 +1,13 @@
 import { loginBodySchema, registerBodySchema, selectOrganizationBodySchema } from '@vaultstack/validation';
 import type { Request, Response } from 'express';
 import { requestMeta } from '../../../lib/audit.js';
-import { asyncHandler } from '../../../lib/async-handler.js';
+import { asyncHandler, type AsyncRouteHandler } from '../../../lib/async-handler.js';
 import { storageAccessDenied } from '../../../lib/errors.js';
 import { readBody } from '../../../middleware/validate.js';
 import { AuthenticatedController } from '../../../http/base.controller.js';
-import type { AppContainer } from '../../../container/app-container.js';
 
 export class AuthController extends AuthenticatedController {
-  constructor(container: AppContainer) {
-    super(container);
-  }
-
-  register = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  register: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const result = await this.container.auth.register(readBody(req, registerBodySchema), {
       ...requestMeta(req),
       previousSessionToken: this.container.cookies.readSessionToken(req),
@@ -27,7 +22,7 @@ export class AuthController extends AuthenticatedController {
     });
   });
 
-  login = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  login: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const result = await this.container.auth.login(readBody(req, loginBodySchema), {
       ...requestMeta(req),
       previousSessionToken: this.container.cookies.readSessionToken(req),
@@ -41,14 +36,14 @@ export class AuthController extends AuthenticatedController {
     });
   });
 
-  logout = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  logout: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const auth = this.requireAuth(req);
     await this.container.auth.logout(auth.user.id, auth.sessionId, requestMeta(req));
     this.container.cookies.clearSession(res);
     this.noContent(res);
   });
 
-  me = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  me: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const auth = this.requireAuth(req);
     const result = await this.container.auth.me(auth.user.id);
     this.ok(res, {
@@ -58,7 +53,7 @@ export class AuthController extends AuthenticatedController {
     });
   });
 
-  selectOrganization = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  selectOrganization: AsyncRouteHandler = asyncHandler((req: Request, res: Response): void => {
     const auth = this.requireAuth(req);
     const { organizationId } = readBody(req, selectOrganizationBodySchema);
 

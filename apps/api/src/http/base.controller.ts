@@ -6,11 +6,11 @@ import type { AuthContext } from '../modules/auth/auth.types.js';
 export abstract class BaseController {
   constructor(protected readonly container: AppContainer) {}
 
-  protected ok<T>(res: Response, body: T): void {
+  protected ok(res: Response, body: unknown): void {
     res.status(200).json(body);
   }
 
-  protected created<T>(res: Response, body: T): void {
+  protected created(res: Response, body: unknown): void {
     res.status(201).json(body);
   }
 
