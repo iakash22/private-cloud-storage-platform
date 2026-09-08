@@ -48,7 +48,14 @@ export type ApiErrorCode =
   | 'STORAGE_MULTIPART_NOT_FOUND'
   | 'STORAGE_MULTIPART_INVALID_PART'
   | 'STORAGE_NOT_IMPLEMENTED'
-  | 'ORGANIZATION_CONTEXT_REQUIRED';
+  | 'ORGANIZATION_CONTEXT_REQUIRED'
+  | 'SHARE_LINK_NOT_FOUND'
+  | 'SHARE_LINK_EXPIRED'
+  | 'SHARE_LINK_REVOKED'
+  | 'SHARE_PASSWORD_REQUIRED'
+  | 'SHARE_PASSWORD_INVALID'
+  | 'SHARE_DOWNLOAD_LIMIT_REACHED'
+  | 'SHARE_ACCESS_DENIED';
 
 export interface ApiErrorResponse {
   error: {
@@ -130,6 +137,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRoleName, readonly Permission
   DEVELOPER: [
     PERMISSIONS.STORAGE_READ,
     PERMISSIONS.STORAGE_UPLOAD,
+    PERMISSIONS.STORAGE_SHARE,
     PERMISSIONS.ARTIFACT_READ,
     PERMISSIONS.ARTIFACT_UPLOAD,
     PERMISSIONS.BACKUP_READ,
@@ -187,6 +195,69 @@ export interface PublicTeam {
   name: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface PublicTeamMember {
+  id: string;
+  organizationId: string;
+  teamId: string;
+  userId: string;
+  email: string;
+  name: string;
+  createdAt: string;
+}
+
+export const SHARE_VISIBILITIES = {
+  PRIVATE: 'PRIVATE',
+  TEAM: 'TEAM',
+  ORGANIZATION: 'ORGANIZATION',
+  PUBLIC_LINK: 'PUBLIC_LINK',
+} as const;
+
+export type ShareVisibilityName = (typeof SHARE_VISIBILITIES)[keyof typeof SHARE_VISIBILITIES];
+
+/** Owner-facing share metadata. Never includes the plaintext token after creation. */
+export interface PublicShareLink {
+  id: string;
+  organizationId: string;
+  objectId: string;
+  fileName: string;
+  visibility: ShareVisibilityName;
+  teamId: string | null;
+  tokenPrefix: string;
+  hasPassword: boolean;
+  allowView: boolean;
+  allowDownload: boolean;
+  maxDownloads: number | null;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  lastAccessAt: string | null;
+  accessCount: number;
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Returned once at creation. The plaintext token is never persisted. */
+export interface CreatedShareLink extends PublicShareLink {
+  token: string;
+}
+
+/** Consumer-facing share payload. No object ids, org ids, or storage paths. */
+export interface PublicShareAccess {
+  fileName: string;
+  size: number;
+  contentType: string;
+  visibility: ShareVisibilityName;
+  allowView: boolean;
+  allowDownload: boolean;
+  expiresAt: string | null;
+  hasPassword: boolean;
+}
+
+export interface PublicShareInspect {
+  passwordRequired: boolean;
+  share: PublicShareAccess | null;
 }
 
 export interface PublicRole {
@@ -249,6 +320,40 @@ export const STORAGE_PROVIDER_TYPES = {
 export type StorageProviderTypeName =
   (typeof STORAGE_PROVIDER_TYPES)[keyof typeof STORAGE_PROVIDER_TYPES];
 
+/**
+ * S3-compatible vendor dialect. Stored in provider config JSON, never as a
+ * Prisma enum, so business logic cannot switch on AWS vs R2 vs MinIO.
+ */
+export const S3_DIALECTS = {
+  AWS_S3: 'AWS_S3',
+  CLOUDFLARE_R2: 'CLOUDFLARE_R2',
+  BACKBLAZE_B2: 'BACKBLAZE_B2',
+  MINIO: 'MINIO',
+  WASABI: 'WASABI',
+  DIGITALOCEAN_SPACES: 'DIGITALOCEAN_SPACES',
+  GENERIC: 'GENERIC',
+} as const;
+
+export type S3DialectName = (typeof S3_DIALECTS)[keyof typeof S3_DIALECTS];
+
+export const STORAGE_PROVIDER_STATUSES = {
+  ACTIVE: 'ACTIVE',
+  DEGRADED: 'DEGRADED',
+  DISABLED: 'DISABLED',
+} as const;
+
+export type StorageProviderStatusName =
+  (typeof STORAGE_PROVIDER_STATUSES)[keyof typeof STORAGE_PROVIDER_STATUSES];
+
+export const STORAGE_PROVIDER_CREDENTIAL_SOURCES = {
+  NONE: 'none',
+  ENV: 'env',
+  STORED: 'stored',
+} as const;
+
+export type StorageProviderCredentialSource =
+  (typeof STORAGE_PROVIDER_CREDENTIAL_SOURCES)[keyof typeof STORAGE_PROVIDER_CREDENTIAL_SOURCES];
+
 export const UPLOAD_STATUSES = {
   PENDING: 'PENDING',
   UPLOADING: 'UPLOADING',
@@ -282,8 +387,8 @@ export type MultipartTransferTransport =
   (typeof MULTIPART_TRANSFER_TRANSPORTS)[keyof typeof MULTIPART_TRANSFER_TRANSPORTS];
 
 /**
- * Provider metadata safe to serialize to a browser. Credentials and physical
- * filesystem locations are deliberately absent.
+ * Provider metadata safe to serialize to a browser. Secret keys, ciphertext,
+ * nonces, and physical filesystem locations are deliberately absent.
  */
 export interface PublicStorageProvider {
   id: string;
@@ -292,8 +397,23 @@ export interface PublicStorageProvider {
   type: StorageProviderTypeName;
   status: string;
   isDefault: boolean;
+  dialect: S3DialectName | null;
+  endpoint: string | null;
+  region: string | null;
+  bucket: string | null;
+  forcePathStyle: boolean | null;
+  tls: boolean | null;
+  accountId: string | null;
+  accessKeyId: string | null;
+  hasSecret: boolean;
+  credentialsSource: StorageProviderCredentialSource;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface PublicStorageProviderHealth {
+  ok: boolean;
+  message: string;
 }
 
 export interface PublicBucket {
@@ -504,10 +624,4 @@ export interface CreatedS3AccessCredential extends PublicS3AccessCredential {
   secretAccessKey: string;
 }
 
-export type {
-  ApiResult,
-  HttpStatus,
-  RequestCookies,
-  RequestHeaders,
-  RequestMeta,
-} from './http.js';
+export type { ApiResult, HttpStatus, RequestCookies, RequestHeaders, RequestMeta } from './http.js';

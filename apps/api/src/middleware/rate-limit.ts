@@ -1,4 +1,5 @@
 import type { EnvConfig } from '@vaultstack/config';
+import { hashToken } from '@vaultstack/auth';
 import type { NextFunction, Request, Response } from 'express';
 import { rateLimited } from '../lib/errors.js';
 import type { RateLimiter } from '../lib/rate-limit.js';
@@ -52,6 +53,27 @@ export function createLoginRateLimitMiddleware(limiter: RateLimiter, config: Env
       }
       if (!perIp.allowed) {
         throw rateLimited(perIp.retryAfterSeconds);
+      }
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+}
+
+export function createSharePasswordRateLimitMiddleware(limiter: RateLimiter, config: EnvConfig) {
+  return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const raw = req.params.token;
+      const token = Array.isArray(raw) ? raw[0] : raw;
+      const ip = clientIp(req);
+      const result = await limiter.consume(
+        `share-pw:${ip}:${hashToken(token ?? 'unknown').slice(0, 16)}`,
+        config.LOGIN_RATE_LIMIT_MAX,
+        config.LOGIN_RATE_LIMIT_WINDOW_SECONDS,
+      );
+      if (!result.allowed) {
+        throw rateLimited(result.retryAfterSeconds);
       }
       next();
     } catch (error) {

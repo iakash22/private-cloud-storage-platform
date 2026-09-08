@@ -10,6 +10,7 @@ const navItems: {
   { to: '/storage', label: 'Overview', end: true },
   { to: '/storage/files', label: 'Files' },
   { to: '/storage/buckets', label: 'Buckets' },
+  { to: '/storage/providers', label: 'Providers' },
   { to: '/storage/shares', label: 'Shares' },
   { to: '/storage/usage', label: 'Usage' },
   { to: '/storage/trash', label: 'Trash' },

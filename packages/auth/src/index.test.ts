@@ -3,7 +3,9 @@ import {
   generateApiKey,
   generateCsrfToken,
   generateSessionToken,
+  generateShareToken,
   hashApiKey,
+  hashShareToken,
   hashPassword,
   hashToken,
   isApiKeyToken,
@@ -43,6 +45,18 @@ describe('@vaultstack/auth', () => {
     expect(key.hash).toBe(hashApiKey(key.plaintext));
     expect(key.hash).not.toBe(key.plaintext);
     expect(key.prefix).toBe(key.plaintext.slice(0, 12));
+  });
+
+  it('generates high-entropy share tokens that are never sequential ids', () => {
+    const first = generateShareToken();
+    const second = generateShareToken();
+
+    expect(first.plaintext.startsWith('vs_sh_')).toBe(true);
+    expect(first.plaintext).toMatch(/^vs_sh_[a-f0-9]{64}$/);
+    expect(first.hash).toBe(hashShareToken(first.plaintext));
+    expect(first.hash).not.toBe(first.plaintext);
+    expect(first.plaintext).not.toBe(second.plaintext);
+    expect(/^\d+$/.test(first.plaintext)).toBe(false);
   });
 
   it('serializes httpOnly session cookies and parses them back', () => {

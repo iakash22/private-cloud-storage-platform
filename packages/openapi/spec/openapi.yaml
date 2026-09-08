@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: VaultStack API
-  version: 0.3.0
+  version: 0.8.0
   description: |
     Self-hosted private cloud storage management platform.
 
@@ -46,6 +46,8 @@ tags:
     description: Buckets, objects, uploads (metadata control plane)
   - name: Storage Transfer
     description: Byte upload/download via scoped tokens
+  - name: Sharing
+    description: Secure object share links
   - name: S3 Gateway
     description: Inbound S3-compatible API (when enabled)
 
@@ -556,6 +558,92 @@ paths:
         '200':
           description: Audit log page
 
+  /api/v1/storage/providers:
+    get:
+      tags: [Storage]
+      summary: List storage providers
+      operationId: listStorageProviders
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Provider list; secret keys are never included
+    post:
+      tags: [Storage]
+      summary: Register an S3-compatible storage provider
+      operationId: createStorageProvider
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStorageProviderBody'
+      responses:
+        '201':
+          description: Provider created; secret key is not returned
+
+  /api/v1/storage/providers/{providerId}:
+    parameters:
+      - $ref: '#/components/parameters/providerId'
+    get:
+      tags: [Storage]
+      summary: Get a storage provider
+      operationId: getStorageProvider
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Provider metadata without secrets
+    patch:
+      tags: [Storage]
+      summary: Update a storage provider
+      operationId: updateStorageProvider
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStorageProviderBody'
+      responses:
+        '200':
+          description: Provider updated
+    delete:
+      tags: [Storage]
+      summary: Delete a storage provider
+      operationId: deleteStorageProvider
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      responses:
+        '204':
+          description: Provider deleted
+
+  /api/v1/storage/providers/{providerId}/test:
+    parameters:
+      - $ref: '#/components/parameters/providerId'
+    post:
+      tags: [Storage]
+      summary: Test storage provider connectivity
+      operationId: testStorageProvider
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Connection health without vendor error details
+
   /api/v1/storage/buckets:
     get:
       tags: [Storage]
@@ -851,6 +939,204 @@ paths:
       responses:
         '200':
           description: Short-lived download URL with token
+
+  /api/v1/storage/objects/{objectId}/shares:
+    parameters:
+      - $ref: '#/components/parameters/objectId'
+    post:
+      tags: [Storage]
+      summary: Create a share link for an object
+      operationId: createShareLink
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateShareBody'
+      responses:
+        '201':
+          description: Share created; plaintext token returned once
+
+  /api/v1/storage/shares:
+    get:
+      tags: [Storage]
+      summary: List share links in the active organization
+      operationId: listShareLinks
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      parameters:
+        - name: objectId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Share list (no plaintext tokens)
+
+  /api/v1/storage/shares/{shareId}:
+    parameters:
+      - $ref: '#/components/parameters/shareId'
+    get:
+      tags: [Storage]
+      summary: Get a share link
+      operationId: getShareLink
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Share metadata
+    patch:
+      tags: [Storage]
+      summary: Update share expiration, permissions, or revoke
+      operationId: updateShareLink
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateShareBody'
+      responses:
+        '200':
+          description: Share updated
+    delete:
+      tags: [Storage]
+      summary: Revoke a share link
+      operationId: revokeShareLink
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      responses:
+        '204':
+          description: Share revoked
+
+  /api/v1/public/shares/{token}:
+    parameters:
+      - $ref: '#/components/parameters/shareToken'
+    get:
+      tags: [Sharing]
+      summary: Inspect a share by high-entropy token
+      operationId: inspectPublicShare
+      security: []
+      responses:
+        '200':
+          description: Share metadata or passwordRequired
+        '404':
+          description: Unknown token or deleted object
+        '410':
+          description: Share expired
+
+  /api/v1/public/shares/{token}/unlock:
+    parameters:
+      - $ref: '#/components/parameters/shareToken'
+    post:
+      tags: [Sharing]
+      summary: Unlock a password-protected share
+      operationId: unlockPublicShare
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Short-lived share access token
+        '403':
+          description: Wrong password
+        '429':
+          description: Too many password attempts
+
+  /api/v1/public/shares/{token}/download-url:
+    parameters:
+      - $ref: '#/components/parameters/shareToken'
+    post:
+      tags: [Sharing]
+      summary: Issue a short-lived object download URL
+      operationId: createPublicShareDownloadUrl
+      security: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+                accessToken:
+                  type: string
+      responses:
+        '200':
+          description: VaultStack-signed download URL (no provider credentials)
+
+  /api/v1/organizations/{organizationId}/teams/{teamId}/members:
+    parameters:
+      - $ref: '#/components/parameters/organizationId'
+      - $ref: '#/components/parameters/teamId'
+    get:
+      tags: [Teams]
+      summary: List team members
+      operationId: listTeamMembers
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Team members
+    post:
+      tags: [Teams]
+      summary: Add a team member
+      operationId: addTeamMember
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId:
+                  type: string
+      responses:
+        '201':
+          description: Member added
+
+  /api/v1/organizations/{organizationId}/teams/{teamId}/members/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/organizationId'
+      - $ref: '#/components/parameters/teamId'
+      - $ref: '#/components/parameters/userId'
+    delete:
+      tags: [Teams]
+      summary: Remove a team member
+      operationId: removeTeamMember
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      responses:
+        '204':
+          description: Member removed
 
   /api/v1/storage/objects/{objectId}/copy:
     parameters:
@@ -1321,12 +1607,31 @@ components:
       required: true
       schema:
         type: string
+    providerId:
+      name: providerId
+      in: path
+      required: true
+      schema:
+        type: string
     objectId:
       name: objectId
       in: path
       required: true
       schema:
         type: string
+    shareId:
+      name: shareId
+      in: path
+      required: true
+      schema:
+        type: string
+    shareToken:
+      name: token
+      in: path
+      required: true
+      schema:
+        type: string
+        description: High-entropy share token; never a sequential id
     uploadId:
       name: uploadId
       in: path
@@ -1516,6 +1821,46 @@ components:
         name:
           type: string
 
+    CreateShareBody:
+      type: object
+      required: [visibility]
+      properties:
+        visibility:
+          type: string
+          enum: [PRIVATE, TEAM, ORGANIZATION, PUBLIC_LINK]
+        teamId:
+          type: string
+        password:
+          type: string
+        allowView:
+          type: boolean
+        allowDownload:
+          type: boolean
+        maxDownloads:
+          type: integer
+          minimum: 1
+        expiresAt:
+          type: string
+          format: date-time
+
+    UpdateShareBody:
+      type: object
+      properties:
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        allowView:
+          type: boolean
+        allowDownload:
+          type: boolean
+        maxDownloads:
+          type: integer
+          nullable: true
+        revoked:
+          type: boolean
+          enum: [true]
+
     CreateRoleBody:
       type: object
       required: [name, permissions]
@@ -1560,6 +1905,75 @@ components:
         versioning:
           type: string
           enum: [UNVERSIONED, ENABLED]
+        storageProviderId:
+          type: string
+
+    CreateStorageProviderBody:
+      type: object
+      required: [name, dialect, accessKeyId, secretAccessKey]
+      properties:
+        name:
+          type: string
+        dialect:
+          type: string
+          enum: [AWS_S3, CLOUDFLARE_R2, BACKBLAZE_B2, MINIO, WASABI, DIGITALOCEAN_SPACES, GENERIC]
+        endpoint:
+          type: string
+        region:
+          type: string
+        bucket:
+          type: string
+        forcePathStyle:
+          type: boolean
+        tls:
+          type: boolean
+        accountId:
+          type: string
+        accessKeyId:
+          type: string
+        secretAccessKey:
+          type: string
+        isDefault:
+          type: boolean
+        status:
+          type: string
+          enum: [ACTIVE, DEGRADED, DISABLED]
+
+    UpdateStorageProviderBody:
+      type: object
+      properties:
+        name:
+          type: string
+        dialect:
+          type: string
+          enum: [AWS_S3, CLOUDFLARE_R2, BACKBLAZE_B2, MINIO, WASABI, DIGITALOCEAN_SPACES, GENERIC]
+        endpoint:
+          type: string
+          nullable: true
+        region:
+          type: string
+          nullable: true
+        bucket:
+          type: string
+          nullable: true
+        forcePathStyle:
+          type: boolean
+          nullable: true
+        tls:
+          type: boolean
+          nullable: true
+        accountId:
+          type: string
+          nullable: true
+        accessKeyId:
+          type: string
+        secretAccessKey:
+          type: string
+        isDefault:
+          type: boolean
+        status:
+          type: string
+          enum: [ACTIVE, DEGRADED, DISABLED]
 
     UpdateBucketVersioningBody:
       type: object

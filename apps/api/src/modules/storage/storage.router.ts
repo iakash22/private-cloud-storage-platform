@@ -6,20 +6,27 @@ import {
   confirmMultipartPartBodySchema,
   createBucketBodySchema,
   createLifecyclePolicyBodySchema,
+  createShareBodySchema,
+  createStorageProviderBodySchema,
   deleteObjectQuerySchema,
   downloadUrlBodySchema,
   initiateMultipartBodySchema,
   initiateUploadBodySchema,
   listMultipartSessionsQuerySchema,
   listObjectsQuerySchema,
+  listSharesQuerySchema,
   multipartPartDestinationBodySchema,
   multipartPartParamsSchema,
   objectDestinationBodySchema,
   objectIdParamsSchema,
   objectVersionParamsSchema,
+  shareIdParamsSchema,
   storagePolicyIdParamsSchema,
+  storageProviderIdParamsSchema,
   updateBucketVersioningBodySchema,
   updateLifecyclePolicyBodySchema,
+  updateShareBodySchema,
+  updateStorageProviderBodySchema,
   uploadIdParamsSchema,
   uploadPartQuerySchema,
 } from '@vaultstack/validation';
@@ -27,6 +34,8 @@ import { Router } from 'express';
 import type { AppContainer } from '../../container/app-container.js';
 import { requireOrganizationContext } from '../../middleware/organization-context.js';
 import { validateBody, validateParams, validateQuery } from '../../middleware/validate.js';
+import { ShareController } from './controllers/share.controller.js';
+import { ProviderController } from './controllers/provider.controller.js';
 import { StorageController } from './controllers/storage.controller.js';
 
 /**
@@ -39,8 +48,43 @@ import { StorageController } from './controllers/storage.controller.js';
 export function createStorageRouter(container: AppContainer): Router {
   const router = Router();
   const controller = new StorageController(container);
+  const shares = new ShareController(container);
+  const providers = new ProviderController(container);
 
   router.use(requireOrganizationContext);
+
+  router.get('/providers', providers.allow(PERMISSIONS.STORAGE_READ), providers.list);
+  router.post(
+    '/providers',
+    validateBody(createStorageProviderBodySchema),
+    providers.allow(PERMISSIONS.STORAGE_UPLOAD),
+    providers.create,
+  );
+  router.get(
+    '/providers/:providerId',
+    validateParams(storageProviderIdParamsSchema),
+    providers.allow(PERMISSIONS.STORAGE_READ),
+    providers.get,
+  );
+  router.patch(
+    '/providers/:providerId',
+    validateParams(storageProviderIdParamsSchema),
+    validateBody(updateStorageProviderBodySchema),
+    providers.allow(PERMISSIONS.STORAGE_UPLOAD),
+    providers.update,
+  );
+  router.delete(
+    '/providers/:providerId',
+    validateParams(storageProviderIdParamsSchema),
+    providers.allow(PERMISSIONS.STORAGE_DELETE),
+    providers.remove,
+  );
+  router.post(
+    '/providers/:providerId/test',
+    validateParams(storageProviderIdParamsSchema),
+    providers.allow(PERMISSIONS.STORAGE_UPLOAD),
+    providers.test,
+  );
 
   router.get('/buckets', controller.allow(PERMISSIONS.STORAGE_READ), controller.listBuckets);
   router.post(
@@ -216,11 +260,7 @@ export function createStorageRouter(container: AppContainer): Router {
     controller.abortMultipart,
   );
 
-  router.get(
-    '/policies',
-    controller.allow(PERMISSIONS.STORAGE_READ),
-    controller.listPolicies,
-  );
+  router.get('/policies', controller.allow(PERMISSIONS.STORAGE_READ), controller.listPolicies);
   router.post(
     '/policies',
     validateBody(createLifecyclePolicyBodySchema),
@@ -245,6 +285,39 @@ export function createStorageRouter(container: AppContainer): Router {
     validateParams(storagePolicyIdParamsSchema),
     controller.allow(PERMISSIONS.STORAGE_DELETE),
     controller.removePolicy,
+  );
+
+  router.get(
+    '/shares',
+    validateQuery(listSharesQuerySchema),
+    shares.allow(PERMISSIONS.STORAGE_SHARE),
+    shares.list,
+  );
+  router.post(
+    '/objects/:objectId/shares',
+    validateParams(objectIdParamsSchema),
+    validateBody(createShareBodySchema),
+    shares.allow(PERMISSIONS.STORAGE_SHARE),
+    shares.create,
+  );
+  router.get(
+    '/shares/:shareId',
+    validateParams(shareIdParamsSchema),
+    shares.allow(PERMISSIONS.STORAGE_SHARE),
+    shares.get,
+  );
+  router.patch(
+    '/shares/:shareId',
+    validateParams(shareIdParamsSchema),
+    validateBody(updateShareBodySchema),
+    shares.allow(PERMISSIONS.STORAGE_SHARE),
+    shares.update,
+  );
+  router.delete(
+    '/shares/:shareId',
+    validateParams(shareIdParamsSchema),
+    shares.allow(PERMISSIONS.STORAGE_SHARE),
+    shares.revoke,
   );
 
   return router;

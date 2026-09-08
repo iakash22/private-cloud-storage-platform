@@ -6,7 +6,11 @@ import {
   type Bucket,
   type StorageProvider as StorageProviderRow,
 } from '@vaultstack/database';
-import { storageBucketNotFound, storageProviderUnavailable } from '../../../lib/errors.js';
+import {
+  storageBucketNotFound,
+  storageProviderNotFound,
+  storageProviderUnavailable,
+} from '../../../lib/errors.js';
 import type { StorageProvider } from '../domain/storage-provider.js';
 import type { StorageLocation } from '../domain/storage.types.js';
 import type { ProviderRegistry } from '../providers/provider-registry.js';
@@ -42,13 +46,14 @@ export interface StorageService {
    */
   resolveBucket(organizationId: string, bucketId: string): Promise<ResolvedBucket>;
   defaultProvider(organizationId: string): Promise<StorageProviderRow>;
+  findProvider(organizationId: string, providerId: string): Promise<StorageProviderRow>;
   providerFor(record: StorageProviderRow): StorageProvider;
 
-  physicalBucketFor(bucket: Pick<Bucket, 'id'>): string;
+  physicalBucketFor(bucket: Pick<Bucket, 'id' | 'physicalPrefix'>): string;
   physicalKeyFor(input: { organizationId: string; objectId: string; versionId: string }): string;
   newObjectId(): string;
   newVersionId(): string;
-  locationFor(bucket: Pick<Bucket, 'id'>, physicalKey: string): StorageLocation;
+  locationFor(bucket: Pick<Bucket, 'id' | 'physicalPrefix'>, physicalKey: string): StorageLocation;
 }
 
 export function createStorageService(deps: {
@@ -105,6 +110,19 @@ export function createStorageService(deps: {
       return providers.ensureDefault(organizationId, type);
     },
 
+    async findProvider(organizationId, providerId) {
+      const record = await providers.findById(organizationId, providerId);
+      if (!record) {
+        throw storageProviderNotFound();
+      }
+
+      if (record.status === StorageProviderStatus.DISABLED) {
+        throw storageProviderUnavailable('Storage provider is disabled');
+      }
+
+      return record;
+    },
+
     providerFor(record) {
       return registry.resolve(record);
     },
@@ -112,11 +130,17 @@ export function createStorageService(deps: {
     /**
      * Physical bucket identifier.
      *
-     * Derived from the bucket id rather than its display name so it is stable,
+     * Uses the stored physical prefix when present so objects land in the
+     * namespace provisioned at bucket creation (including a shared external
+     * bucket). Otherwise derived from the bucket id so it is stable,
      * unguessable, free of user input, and simultaneously a valid S3 bucket
      * name and a valid directory name.
      */
     physicalBucketFor(bucket) {
+      if (bucket.physicalPrefix.length > 0) {
+        return bucket.physicalPrefix;
+      }
+
       return `vs-${bucket.id.toLowerCase()}`;
     },
 

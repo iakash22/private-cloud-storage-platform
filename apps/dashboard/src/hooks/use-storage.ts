@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { PublicBucket, PublicObjectListPage, PublicStorageObject } from '@vaultstack/types';
+import type {
+  PublicBucket,
+  PublicObjectListPage,
+  PublicStorageObject,
+  PublicStorageProvider,
+} from '@vaultstack/types';
 import { apiClient } from '../lib/api.js';
 
 export function useBuckets() {
@@ -26,6 +31,32 @@ export function useBuckets() {
   }, [refresh]);
 
   return { buckets, loading, error, refresh };
+}
+
+export function useStorageProviders() {
+  const [providers, setProviders] = useState<PublicStorageProvider[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const next = await apiClient.listStorageProviders();
+      setProviders(next);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Unable to load storage providers');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  return { providers, loading, error, refresh };
 }
 
 export function useObjectList(bucketId?: string, prefix = '') {

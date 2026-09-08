@@ -1,4 +1,5 @@
 import {
+  addTeamMemberBodySchema,
   createTeamBodySchema,
   updateTeamBodySchema,
 } from '@vaultstack/validation';
@@ -57,6 +58,44 @@ export class TeamsController extends OrganizationScopedController {
     );
     this.noContent(res);
   });
+
+  listMembers: AsyncRouteHandler = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const members = await this.container.teams.listMembers(
+        routeParam(req, 'organizationId'),
+        routeParam(req, 'teamId'),
+      );
+      this.ok(res, { members });
+    },
+  );
+
+  addMember: AsyncRouteHandler = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const auth = this.requireAuth(req);
+      const member = await this.container.teams.addMember(
+        routeParam(req, 'organizationId'),
+        routeParam(req, 'teamId'),
+        readBody(req, addTeamMemberBodySchema).userId,
+        auth.user.id,
+        requestMeta(req),
+      );
+      this.created(res, { member });
+    },
+  );
+
+  removeMember: AsyncRouteHandler = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const auth = this.requireAuth(req);
+      await this.container.teams.removeMember(
+        routeParam(req, 'organizationId'),
+        routeParam(req, 'teamId'),
+        routeParam(req, 'userId'),
+        auth.user.id,
+        requestMeta(req),
+      );
+      this.noContent(res);
+    },
+  );
 
   static readonly readPermission = PERMISSIONS.USERS_READ;
   static readonly managePermission = PERMISSIONS.USERS_MANAGE;

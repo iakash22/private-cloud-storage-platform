@@ -65,6 +65,17 @@ import type {
 export interface S3CompatibleProviderOptions {
   client: S3Client;
   region: string;
+  /**
+   * When false, CreateBucket is sent without a LocationConstraint. Dialects
+   * whose region tokens are not AWS location codes (for example R2 `auto`)
+   * must set this.
+   */
+  sendCreateBucketLocationConstraint?: boolean;
+  /**
+   * When false, deleteBucket is a no-op. Used when the organization supplied a
+   * shared physical bucket that VaultStack must not destroy.
+   */
+  ownsPhysicalBuckets?: boolean;
 }
 
 export function createS3CompatibleProvider(options: S3CompatibleProviderOptions): StorageProvider {
@@ -92,25 +103,35 @@ export class S3CompatibleStorageProvider implements StorageProvider {
 
   private readonly client: S3Client;
   private readonly region: string;
+  private readonly sendCreateBucketLocationConstraint: boolean;
+  private readonly ownsPhysicalBuckets: boolean;
 
   constructor(options: S3CompatibleProviderOptions) {
     this.client = options.client;
     this.region = options.region;
+    this.sendCreateBucketLocationConstraint = options.sendCreateBucketLocationConstraint ?? true;
+    this.ownsPhysicalBuckets = options.ownsPhysicalBuckets ?? true;
   }
 
   // --- buckets -----------------------------------------------------------
 
   async createBucket(ref: ProviderBucketRef): Promise<void> {
     await this.guard(async () => {
-      await this.client.send(
-        new CreateBucketCommand({
-          Bucket: ref.physicalBucket,
-          // us-east-1 must not send a location constraint.
-          ...(this.region && this.region !== 'us-east-1'
-            ? { CreateBucketConfiguration: { LocationConstraint: this.region as never } }
-            : {}),
-        }),
-      );
+      try {
+        await this.client.send(
+          new CreateBucketCommand({
+            Bucket: ref.physicalBucket,
+            ...(this.shouldSendLocationConstraint()
+              ? { CreateBucketConfiguration: { LocationConstraint: this.region as never } }
+              : {}),
+          }),
+        );
+      } catch (error) {
+        if (isBucketAlreadyExistsError(error)) {
+          return;
+        }
+        throw error;
+      }
     }, 'Bucket could not be created');
   }
 
@@ -141,6 +162,10 @@ export class S3CompatibleStorageProvider implements StorageProvider {
   }
 
   async deleteBucket(ref: ProviderBucketRef): Promise<void> {
+    if (!this.ownsPhysicalBuckets) {
+      return;
+    }
+
     await this.guard(
       () => this.client.send(new DeleteBucketCommand({ Bucket: ref.physicalBucket })),
       'Bucket could not be deleted',
@@ -299,27 +324,24 @@ export class S3CompatibleStorageProvider implements StorageProvider {
   }
 
   async listObjects(input: ListObjectsInput): Promise<ProviderObjectListPage> {
-    const response = await this.guard(
-      async () => {
-        try {
-          return await this.client.send(
-            new ListObjectsV2Command({
-              Bucket: input.physicalBucket,
-              Prefix: input.prefix,
-              Delimiter: input.delimiter,
-              MaxKeys: input.maxKeys,
-              ContinuationToken: input.cursor,
-            }),
-          );
-        } catch (error) {
-          if (isNoSuchBucketError(error)) {
-            throw storageBucketNotFound();
-          }
-          throw error;
+    const response = await this.guard(async () => {
+      try {
+        return await this.client.send(
+          new ListObjectsV2Command({
+            Bucket: input.physicalBucket,
+            Prefix: input.prefix,
+            Delimiter: input.delimiter,
+            MaxKeys: input.maxKeys,
+            ContinuationToken: input.cursor,
+          }),
+        );
+      } catch (error) {
+        if (isNoSuchBucketError(error)) {
+          throw storageBucketNotFound();
         }
-      },
-      'Objects could not be listed',
-    );
+        throw error;
+      }
+    }, 'Objects could not be listed');
 
     return {
       objects: (response.Contents ?? [])
@@ -599,12 +621,15 @@ export class S3CompatibleStorageProvider implements StorageProvider {
     try {
       await this.client.send(new ListBucketsCommand({}));
       return { ok: true };
-    } catch (error) {
-      return {
-        ok: false,
-        message: error instanceof Error ? error.message : 'S3 endpoint unreachable',
-      };
+    } catch {
+      return { ok: false, message: 'S3 endpoint unreachable' };
     }
+  }
+
+  private shouldSendLocationConstraint(): boolean {
+    return (
+      this.sendCreateBucketLocationConstraint && Boolean(this.region) && this.region !== 'us-east-1'
+    );
   }
 
   /**
@@ -712,6 +737,14 @@ function isNoSuchBucketError(error: unknown): boolean {
 
 function isAppError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AppError';
+}
+
+function isBucketAlreadyExistsError(error: unknown): boolean {
+  const name = (error as { name?: string } | null)?.name;
+  const status = (error as { $metadata?: { httpStatusCode?: number } } | null)?.$metadata
+    ?.httpStatusCode;
+
+  return name === 'BucketAlreadyOwnedByYou' || name === 'BucketAlreadyExists' || status === 409;
 }
 
 function isNotFoundError(error: unknown): boolean {

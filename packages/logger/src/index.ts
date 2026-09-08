@@ -12,6 +12,7 @@ const REDACT_PATHS = [
   'secretKey',
   'keyHash',
   'tokenHash',
+  'accessToken',
   'authorization',
   'JWT_SECRET',
   'MINIO_SECRET_KEY',
@@ -28,6 +29,7 @@ const REDACT_PATHS = [
   '*.secretKey',
   '*.keyHash',
   '*.tokenHash',
+  '*.accessToken',
   '*.authorization',
 ];
 

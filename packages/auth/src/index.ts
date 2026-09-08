@@ -3,11 +3,13 @@ import { ApiKeyService } from './api-key.service.js';
 import { CookieSerializer } from './cookie.serializer.js';
 import { CryptoUtil } from './crypto.util.js';
 import { PasswordService } from './password.service.js';
+import { ShareTokenService } from './share-token.service.js';
 import { TokenService } from './token.service.js';
 import {
   API_KEY_PREFIX,
   CSRF_TOKEN_PREFIX,
   SESSION_TOKEN_PREFIX,
+  SHARE_TOKEN_PREFIX,
   type AccessTokenPayload,
   type CookieOptions,
   type GeneratedApiKey,
@@ -17,13 +19,16 @@ export {
   API_KEY_PREFIX,
   CSRF_TOKEN_PREFIX,
   SESSION_TOKEN_PREFIX,
+  SHARE_TOKEN_PREFIX,
   ApiKeyService,
   CookieSerializer,
   CryptoUtil,
   PasswordService,
+  ShareTokenService,
   TokenService,
 };
 export type { AccessTokenPayload, CookieOptions, GeneratedApiKey };
+export type { GeneratedShareToken } from './share-token.service.js';
 
 export function passwordHashRounds(nodeEnv: string): number {
   return new PasswordService(nodeEnv).getRounds();
@@ -78,6 +83,14 @@ export function parseCookieHeader(header: string | undefined): Record<string, st
 
 export function generateApiKey(): GeneratedApiKey {
   return new ApiKeyService().generate();
+}
+
+export function generateShareToken() {
+  return new ShareTokenService().generate();
+}
+
+export function hashShareToken(plaintext: string): string {
+  return new ShareTokenService().hash(plaintext);
 }
 
 export function isApiKeyToken(token: string): boolean {

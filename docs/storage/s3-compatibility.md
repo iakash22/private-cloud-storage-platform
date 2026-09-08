@@ -30,10 +30,13 @@ Capabilities reported: `nativePresignedUrls: true`, `nativeVersioning: true`,
 `serverSideCopy: true`. Copies are performed server-side by the backend rather
 than streamed through the API.
 
-Credentials are never stored in plaintext in the database. `StorageProvider.config`
-holds non-secret settings only, and `secretRef` points at environment-supplied
-credentials. `describeS3Connection()` produces a redacted description for logs
-and health output; access keys and secret keys never appear.
+Credentials for the server-wide default may live in `S3_*` environment variables
+(`credentialRef: env:S3`). Organizations can also register their own
+S3-compatible providers; those secrets are stored as AES-256-GCM ciphertext and
+are never returned by the API. `StorageProvider.config` holds only non-secret
+settings (dialect, endpoint, region, bucket, path style, TLS).
+`describeS3Connection()` produces a redacted description for logs and health
+output; access keys and secret keys never appear.
 
 ## Inbound: the S3-compatible gateway
 

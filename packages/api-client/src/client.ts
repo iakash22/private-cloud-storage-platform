@@ -15,17 +15,23 @@ import {
   type PublicObjectVersion,
   type PublicObjectVersionListPage,
   type PublicPresignedUrl,
+  type PublicShareAccess,
+  type PublicShareInspect,
+  type PublicShareLink,
   type PublicStorageObject,
   type PublicStoragePolicy,
+  type PublicStorageProvider,
+  type PublicStorageProviderHealth,
+  type S3DialectName,
+  type PublicTeam,
+  type PublicTeamMember,
   type ReadinessResponse,
+  type ShareVisibilityName,
   type StorageLifecycleActionName,
 } from '@vaultstack/types';
 import { ApiClientError } from './errors.js';
 import { defaultHttpFetch, type HttpFetch, type HttpRequestInit } from './http.js';
-import {
-  uploadMultipartFile,
-  type UploadMultipartFileOptions,
-} from './multipart-upload.js';
+import { uploadMultipartFile, type UploadMultipartFileOptions } from './multipart-upload.js';
 import { uploadBlobWithProgress, type UploadWithProgressOptions } from './upload-with-progress.js';
 
 export interface ApiClientOptions {
@@ -137,14 +143,83 @@ export class VaultStackApiClient {
   }
 
   async listBuckets(): Promise<PublicBucket[]> {
-    const result = await this.request<{ buckets: PublicBucket[] }>('GET', '/api/v1/storage/buckets');
+    const result = await this.request<{ buckets: PublicBucket[] }>(
+      'GET',
+      '/api/v1/storage/buckets',
+    );
     return result.buckets;
+  }
+
+  async listStorageProviders(): Promise<PublicStorageProvider[]> {
+    const result = await this.request<{ providers: PublicStorageProvider[] }>(
+      'GET',
+      '/api/v1/storage/providers',
+    );
+    return result.providers;
+  }
+
+  async createStorageProvider(input: {
+    name: string;
+    dialect: S3DialectName;
+    endpoint?: string;
+    region?: string;
+    bucket?: string;
+    forcePathStyle?: boolean;
+    tls?: boolean;
+    accountId?: string;
+    accessKeyId: string;
+    secretAccessKey: string;
+    isDefault?: boolean;
+  }): Promise<PublicStorageProvider> {
+    const result = await this.request<{ provider: PublicStorageProvider }>(
+      'POST',
+      '/api/v1/storage/providers',
+      { body: input },
+    );
+    return result.provider;
+  }
+
+  async updateStorageProvider(
+    providerId: string,
+    input: {
+      name?: string;
+      endpoint?: string | null;
+      region?: string | null;
+      bucket?: string | null;
+      forcePathStyle?: boolean | null;
+      tls?: boolean | null;
+      accountId?: string | null;
+      accessKeyId?: string;
+      secretAccessKey?: string;
+      isDefault?: boolean;
+      status?: string;
+    },
+  ): Promise<PublicStorageProvider> {
+    const result = await this.request<{ provider: PublicStorageProvider }>(
+      'PATCH',
+      `/api/v1/storage/providers/${providerId}`,
+      { body: input },
+    );
+    return result.provider;
+  }
+
+  async deleteStorageProvider(providerId: string): Promise<void> {
+    await this.request<undefined>('DELETE', `/api/v1/storage/providers/${providerId}`);
+  }
+
+  async testStorageProvider(providerId: string): Promise<PublicStorageProviderHealth> {
+    const result = await this.request<{ health: PublicStorageProviderHealth }>(
+      'POST',
+      `/api/v1/storage/providers/${providerId}/test`,
+    );
+    return result.health;
   }
 
   async createBucket(input: {
     name: string;
     region?: string;
     versioning?: 'UNVERSIONED' | 'ENABLED';
+    storageProviderId?: string;
   }): Promise<PublicBucket> {
     const result = await this.request<{ bucket: PublicBucket }>('POST', '/api/v1/storage/buckets', {
       body: input,
@@ -176,7 +251,10 @@ export class VaultStackApiClient {
     return result.bucket;
   }
 
-  async listObjects(bucketId: string, params: ListObjectsParams = {}): Promise<PublicObjectListPage> {
+  async listObjects(
+    bucketId: string,
+    params: ListObjectsParams = {},
+  ): Promise<PublicObjectListPage> {
     const search = new URLSearchParams();
     if (params.prefix) {
       search.set('prefix', params.prefix);
@@ -306,6 +384,117 @@ export class VaultStackApiClient {
     await this.request<undefined>('DELETE', `/api/v1/storage/policies/${policyId}`);
   }
 
+  async listShares(objectId?: string): Promise<PublicShareLink[]> {
+    const query = objectId ? `?objectId=${encodeURIComponent(objectId)}` : '';
+    const result = await this.request<{ shares: PublicShareLink[] }>(
+      'GET',
+      `/api/v1/storage/shares${query}`,
+    );
+    return result.shares;
+  }
+
+  async createShare(
+    objectId: string,
+    input: {
+      visibility: ShareVisibilityName;
+      teamId?: string;
+      password?: string;
+      allowView?: boolean;
+      allowDownload?: boolean;
+      maxDownloads?: number;
+      expiresAt?: string;
+    },
+  ): Promise<PublicShareLink & { token: string }> {
+    const result = await this.request<{ share: PublicShareLink & { token: string } }>(
+      'POST',
+      `/api/v1/storage/objects/${objectId}/shares`,
+      { body: input },
+    );
+    return result.share;
+  }
+
+  async getShare(shareId: string): Promise<PublicShareLink> {
+    const result = await this.request<{ share: PublicShareLink }>(
+      'GET',
+      `/api/v1/storage/shares/${shareId}`,
+    );
+    return result.share;
+  }
+
+  async updateShare(
+    shareId: string,
+    input: {
+      expiresAt?: string | null;
+      allowView?: boolean;
+      allowDownload?: boolean;
+      maxDownloads?: number | null;
+      revoked?: true;
+    },
+  ): Promise<PublicShareLink> {
+    const result = await this.request<{ share: PublicShareLink }>(
+      'PATCH',
+      `/api/v1/storage/shares/${shareId}`,
+      { body: input },
+    );
+    return result.share;
+  }
+
+  async revokeShare(shareId: string): Promise<void> {
+    await this.request<undefined>('DELETE', `/api/v1/storage/shares/${shareId}`);
+  }
+
+  async inspectPublicShare(token: string, accessToken?: string): Promise<PublicShareInspect> {
+    const query = accessToken ? `?accessToken=${encodeURIComponent(accessToken)}` : '';
+    return this.request<PublicShareInspect>(
+      'GET',
+      `/api/v1/public/shares/${encodeURIComponent(token)}${query}`,
+    );
+  }
+
+  async unlockPublicShare(
+    token: string,
+    password: string,
+  ): Promise<{ share: PublicShareAccess; accessToken: string; expiresAt: string }> {
+    return this.request<{ share: PublicShareAccess; accessToken: string; expiresAt: string }>(
+      'POST',
+      `/api/v1/public/shares/${encodeURIComponent(token)}/unlock`,
+      { body: { password } },
+    );
+  }
+
+  async createPublicShareDownloadUrl(
+    token: string,
+    input: { password?: string; accessToken?: string } = {},
+  ): Promise<PublicPresignedUrl> {
+    const result = await this.request<{ download: PublicPresignedUrl }>(
+      'POST',
+      `/api/v1/public/shares/${encodeURIComponent(token)}/download-url`,
+      { body: input },
+    );
+    return result.download;
+  }
+
+  async listTeams(organizationId: string): Promise<PublicTeam[]> {
+    const result = await this.request<{ teams: PublicTeam[] }>(
+      'GET',
+      `/api/v1/organizations/${organizationId}/teams`,
+    );
+    return result.teams;
+  }
+
+  async addTeamMember(
+    organizationId: string,
+    teamId: string,
+    userId: string,
+  ): Promise<PublicTeamMember> {
+    const result = await this.request<{ member: PublicTeamMember }>(
+      'POST',
+      `/api/v1/organizations/${organizationId}/teams/${teamId}/members`,
+      { body: { userId } },
+    );
+    return result.member;
+  }
+
   async copyObject(
     objectId: string,
     destination: { destinationBucketId: string; destinationKey: string },
@@ -387,11 +576,13 @@ export class VaultStackApiClient {
     return result.session;
   }
 
-  async listMultipartSessions(params: {
-    status?: MultipartUploadStatusName;
-    limit?: number;
-    cursor?: string;
-  } = {}): Promise<PublicMultipartSessionListPage> {
+  async listMultipartSessions(
+    params: {
+      status?: MultipartUploadStatusName;
+      limit?: number;
+      cursor?: string;
+    } = {},
+  ): Promise<PublicMultipartSessionListPage> {
     const search = new URLSearchParams();
     if (params.status) {
       search.set('status', params.status);
@@ -403,10 +594,7 @@ export class VaultStackApiClient {
       search.set('cursor', params.cursor);
     }
     const query = search.toString();
-    return this.request(
-      'GET',
-      `/api/v1/storage/multipart-uploads${query ? `?${query}` : ''}`,
-    );
+    return this.request('GET', `/api/v1/storage/multipart-uploads${query ? `?${query}` : ''}`);
   }
 
   async listMultipartParts(uploadId: string): Promise<PublicMultipartPart[]> {

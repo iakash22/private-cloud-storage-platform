@@ -3,8 +3,10 @@ import {
   ALL_PERMISSIONS,
   ALL_SYSTEM_ROLES,
   PERMISSIONS,
+  S3_DIALECTS,
   STORAGE_LIFECYCLE_ACTIONS,
   STORAGE_POLICY_KINDS,
+  STORAGE_PROVIDER_TYPES,
   SYSTEM_ROLE_PERMISSIONS,
   SYSTEM_ROLES,
   type HealthResponse,
@@ -31,6 +33,12 @@ describe('@vaultstack/types', () => {
     expect(ALL_PERMISSIONS).toContain(PERMISSIONS.USERS_MANAGE);
     expect(ALL_PERMISSIONS).toContain(PERMISSIONS.AUDIT_READ);
     expect(ALL_PERMISSIONS).toHaveLength(16);
+  });
+
+  it('lists S3 dialects without promoting them to provider types', () => {
+    expect(S3_DIALECTS.AWS_S3).toBe('AWS_S3');
+    expect(S3_DIALECTS.MINIO).toBe('MINIO');
+    expect(STORAGE_PROVIDER_TYPES.S3_COMPATIBLE).toBe('S3_COMPATIBLE');
   });
 
   it('defines the six system roles and SUPER_ADMIN has every permission', () => {

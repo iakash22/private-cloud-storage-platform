@@ -12,10 +12,12 @@ import {
   ObjectDetails,
   ShareDialog,
   type ExplorerEntry,
+  type ShareDialogCreateInput,
   type SortDirection,
   type SortField,
   type ViewMode,
 } from '@vaultstack/ui';
+import type { PublicTeam } from '@vaultstack/types';
 import { useAuth } from '../../context/auth-context.js';
 import { useObjectList, useSelectedObject, useBuckets } from '../../hooks/use-storage.js';
 import { useUploadQueue } from '../../hooks/use-upload-queue.js';
@@ -25,6 +27,7 @@ import {
   buildObjectKey,
   canDeleteStorage,
   canReadStorage,
+  canShareStorage,
   canUploadStorage,
   getFavoriteIds,
   getSelectedBucketId,
@@ -34,7 +37,7 @@ import {
 } from '../../lib/storage-preferences.js';
 
 export function FilesPage() {
-  const { permissions } = useAuth();
+  const { permissions, activeOrganizationId } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const { buckets, loading: bucketsLoading } = useBuckets();
   const [bucketId, setBucketId] = useState<string | undefined>(
@@ -55,15 +58,22 @@ export function FilesPage() {
   const [moveBucketId, setMoveBucketId] = useState('');
   const [moveKey, setMoveKey] = useState('');
   const [shareOpen, setShareOpen] = useState(false);
+  const [shareSubmitting, setShareSubmitting] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [teams, setTeams] = useState<PublicTeam[]>([]);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const { page, loading, error, refresh, loadMore } = useObjectList(bucketId, prefix);
-  const { object } = useSelectedObject(selectedEntry?.kind === 'file' ? selectedEntry.id : undefined);
-  const { uploads, enqueueFiles, cancelUpload, retryUpload, pauseUpload, resumeUpload } = useUploadQueue({
-    onComplete: () => {
-      void refresh();
-    },
-  });
+  const { object } = useSelectedObject(
+    selectedEntry?.kind === 'file' ? selectedEntry.id : undefined,
+  );
+  const { uploads, enqueueFiles, cancelUpload, retryUpload, pauseUpload, resumeUpload } =
+    useUploadQueue({
+      onComplete: () => {
+        void refresh();
+      },
+    });
 
   const selectedBucket = useMemo(
     () => buckets.find((bucket) => bucket.id === bucketId),
@@ -199,7 +209,9 @@ export function FilesPage() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold text-slate-900">Files</h2>
-          <p className="text-sm text-slate-500">Browse, upload, and manage objects by bucket and prefix.</p>
+          <p className="text-sm text-slate-500">
+            Browse, upload, and manage objects by bucket and prefix.
+          </p>
         </div>
         <div className="w-full max-w-xs">
           <BucketSelector
@@ -216,69 +228,69 @@ export function FilesPage() {
       <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
         <div className="space-y-4">
           <FileExplorer
-          prefix={prefix}
-          page={page}
-          loading={loading || bucketsLoading}
-          error={error ?? undefined}
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
-          search={search}
-          onSearchChange={setSearch}
-          sortField={sortField}
-          sortDirection={sortDirection}
-          onSortFieldChange={setSortField}
-          onSortDirectionChange={setSortDirection}
-          selectedId={selectedEntry?.id}
-          favoriteIds={favoriteIds}
-          onNavigatePrefix={setPrefix}
-          onSelect={setSelectedEntry}
-          onOpen={handleOpen}
-          onDownload={
-            canReadStorage(permissions)
-              ? (entry) => {
-                  void handleDownload(entry);
-                }
-              : undefined
-          }
-          onRename={
-            canUploadStorage(permissions)
-              ? (entry) => {
-                  if (entry.kind !== 'file') {
-                    return;
+            prefix={prefix}
+            page={page}
+            loading={loading || bucketsLoading}
+            error={error ?? undefined}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            search={search}
+            onSearchChange={setSearch}
+            sortField={sortField}
+            sortDirection={sortDirection}
+            onSortFieldChange={setSortField}
+            onSortDirectionChange={setSortDirection}
+            selectedId={selectedEntry?.id}
+            favoriteIds={favoriteIds}
+            onNavigatePrefix={setPrefix}
+            onSelect={setSelectedEntry}
+            onOpen={handleOpen}
+            onDownload={
+              canReadStorage(permissions)
+                ? (entry) => {
+                    void handleDownload(entry);
                   }
-                  setRenameTarget(entry);
-                  setRenameValue(entry.name);
-                }
-              : undefined
-          }
-          onDelete={canDeleteStorage(permissions) ? setDeleteTarget : undefined}
-          onToggleFavorite={(entry) => {
-            if (entry.kind !== 'file') {
-              return;
+                : undefined
             }
-            setFavoriteIds(toggleFavorite(entry.id));
-          }}
-          onUploadClick={() => {
-            setShowUploader((current) => !current);
-          }}
-          onFilesSelected={(files) => {
-            if (!bucketId || !canUploadStorage(permissions)) {
-              return;
+            onRename={
+              canUploadStorage(permissions)
+                ? (entry) => {
+                    if (entry.kind !== 'file') {
+                      return;
+                    }
+                    setRenameTarget(entry);
+                    setRenameValue(entry.name);
+                  }
+                : undefined
             }
-            enqueueFiles(files, bucketId, prefix);
-          }}
-          uploads={uploads}
-          onCancelUpload={(uploadId) => {
-            cancelUpload(uploadId);
-          }}
-          onRetryUpload={retryUpload}
-          onPauseUpload={pauseUpload}
-          onResumeUpload={resumeUpload}
-          onRetry={() => {
-            void refresh();
-          }}
-          uploadDisabled={!bucketId || !canUploadStorage(permissions)}
-          showUploader={showUploader}
+            onDelete={canDeleteStorage(permissions) ? setDeleteTarget : undefined}
+            onToggleFavorite={(entry) => {
+              if (entry.kind !== 'file') {
+                return;
+              }
+              setFavoriteIds(toggleFavorite(entry.id));
+            }}
+            onUploadClick={() => {
+              setShowUploader((current) => !current);
+            }}
+            onFilesSelected={(files) => {
+              if (!bucketId || !canUploadStorage(permissions)) {
+                return;
+              }
+              enqueueFiles(files, bucketId, prefix);
+            }}
+            uploads={uploads}
+            onCancelUpload={(uploadId) => {
+              cancelUpload(uploadId);
+            }}
+            onRetryUpload={retryUpload}
+            onPauseUpload={pauseUpload}
+            onResumeUpload={resumeUpload}
+            onRetry={() => {
+              void refresh();
+            }}
+            uploadDisabled={!bucketId || !canUploadStorage(permissions)}
+            showUploader={showUploader}
           />
 
           {page?.isTruncated ? (
@@ -297,12 +309,20 @@ export function FilesPage() {
           <ObjectDetails object={object} bucket={selectedBucket} />
           {selectedEntry?.kind === 'file' ? (
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" onClick={() => void handleDownload(selectedEntry)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void handleDownload(selectedEntry)}
+              >
                 Download
               </Button>
               {canUploadStorage(permissions) ? (
                 <>
-                  <Button type="button" variant="outline" onClick={() => void handleCopy(selectedEntry)}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void handleCopy(selectedEntry)}
+                  >
                     Copy
                   </Button>
                   <Button
@@ -316,16 +336,28 @@ export function FilesPage() {
                   >
                     Move
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      setShareOpen(true);
-                    }}
-                  >
-                    Share
-                  </Button>
                 </>
+              ) : null}
+              {canShareStorage(permissions) ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShareError(null);
+                    setShareUrl(null);
+                    setShareOpen(true);
+                    if (activeOrganizationId) {
+                      void apiClient
+                        .listTeams(activeOrganizationId)
+                        .then(setTeams)
+                        .catch(() => {
+                          setTeams([]);
+                        });
+                    }
+                  }}
+                >
+                  Share
+                </Button>
               ) : null}
             </div>
           ) : null}
@@ -414,7 +446,35 @@ export function FilesPage() {
       <ShareDialog
         open={shareOpen}
         objectName={selectedEntry?.name}
-        onOpenChange={setShareOpen}
+        teams={teams}
+        submitting={shareSubmitting}
+        error={shareError}
+        createdUrl={shareUrl}
+        onOpenChange={(open) => {
+          setShareOpen(open);
+          if (!open) {
+            setShareUrl(null);
+            setShareError(null);
+          }
+        }}
+        onCreate={(input: ShareDialogCreateInput) => {
+          if (!selectedEntry) {
+            return;
+          }
+          setShareSubmitting(true);
+          setShareError(null);
+          void apiClient
+            .createShare(selectedEntry.id, input)
+            .then((share) => {
+              setShareUrl(`${window.location.origin}/s/${share.token}`);
+            })
+            .catch((caught: unknown) => {
+              setShareError(caught instanceof Error ? caught.message : 'Unable to create share');
+            })
+            .finally(() => {
+              setShareSubmitting(false);
+            });
+        }}
       />
     </div>
   );

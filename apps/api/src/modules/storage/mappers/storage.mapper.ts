@@ -14,6 +14,7 @@ import type {
   UploadStatusName,
 } from '@vaultstack/types';
 import type { Prisma } from '@vaultstack/database';
+import { credentialsSourceOf, readProviderConfig } from '../domain/provider-config.js';
 
 export function serializeStorageProvider(provider: {
   id: string;
@@ -22,9 +23,15 @@ export function serializeStorageProvider(provider: {
   type: string;
   status: string;
   isDefault: boolean;
+  config: Prisma.JsonValue;
+  credentialRef: string | null;
+  accessKeyId: string | null;
+  secretCiphertext: string | null;
   createdAt: Date;
   updatedAt: Date;
 }): PublicStorageProvider {
+  const settings = readProviderConfig(provider.config);
+
   return {
     id: provider.id,
     organizationId: provider.organizationId,
@@ -32,6 +39,16 @@ export function serializeStorageProvider(provider: {
     type: provider.type as StorageProviderTypeName,
     status: provider.status,
     isDefault: provider.isDefault,
+    dialect: settings.dialect,
+    endpoint: settings.endpoint,
+    region: settings.region,
+    bucket: settings.bucket,
+    forcePathStyle: settings.forcePathStyle,
+    tls: settings.tls,
+    accountId: settings.accountId,
+    accessKeyId: provider.accessKeyId,
+    hasSecret: Boolean(provider.secretCiphertext) || Boolean(provider.credentialRef),
+    credentialsSource: credentialsSourceOf(provider),
     createdAt: provider.createdAt.toISOString(),
     updatedAt: provider.updatedAt.toISOString(),
   };

@@ -8,10 +8,10 @@ Infrastructure probes remain at `/health` and `/ready` (also mirrored at `/api/v
 
 When the API is running:
 
-| URL | Description |
-| --- | --- |
-| [http://localhost:3000/api/docs](http://localhost:3000/api/docs) | Swagger UI — browse and try endpoints |
-| [http://localhost:3000/api/openapi.json](http://localhost:3000/api/openapi.json) | OpenAPI 3.0 JSON document |
+| URL                                                                              | Description                           |
+| -------------------------------------------------------------------------------- | ------------------------------------- |
+| [http://localhost:3000/api/docs](http://localhost:3000/api/docs)                 | Swagger UI — browse and try endpoints |
+| [http://localhost:3000/api/openapi.json](http://localhost:3000/api/openapi.json) | OpenAPI 3.0 JSON document             |
 
 The machine-readable spec lives at [`packages/openapi/spec/openapi.yaml`](../../packages/openapi/spec/openapi.yaml). Keep it in sync with routes and Zod schemas (see [`AGENTS.md`](../../AGENTS.md) rules 21–22).
 
@@ -81,6 +81,9 @@ Programmatic clients may still use `Authorization: Bearer <api-key>`.
 - `GET /api/v1/organizations/:organizationId/teams/:teamId` — `users.read`
 - `PATCH /api/v1/organizations/:organizationId/teams/:teamId` — `users.manage`
 - `DELETE /api/v1/organizations/:organizationId/teams/:teamId` — `users.manage`
+- `GET /api/v1/organizations/:organizationId/teams/:teamId/members` — `users.read`
+- `POST /api/v1/organizations/:organizationId/teams/:teamId/members` — `users.manage`
+- `DELETE /api/v1/organizations/:organizationId/teams/:teamId/members/:userId` — `users.manage
 
 ### Permissions, API keys, audit
 
@@ -102,10 +105,22 @@ belongs to, and the RBAC check still runs afterwards.
 
 - `POST /api/v1/auth/organization` — set the active organization selector
 
+Storage providers (Phase 9). Secret keys are accepted on create/update only and
+never returned. Dialects: `AWS_S3`, `CLOUDFLARE_R2`, `BACKBLAZE_B2`, `MINIO`,
+`WASABI`, `DIGITALOCEAN_SPACES`, `GENERIC`. Arbitrary endpoints are SSRF-checked
+(HTTPS required except MinIO; loopback/private/link-local blocked except MinIO).
+
+- `GET    /api/v1/storage/providers` — `storage.read`
+- `POST   /api/v1/storage/providers` — `storage.upload`
+- `GET    /api/v1/storage/providers/:providerId` — `storage.read`
+- `PATCH  /api/v1/storage/providers/:providerId` — `storage.upload`
+- `DELETE /api/v1/storage/providers/:providerId` — `storage.delete` (refuses providers that still have buckets)
+- `POST   /api/v1/storage/providers/:providerId/test` — `storage.upload`
+
 Buckets:
 
 - `GET    /api/v1/storage/buckets` — `storage.read`
-- `POST   /api/v1/storage/buckets` — `storage.upload`
+- `POST   /api/v1/storage/buckets` — `storage.upload` (optional `storageProviderId`)
 - `GET    /api/v1/storage/buckets/:bucketId` — `storage.read`
 - `DELETE /api/v1/storage/buckets/:bucketId` — `storage.delete` (refuses a non-empty bucket)
 - `PUT    /api/v1/storage/buckets/:bucketId/versioning` — `storage.upload` (`UNVERSIONED` | `ENABLED` | `SUSPENDED`)
@@ -130,6 +145,24 @@ Lifecycle policies (provider-independent; evaluated by the storage worker):
 - `GET    /api/v1/storage/policies/:policyId` — `storage.read`
 - `PATCH  /api/v1/storage/policies/:policyId` — `storage.upload`
 - `DELETE /api/v1/storage/policies/:policyId` — `storage.delete`
+
+Sharing (`storage.share`). Public identifiers are high-entropy tokens (`vs_sh_` + 32 random bytes), never sequential ids. Bytes are fetched through a short-lived VaultStack download token; filesystem paths and provider credentials are never returned.
+
+Authenticated management:
+
+- `POST   /api/v1/storage/objects/:objectId/shares` — create (`PRIVATE` \| `TEAM` \| `ORGANIZATION` \| `PUBLIC_LINK`; optional password, viewer/download flags, download limit, expiration)
+- `GET    /api/v1/storage/shares` — list (`?objectId=`)
+- `GET    /api/v1/storage/shares/:shareId`
+- `PATCH  /api/v1/storage/shares/:shareId` — expiration, permissions, revoke
+- `DELETE /api/v1/storage/shares/:shareId` — revoke
+
+Public consumption (optional session for private/team/org shares):
+
+- `GET  /api/v1/public/shares/:token` — inspect; `{ passwordRequired: true }` when locked
+- `POST /api/v1/public/shares/:token/unlock` — password; rate-limited
+- `POST /api/v1/public/shares/:token/download-url` — short-lived `GET /storage/objects/:id/content?token=`
+
+Share error codes: `SHARE_LINK_NOT_FOUND`, `SHARE_LINK_EXPIRED`, `SHARE_LINK_REVOKED`, `SHARE_PASSWORD_REQUIRED`, `SHARE_PASSWORD_INVALID`, `SHARE_DOWNLOAD_LIMIT_REACHED`, `SHARE_ACCESS_DENIED`.
 
 Uploads:
 
@@ -181,7 +214,9 @@ Storage error codes: `STORAGE_BUCKET_NOT_FOUND`, `STORAGE_BUCKET_NOT_EMPTY`,
 `STORAGE_SIZE_MISMATCH`, `STORAGE_OBJECT_TOO_LARGE`, `STORAGE_INVALID_KEY`,
 `STORAGE_INVALID_BUCKET_NAME`, `STORAGE_MULTIPART_NOT_FOUND`,
 `STORAGE_MULTIPART_INVALID_PART`, `STORAGE_NOT_IMPLEMENTED`,
-`ORGANIZATION_CONTEXT_REQUIRED`.
+`ORGANIZATION_CONTEXT_REQUIRED`, `SHARE_LINK_NOT_FOUND`, `SHARE_LINK_EXPIRED`,
+`SHARE_LINK_REVOKED`, `SHARE_PASSWORD_REQUIRED`, `SHARE_PASSWORD_INVALID`,
+`SHARE_DOWNLOAD_LIMIT_REACHED`, `SHARE_ACCESS_DENIED`.
 
 See [../storage/architecture.md](../storage/architecture.md) for the flows and
 security model.

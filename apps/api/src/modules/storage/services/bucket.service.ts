@@ -4,6 +4,7 @@ import { writeAuditLog } from '../../../lib/audit.js';
 import { conflict, storageBucketNotEmpty, storageBucketNotFound } from '../../../lib/errors.js';
 import { serializeBucket } from '../mappers/storage.mapper.js';
 import { assertValidBucketName } from '../domain/object-key.js';
+import { configuredPhysicalBucket } from '../domain/provider-config.js';
 import type { BucketRepository } from '../repositories/bucket.repository.js';
 import type { StorageService } from './storage.service.js';
 
@@ -16,6 +17,7 @@ export interface CreateBucketOptions {
   name: string;
   region?: string | null;
   versioning?: 'UNVERSIONED' | 'ENABLED';
+  storageProviderId?: string;
 }
 
 export interface BucketService {
@@ -80,7 +82,9 @@ export function createBucketService(deps: {
         throw conflict('A bucket with that name already exists');
       }
 
-      const providerRecord = await storage.defaultProvider(organizationId);
+      const providerRecord = options.storageProviderId
+        ? await storage.findProvider(organizationId, options.storageProviderId)
+        : await storage.defaultProvider(organizationId);
 
       // The row is created first so the physical prefix is derived from a
       // persisted id, then the physical bucket is provisioned. If provisioning
@@ -102,7 +106,8 @@ export function createBucketService(deps: {
         throw normalizeUniqueViolation(error);
       }
 
-      const physicalPrefix = storage.physicalBucketFor(bucket);
+      const physicalPrefix =
+        configuredPhysicalBucket(providerRecord.config) ?? storage.physicalBucketFor(bucket);
 
       try {
         const provider = storage.providerFor(providerRecord);

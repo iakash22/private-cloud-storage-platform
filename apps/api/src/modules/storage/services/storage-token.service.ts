@@ -7,7 +7,7 @@ import { storageAccessDenied, storageUploadExpired } from '../../../lib/errors.j
  * providers with no signing endpoint of their own (the local filesystem).
  */
 
-export type StorageTokenPurpose = 'download' | 'upload' | 'multipart-part';
+export type StorageTokenPurpose = 'download' | 'upload' | 'multipart-part' | 'share-access';
 
 export interface StorageTokenClaims {
   purpose: StorageTokenPurpose;

@@ -1,9 +1,34 @@
 import {
+  Prisma,
   StorageProviderStatus,
   StorageProviderType,
   type PrismaClient,
   type StorageProvider as StorageProviderRow,
 } from '@vaultstack/database';
+
+export interface CreateProviderRecord {
+  organizationId: string;
+  name: string;
+  type: StorageProviderType;
+  status: StorageProviderStatus;
+  isDefault: boolean;
+  config: Prisma.InputJsonValue;
+  credentialRef: string | null;
+  accessKeyId: string | null;
+  secretCiphertext: string | null;
+  secretNonce: string | null;
+}
+
+export interface UpdateProviderRecord {
+  name?: string;
+  status?: StorageProviderStatus;
+  isDefault?: boolean;
+  config?: Prisma.InputJsonValue;
+  credentialRef?: string | null;
+  accessKeyId?: string | null;
+  secretCiphertext?: string | null;
+  secretNonce?: string | null;
+}
 
 /**
  * Persistence for storage provider registrations.
@@ -16,6 +41,14 @@ export interface ProviderRepository {
   findById(organizationId: string, id: string): Promise<StorageProviderRow | null>;
   findDefault(organizationId: string): Promise<StorageProviderRow | null>;
   ensureDefault(organizationId: string, type: StorageProviderType): Promise<StorageProviderRow>;
+  create(input: CreateProviderRecord): Promise<StorageProviderRow>;
+  update(
+    organizationId: string,
+    id: string,
+    input: UpdateProviderRecord,
+  ): Promise<StorageProviderRow | null>;
+  delete(organizationId: string, id: string): Promise<void>;
+  countBuckets(organizationId: string, providerId: string): Promise<number>;
 }
 
 export function createProviderRepository(prisma: PrismaClient): ProviderRepository {
@@ -66,6 +99,49 @@ export function createProviderRepository(prisma: PrismaClient): ProviderReposito
           credentialRef: type === StorageProviderType.S3_COMPATIBLE ? 'env:S3' : null,
         },
       });
+    },
+
+    async create(input) {
+      return prisma.$transaction(async (tx) => {
+        if (input.isDefault) {
+          await tx.storageProvider.updateMany({
+            where: { organizationId: input.organizationId, isDefault: true },
+            data: { isDefault: false },
+          });
+        }
+
+        return tx.storageProvider.create({ data: input });
+      });
+    },
+
+    async update(organizationId, id, input) {
+      return prisma.$transaction(async (tx) => {
+        if (input.isDefault) {
+          await tx.storageProvider.updateMany({
+            where: { organizationId, isDefault: true, NOT: { id } },
+            data: { isDefault: false },
+          });
+        }
+
+        const updated = await tx.storageProvider.updateMany({
+          where: { id, organizationId },
+          data: input,
+        });
+
+        if (updated.count === 0) {
+          return null;
+        }
+
+        return tx.storageProvider.findFirstOrThrow({ where: { id, organizationId } });
+      });
+    },
+
+    async delete(organizationId, id) {
+      await prisma.storageProvider.deleteMany({ where: { id, organizationId } });
+    },
+
+    async countBuckets(organizationId, providerId) {
+      return prisma.bucket.count({ where: { organizationId, storageProviderId: providerId } });
     },
   };
 }

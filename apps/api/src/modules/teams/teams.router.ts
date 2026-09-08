@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import {
+  addTeamMemberBodySchema,
   createTeamBodySchema,
   organizationIdParamsSchema,
+  organizationTeamMemberParamsSchema,
   organizationTeamParamsSchema,
   updateTeamBodySchema,
 } from '@vaultstack/validation';
@@ -48,6 +50,28 @@ export function createTeamsRouter(container: AppContainer): Router {
     validateParams(organizationTeamParamsSchema),
     controller.allow(TeamsController.managePermission),
     controller.remove,
+  );
+
+  router.get(
+    '/:teamId/members',
+    validateParams(organizationTeamParamsSchema),
+    controller.allow(TeamsController.readPermission),
+    controller.listMembers,
+  );
+
+  router.post(
+    '/:teamId/members',
+    validateParams(organizationTeamParamsSchema),
+    validateBody(addTeamMemberBodySchema),
+    controller.allow(TeamsController.managePermission),
+    controller.addMember,
+  );
+
+  router.delete(
+    '/:teamId/members/:userId',
+    validateParams(organizationTeamMemberParamsSchema),
+    controller.allow(TeamsController.managePermission),
+    controller.removeMember,
   );
 
   return router;

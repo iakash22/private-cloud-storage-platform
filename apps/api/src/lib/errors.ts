@@ -146,3 +146,35 @@ export function storageMultipartInvalidPart(message: string): AppError {
 export function storageNotImplemented(message: string): AppError {
   return new AppError(501, 'STORAGE_NOT_IMPLEMENTED', message);
 }
+
+export function shareLinkNotFound(): AppError {
+  return new AppError(404, 'SHARE_LINK_NOT_FOUND', 'Share link not found');
+}
+
+export function shareLinkExpired(): AppError {
+  return new AppError(410, 'SHARE_LINK_EXPIRED', 'This share link has expired');
+}
+
+export function shareLinkRevoked(): AppError {
+  return new AppError(403, 'SHARE_LINK_REVOKED', 'This share link has been revoked');
+}
+
+export function sharePasswordRequired(): AppError {
+  return new AppError(401, 'SHARE_PASSWORD_REQUIRED', 'This share link requires a password');
+}
+
+export function sharePasswordInvalid(): AppError {
+  return new AppError(403, 'SHARE_PASSWORD_INVALID', 'Share password is incorrect');
+}
+
+export function shareDownloadLimitReached(): AppError {
+  return new AppError(
+    403,
+    'SHARE_DOWNLOAD_LIMIT_REACHED',
+    'This share link has reached its download limit',
+  );
+}
+
+export function shareAccessDenied(message = 'You cannot access this share'): AppError {
+  return new AppError(403, 'SHARE_ACCESS_DENIED', message);
+}

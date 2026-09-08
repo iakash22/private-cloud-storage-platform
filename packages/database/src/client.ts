@@ -16,6 +16,7 @@ export {
   BucketVersioningStatus,
   ChecksumAlgorithm,
   MultipartUploadStatus,
+  ShareVisibility,
   StorageLifecycleAction,
   StoragePolicyEffect,
   StoragePolicyKind,

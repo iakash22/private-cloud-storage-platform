@@ -19,6 +19,11 @@ import { createStorageService, type StorageService } from './services/storage.se
 import { createUploadService, type UploadService } from './services/upload.service.js';
 import { createPolicyRepository } from './repositories/policy.repository.js';
 import { createPolicyService, type PolicyService } from './services/policy.service.js';
+import {
+  createProviderConfigService,
+  type ProviderConfigService,
+} from './services/provider-config.service.js';
+import { createShareService, type ShareService } from './services/share.service.js';
 
 export interface StorageModuleDeps {
   prisma: PrismaClient;
@@ -35,6 +40,8 @@ export class StorageModule {
   readonly objects: ObjectService;
   readonly uploads: UploadService;
   readonly policies: PolicyService;
+  readonly shares: ShareService;
+  readonly providers: ProviderConfigService;
   readonly tokens: StorageTokenService;
   readonly metrics: StorageMetrics;
 
@@ -79,6 +86,14 @@ export class StorageModule {
       objects: this.objects,
       uploads: this.uploads,
       logger,
+    });
+
+    this.shares = createShareService(prisma, this.tokens, config.NODE_ENV);
+    this.providers = createProviderConfigService({
+      prisma,
+      config,
+      providers,
+      registry,
     });
   }
 

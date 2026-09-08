@@ -4,6 +4,8 @@ import {
   completeMultipartBodySchema,
   confirmMultipartPartBodySchema,
   createLifecyclePolicyBodySchema,
+  createShareBodySchema,
+  createStorageProviderBodySchema,
   healthResponseSchema,
   initiateMultipartBodySchema,
   listMultipartSessionsQuerySchema,
@@ -100,9 +102,10 @@ describe('@vaultstack/validation', () => {
   });
 
   it('validates multipart part addressing and direct confirmation', () => {
-    expect(
-      multipartPartParamsSchema.parse({ uploadId: 'upload-1', partNumber: '2' }),
-    ).toEqual({ uploadId: 'upload-1', partNumber: 2 });
+    expect(multipartPartParamsSchema.parse({ uploadId: 'upload-1', partNumber: '2' })).toEqual({
+      uploadId: 'upload-1',
+      partNumber: 2,
+    });
     expect(multipartPartQuerySchema.safeParse({ partNumber: 10_001 }).success).toBe(false);
 
     const checksumSha256 = 'a'.repeat(64);
@@ -140,9 +143,7 @@ describe('@vaultstack/validation', () => {
       limit: 25,
       cursor: 'session-25',
     });
-    expect(
-      listMultipartSessionsQuerySchema.safeParse({ status: 'FAILED' }).success,
-    ).toBe(false);
+    expect(listMultipartSessionsQuerySchema.safeParse({ status: 'FAILED' }).success).toBe(false);
   });
 
   it('validates lifecycle policy creation and bucket versioning updates', () => {
@@ -160,8 +161,50 @@ describe('@vaultstack/validation', () => {
         lifecycleAction: 'EXPIRE_CURRENT',
       }).success,
     ).toBe(false);
+    expect(updateBucketVersioningBodySchema.safeParse({ versioning: 'SUSPENDED' }).success).toBe(
+      true,
+    );
+  });
+
+  it('validates share creation visibility, team, and permissions', () => {
     expect(
-      updateBucketVersioningBodySchema.safeParse({ versioning: 'SUSPENDED' }).success,
+      createShareBodySchema.safeParse({
+        visibility: 'PUBLIC_LINK',
+        password: 'sharepass1',
+        allowDownload: true,
+      }).success,
     ).toBe(true);
+    expect(
+      createShareBodySchema.safeParse({
+        visibility: 'TEAM',
+      }).success,
+    ).toBe(false);
+    expect(
+      createShareBodySchema.safeParse({
+        visibility: 'PUBLIC_LINK',
+        allowView: false,
+        allowDownload: false,
+      }).success,
+    ).toBe(false);
+  });
+
+  it('requires S3 dialect and credentials when creating a storage provider', () => {
+    expect(
+      createStorageProviderBodySchema.safeParse({
+        name: 'minio',
+        dialect: 'MINIO',
+        endpoint: 'http://127.0.0.1:9000',
+        accessKeyId: 'minioadmin',
+        secretAccessKey: 'minioadmin',
+      }).success,
+    ).toBe(true);
+    expect(
+      createStorageProviderBodySchema.safeParse({
+        name: 'minio',
+        dialect: 'NOT_A_VENDOR',
+        accessKeyId: 'minioadmin',
+        secretAccessKey: 'minioadmin',
+      }).success,
+    ).toBe(false);
   });
 });

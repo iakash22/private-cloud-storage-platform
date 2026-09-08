@@ -26,8 +26,8 @@ profile precisely so it cannot drift into being required.
                     /              \
      LocalFilesystemStorageProvider  S3CompatibleStorageProvider
                  |                              |
-                 v                              v
-          Ubuntu disk                  AWS / R2 / B2 / MinIO / ...
+                 v                    dialect adapters (config only)
+          Ubuntu disk                  AWS / R2 / B2 / MinIO / Wasabi / Spaces / generic
 ```
 
 Business logic depends on `StorageProvider` and nothing below it. There is no
@@ -45,9 +45,13 @@ interface StorageProviderCapabilities {
 }
 ```
 
-`ProviderRegistry` is the single place a provider type is switched on. Adding a
-new S3-compatible vendor requires no code change at all; adding a genuinely new
-backend means one new `StorageProvider` implementation and one registry entry.
+`ProviderRegistry` is the single place a provider type is switched on. S3 vendor
+differences (default endpoint, path style, TLS, CreateBucket location
+constraint, SSRF policy) live in dialect adapters under
+`providers/s3-compatible/`. Business logic never contains `if (AWS)` / `if (R2)`
+/ `if (MinIO)`. Adding a new S3-compatible vendor is a dialect adapter, not a
+service change. Adding a genuinely new backend means one new `StorageProvider`
+implementation and one registry entry.
 
 ## Source layout
 
@@ -55,7 +59,7 @@ backend means one new `StorageProvider` implementation and one registry entry.
 | ------------------------------------------------ | ------------------------------------------------------------------------------ |
 | `modules/storage/domain/`                        | `StorageProvider` interface, domain types, key validation, streaming integrity |
 | `modules/storage/providers/local-filesystem/`    | Primary backend and its hardened path resolution                               |
-| `modules/storage/providers/s3-compatible/`       | Any S3-compatible endpoint, via AWS SDK v3                                     |
+| `modules/storage/providers/s3-compatible/`       | Any S3-compatible endpoint, via AWS SDK v3; vendor dialects and SSRF checks    |
 | `modules/storage/providers/provider-registry.ts` | Builds and caches providers from database rows                                 |
 | `modules/storage/repositories/`                  | Organization-scoped Prisma access                                              |
 | `modules/storage/services/`                      | Bucket, object, upload, token, metrics services                                |
@@ -129,14 +133,35 @@ Restore copies the selected version's bytes into a new current version so histor
 
 Lifecycle rules are provider-independent:
 
-| Action | Effect |
-| --- | --- |
-| `EXPIRE_CURRENT` | Delete the live object (delete marker if versioning is enabled) |
-| `EXPIRE_NONCURRENT` | Permanently delete an old version |
-| `ABORT_INCOMPLETE_MULTIPART` | Abort a stale multipart session |
-| `EXPIRE_TEMPORARY` | Abort an incomplete single-shot upload |
+| Action                       | Effect                                                          |
+| ---------------------------- | --------------------------------------------------------------- |
+| `EXPIRE_CURRENT`             | Delete the live object (delete marker if versioning is enabled) |
+| `EXPIRE_NONCURRENT`          | Permanently delete an old version                               |
+| `ABORT_INCOMPLETE_MULTIPART` | Abort a stale multipart session                                 |
+| `EXPIRE_TEMPORARY`           | Abort an incomplete single-shot upload                          |
 
 The same worker process that drains expired multipart sessions also applies due lifecycle policies (`pnpm --filter @vaultstack/api worker:cleanup`). Backup retention and archival tiering are out of scope.
+
+## Secure sharing
+
+Share links authorize **object access**, not storage credentials. The public identifier is a cryptographically random token (`vs_sh_` + 256 bits). VaultStack stores only `SHA-256(token)` plus an identifying prefix. Sequential `ShareLink.id` values are never accepted as tokens.
+
+```
+User → VaultStack API → authorize object → create ShareLink
+     → recipient presents token → optional password / membership check
+     → short-lived HMAC download token → object bytes
+```
+
+Visibility:
+
+| Type           | Who can open the token                       |
+| -------------- | -------------------------------------------- |
+| `PRIVATE`      | Creator only                                 |
+| `TEAM`         | Creator and members of the named team        |
+| `ORGANIZATION` | Any authenticated member of the organization |
+| `PUBLIC_LINK`  | Anyone with the token (optional password)    |
+
+Enforced at consume time: expiry, revocation, live (non-deleted) object, organization membership, password (rate-limited), download cap. Download URLs are VaultStack HMAC tokens (typically 60 seconds) that hit `/api/v1/storage/objects/:id/content`. Responses never include filesystem paths, physical keys, or provider credentials.
 
 The Prisma model is named `StorageObject` rather than `Object`, because a
 generated client export named `Object` collides with the TypeScript global.

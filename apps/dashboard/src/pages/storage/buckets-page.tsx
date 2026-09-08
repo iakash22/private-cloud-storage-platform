@@ -15,15 +15,17 @@ import {
   Label,
 } from '@vaultstack/ui';
 import { useAuth } from '../../context/auth-context.js';
-import { useBuckets } from '../../hooks/use-storage.js';
+import { useBuckets, useStorageProviders } from '../../hooks/use-storage.js';
 import { apiClient } from '../../lib/api.js';
 import { canDeleteStorage, canUploadStorage } from '../../lib/storage-preferences.js';
 
 export function BucketsPage() {
   const { permissions } = useAuth();
   const { buckets, loading, error, refresh } = useBuckets();
+  const { providers } = useStorageProviders();
   const [createOpen, setCreateOpen] = useState(false);
   const [bucketName, setBucketName] = useState('');
+  const [storageProviderId, setStorageProviderId] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<string | undefined>();
   const [selectedBucketId, setSelectedBucketId] = useState<string | undefined>();
   const [actionError, setActionError] = useState<string | null>(null);
@@ -32,9 +34,13 @@ export function BucketsPage() {
 
   const handleCreate = async () => {
     try {
-      await apiClient.createBucket({ name: bucketName.trim() });
+      await apiClient.createBucket({
+        name: bucketName.trim(),
+        storageProviderId: storageProviderId || undefined,
+      });
       setCreateOpen(false);
       setBucketName('');
+      setStorageProviderId('');
       await refresh();
     } catch (caught) {
       setActionError(caught instanceof Error ? caught.message : 'Unable to create bucket');
@@ -81,7 +87,9 @@ export function BucketsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Bucket list</CardTitle>
-            <CardDescription>{loading ? 'Loading buckets…' : `${buckets.length} buckets`}</CardDescription>
+            <CardDescription>
+              {loading ? 'Loading buckets…' : `${buckets.length} buckets`}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             {buckets.map((bucket) => (
@@ -145,6 +153,29 @@ export function BucketsPage() {
             }}
           />
         </div>
+        {providers.length > 1 ? (
+          <div className="space-y-2">
+            <Label htmlFor="bucket-provider">Storage provider</Label>
+            <select
+              id="bucket-provider"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={storageProviderId}
+              onChange={(event) => {
+                setStorageProviderId(event.target.value);
+              }}
+            >
+              <option value="">Default provider</option>
+              {providers
+                .filter((provider) => provider.status !== 'DISABLED')
+                .map((provider) => (
+                  <option key={provider.id} value={provider.id}>
+                    {provider.name}
+                    {provider.isDefault ? ' (default)' : ''}
+                  </option>
+                ))}
+            </select>
+          </div>
+        ) : null}
       </Dialog>
 
       <DeleteConfirmation

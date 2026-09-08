@@ -57,7 +57,9 @@ export function toggleFavorite(objectId: string): Set<string> {
 
 export function getRecentFiles(limit = 10): RecentFileRecord[] {
   return readJson<RecentFileRecord[]>(RECENT_FILES_KEY, [])
-    .sort((left, right) => new Date(right.accessedAt).getTime() - new Date(left.accessedAt).getTime())
+    .sort(
+      (left, right) => new Date(right.accessedAt).getTime() - new Date(left.accessedAt).getTime(),
+    )
     .slice(0, limit);
 }
 
@@ -107,6 +109,10 @@ export function canUploadStorage(permissions: string[]): boolean {
   return hasPermission(permissions, PERMISSIONS.STORAGE_UPLOAD);
 }
 
+export function canShareStorage(permissions: string[]): boolean {
+  return hasPermission(permissions, PERMISSIONS.STORAGE_SHARE);
+}
+
 export function canDeleteStorage(permissions: string[]): boolean {
   return hasPermission(permissions, PERMISSIONS.STORAGE_DELETE);
 }
@@ -117,5 +123,7 @@ export function buildObjectKey(prefix: string, fileName: string): string {
     return fileName;
   }
 
-  return normalizedPrefix.endsWith('/') ? `${normalizedPrefix}${fileName}` : `${normalizedPrefix}/${fileName}`;
+  return normalizedPrefix.endsWith('/')
+    ? `${normalizedPrefix}${fileName}`
+    : `${normalizedPrefix}/${fileName}`;
 }

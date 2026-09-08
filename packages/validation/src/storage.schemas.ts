@@ -19,7 +19,74 @@ export const createBucketBodySchema = z.object({
   name: bucketNameSchema,
   region: z.string().trim().min(1).max(64).optional(),
   versioning: z.enum(['UNVERSIONED', 'ENABLED']).optional(),
+  storageProviderId: z.string().min(1).optional(),
 });
+
+export const S3_DIALECT_VALUES = [
+  'AWS_S3',
+  'CLOUDFLARE_R2',
+  'BACKBLAZE_B2',
+  'MINIO',
+  'WASABI',
+  'DIGITALOCEAN_SPACES',
+  'GENERIC',
+] as const;
+
+export const s3DialectSchema = z.enum(S3_DIALECT_VALUES);
+
+export const storageProviderStatusSchema = z.enum(['ACTIVE', 'DEGRADED', 'DISABLED']);
+
+export const storageProviderIdParamsSchema = z
+  .object({
+    providerId: z.string().min(1),
+  })
+  .strict();
+
+const providerEndpointSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(512)
+  .refine((value) => !/\s/.test(value), 'Endpoint must not contain whitespace');
+
+const providerSecretSchema = z.string().min(1).max(512);
+
+export const createStorageProviderBodySchema = z
+  .object({
+    name: z.string().trim().min(1).max(64),
+    dialect: s3DialectSchema,
+    endpoint: providerEndpointSchema.optional(),
+    region: z.string().trim().min(1).max(64).optional(),
+    bucket: bucketNameSchema.optional(),
+    forcePathStyle: z.boolean().optional(),
+    tls: z.boolean().optional(),
+    accountId: z.string().trim().min(1).max(128).optional(),
+    accessKeyId: z.string().trim().min(1).max(128),
+    secretAccessKey: providerSecretSchema,
+    isDefault: z.boolean().optional(),
+    status: storageProviderStatusSchema.optional(),
+  })
+  .strict();
+
+export const updateStorageProviderBodySchema = z
+  .object({
+    name: z.string().trim().min(1).max(64).optional(),
+    dialect: s3DialectSchema.optional(),
+    endpoint: providerEndpointSchema.nullable().optional(),
+    region: z.string().trim().min(1).max(64).nullable().optional(),
+    bucket: bucketNameSchema.nullable().optional(),
+    forcePathStyle: z.boolean().nullable().optional(),
+    tls: z.boolean().nullable().optional(),
+    accountId: z.string().trim().min(1).max(128).nullable().optional(),
+    accessKeyId: z.string().trim().min(1).max(128).optional(),
+    secretAccessKey: providerSecretSchema.optional(),
+    isDefault: z.boolean().optional(),
+    status: storageProviderStatusSchema.optional(),
+  })
+  .strict();
+
+export type CreateStorageProviderBody = z.infer<typeof createStorageProviderBodySchema>;
+export type UpdateStorageProviderBody = z.infer<typeof updateStorageProviderBodySchema>;
 
 export const updateBucketVersioningBodySchema = z
   .object({
@@ -216,3 +283,109 @@ export type DeleteObjectQuery = z.infer<typeof deleteObjectQuerySchema>;
 export type DownloadUrlBody = z.infer<typeof downloadUrlBodySchema>;
 export type CreateLifecyclePolicyBody = z.infer<typeof createLifecyclePolicyBodySchema>;
 export type UpdateLifecyclePolicyBody = z.infer<typeof updateLifecyclePolicyBodySchema>;
+
+export const SHARE_VISIBILITY_VALUES = ['PRIVATE', 'TEAM', 'ORGANIZATION', 'PUBLIC_LINK'] as const;
+
+export const shareVisibilitySchema = z.enum(SHARE_VISIBILITY_VALUES);
+
+export const sharePasswordSchema = z.string().min(8).max(128);
+
+export const shareIdParamsSchema = z
+  .object({
+    shareId: z.string().min(1),
+  })
+  .strict();
+
+export const shareTokenParamsSchema = z
+  .object({
+    token: z.string().min(1).max(200),
+  })
+  .strict();
+
+export const createShareBodySchema = z
+  .object({
+    visibility: shareVisibilitySchema,
+    teamId: z.string().min(1).optional(),
+    password: sharePasswordSchema.optional(),
+    allowView: z.boolean().optional(),
+    allowDownload: z.boolean().optional(),
+    maxDownloads: z.number().int().min(1).max(1_000_000).optional(),
+    expiresAt: z.string().datetime().optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.visibility === 'TEAM' && !value.teamId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'teamId is required for TEAM shares',
+        path: ['teamId'],
+      });
+    }
+    if (value.visibility !== 'TEAM' && value.teamId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'teamId is only valid for TEAM shares',
+        path: ['teamId'],
+      });
+    }
+    if (value.allowView === false && value.allowDownload === false) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'A share must allow viewing or downloading',
+        path: ['allowView'],
+      });
+    }
+  });
+
+export const updateShareBodySchema = z
+  .object({
+    expiresAt: z.string().datetime().nullable().optional(),
+    allowView: z.boolean().optional(),
+    allowDownload: z.boolean().optional(),
+    maxDownloads: z.number().int().min(1).max(1_000_000).nullable().optional(),
+    revoked: z.literal(true).optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.allowView === false && value.allowDownload === false) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'A share must allow viewing or downloading',
+        path: ['allowView'],
+      });
+    }
+  });
+
+export const listSharesQuerySchema = z
+  .object({
+    objectId: z.string().min(1).optional(),
+  })
+  .strict();
+
+export const unlockShareBodySchema = z
+  .object({
+    password: z.string().min(1).max(128),
+  })
+  .strict();
+
+export const shareDownloadBodySchema = z.preprocess(
+  (value) => value ?? {},
+  z
+    .object({
+      password: z.string().min(1).max(128).optional(),
+      accessToken: z.string().min(1).max(4096).optional(),
+    })
+    .strict(),
+);
+
+export const inspectShareQuerySchema = z
+  .object({
+    accessToken: z.string().min(1).max(4096).optional(),
+  })
+  .strict();
+
+export type CreateShareBody = z.infer<typeof createShareBodySchema>;
+export type UpdateShareBody = z.infer<typeof updateShareBodySchema>;
+export type ListSharesQuery = z.infer<typeof listSharesQuerySchema>;
+export type UnlockShareBody = z.infer<typeof unlockShareBodySchema>;
+export type ShareDownloadBody = z.infer<typeof shareDownloadBodySchema>;

@@ -16,10 +16,12 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  userRoles UserRole[]
-  apiKeys   ApiKey[]
-  auditLogs AuditLog[]
-  sessions  Session[]
+  userRoles         UserRole[]
+  apiKeys           ApiKey[]
+  auditLogs         AuditLog[]
+  sessions          Session[]
+  teamMembers       TeamMember[]
+  createdShareLinks ShareLink[]
 }
 
 model Session {
@@ -61,6 +63,7 @@ model Organization {
   multipartUploads MultipartUpload[]
   storagePolicies  StoragePolicy[]
   shareLinks       ShareLink[]
+  teamMembers      TeamMember[]
   serviceAccounts  ServiceAccount[]
   s3Credentials    S3AccessCredential[]
 }
@@ -73,9 +76,28 @@ model Team {
   updatedAt      DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members      TeamMember[]
+  shareLinks   ShareLink[]
 
   @@unique([organizationId, name])
   @@index([organizationId])
+}
+
+/// Membership used to enforce TEAM share visibility. A team name alone is not access.
+model TeamMember {
+  id             String   @id @default(cuid())
+  organizationId String
+  teamId         String
+  userId         String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  team         Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([organizationId])
+  @@index([userId])
 }
 
 model Role {
@@ -248,13 +270,20 @@ model StorageProvider {
   status         StorageProviderStatus @default(ACTIVE)
   isDefault      Boolean               @default(false)
 
-  /// Non-secret provider settings only (endpoint, region, path style, root key).
-  /// Credentials are never stored here.
+  /// Non-secret provider settings only (dialect, endpoint, region, bucket, path
+  /// style, TLS). Secret keys are never stored here. Vendor names live in this
+  /// JSON as a dialect; business logic never branches on them.
   config Json @default("{}")
 
-  /// Names the credential set resolved from server-side configuration, so that
-  /// access keys and secret keys stay out of the database entirely.
+  /// Names a server-side credential set (for example env:S3). Organization-stored
+  /// secrets use the encrypted columns instead.
   credentialRef String?
+
+  /// Access key id is identifying metadata, not the secret. The secret is stored
+  /// only as AES-256-GCM ciphertext with a dedicated nonce.
+  accessKeyId      String?
+  secretCiphertext String?
+  secretNonce      String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -505,31 +534,52 @@ model StoragePolicy {
   @@index([organizationId, kind, enabled])
 }
 
-/// Sharing foundation for Phase 8. Intentionally has no anonymous read path in
-/// Phase 3: no route resolves these rows yet.
+enum ShareVisibility {
+  PRIVATE
+  TEAM
+  ORGANIZATION
+  PUBLIC_LINK
+}
+
+/// Time-limited object share. The public identifier is a high-entropy token;
+/// sequential ShareLink ids are never used as access tokens.
 model ShareLink {
-  id             String @id @default(cuid())
-  organizationId String
-  objectId       String
+  id              String @id @default(cuid())
+  organizationId  String
+  objectId        String
   createdByUserId String?
+  teamId          String?
 
   /// SHA-256 of the share token. Plaintext tokens are never persisted.
-  tokenHash String @unique
+  tokenHash   String @unique
+  /// Non-secret prefix of the plaintext token, for owner identification only.
+  tokenPrefix String
 
-  allowDownload Boolean   @default(true)
-  expiresAt     DateTime?
-  revokedAt     DateTime?
-  lastAccessAt  DateTime?
-  accessCount   Int       @default(0)
+  visibility    ShareVisibility @default(PUBLIC_LINK)
+  /// bcrypt hash when a share password is set. Plaintext is never stored.
+  passwordHash  String?
+  allowView     Boolean         @default(true)
+  allowDownload Boolean         @default(true)
+  maxDownloads  Int?
+
+  expiresAt    DateTime?
+  revokedAt    DateTime?
+  lastAccessAt DateTime?
+  accessCount  Int       @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   object       StorageObject @relation(fields: [objectId], references: [id], onDelete: Cascade)
+  createdBy    User?         @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  team         Team?         @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([objectId])
+  @@index([teamId])
+  @@index([organizationId, visibility])
+  @@index([tokenPrefix])
 }
 
 /// Programmatic identity for S3 gateway access. Separate from browser users.

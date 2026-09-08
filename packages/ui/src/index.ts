@@ -21,7 +21,11 @@ export {
 export { EmptyState, ErrorState } from './components/storage/empty-state.js';
 export { Breadcrumbs, type BreadcrumbsProps } from './components/storage/breadcrumbs.js';
 export { BucketSelector, type BucketSelectorProps } from './components/storage/bucket-selector.js';
-export { StorageToolbar, type StorageToolbarProps, type ViewMode } from './components/storage/storage-toolbar.js';
+export {
+  StorageToolbar,
+  type StorageToolbarProps,
+  type ViewMode,
+} from './components/storage/storage-toolbar.js';
 export { FileTable } from './components/storage/file-table.js';
 export { FileGrid } from './components/storage/file-grid.js';
 export { FileUploader, type FileUploaderProps } from './components/storage/file-uploader.js';
@@ -37,8 +41,19 @@ export {
   type ObjectDetailsProps,
   type BucketDetailsProps,
 } from './components/storage/object-details.js';
-export { StorageUsage, type StorageUsageProps, type StorageUsageSummary } from './components/storage/storage-usage.js';
-export { DeleteConfirmation, type DeleteConfirmationProps } from './components/storage/delete-confirmation.js';
-export { ShareDialog, type ShareDialogProps } from './components/storage/share-dialog.js';
+export {
+  StorageUsage,
+  type StorageUsageProps,
+  type StorageUsageSummary,
+} from './components/storage/storage-usage.js';
+export {
+  DeleteConfirmation,
+  type DeleteConfirmationProps,
+} from './components/storage/delete-confirmation.js';
+export {
+  ShareDialog,
+  type ShareDialogProps,
+  type ShareDialogCreateInput,
+} from './components/storage/share-dialog.js';
 export { FileExplorer, type FileExplorerProps } from './components/storage/file-explorer.js';
 export type { ExplorerEntry, FileTableProps, FileGridProps } from './components/storage/types.js';

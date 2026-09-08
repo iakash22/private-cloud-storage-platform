@@ -22,3 +22,4 @@ export const API_KEY_PREFIX = 'vs_ak_';
 export const ACCESS_TOKEN_TYP = 'access';
 export const SESSION_TOKEN_PREFIX = 'vs_sess_';
 export const CSRF_TOKEN_PREFIX = 'vs_csrf_';
+export const SHARE_TOKEN_PREFIX = 'vs_sh_';

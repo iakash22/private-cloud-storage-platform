@@ -27,7 +27,13 @@ erDiagram
     Organization ||--o{ Upload : "owns"
     Organization ||--o{ MultipartUpload : "owns"
     Organization ||--o{ StoragePolicy : "defines"
+    Organization ||--o{ TeamMember : "scopes"
     Organization ||--o{ ShareLink : "issues"
+
+    Team ||--o{ TeamMember : "has"
+    Team ||--o{ ShareLink : "receives"
+    User ||--o{ TeamMember : "joins"
+    User ||--o{ ShareLink : "creates"
 
     Role ||--o{ RolePermission : "grants"
     Permission ||--o{ RolePermission : "referenced_by"
@@ -78,6 +84,13 @@ erDiagram
         string name
     }
 
+    TeamMember {
+        string id PK
+        string organizationId FK
+        string teamId FK
+        string userId FK
+    }
+
     Role {
         string id PK
         string organizationId FK
@@ -126,6 +139,10 @@ erDiagram
         enum status
         boolean isDefault
         json config
+        string credentialRef
+        string accessKeyId
+        string secretCiphertext
+        string secretNonce
     }
 
     Bucket {
@@ -203,29 +220,39 @@ erDiagram
         string id PK
         string organizationId FK
         string objectId FK
+        string teamId FK
         string tokenHash UK
+        string tokenPrefix
+        enum visibility
+        string passwordHash
+        boolean allowView
         boolean allowDownload
+        int maxDownloads
+        datetime expiresAt
+        datetime revokedAt
     }
 ```
 
 ## Domain groups
 
-| Domain | Models | Notes |
-| --- | --- | --- |
-| Identity | `User`, `Session` | Sessions store hashed tokens; plaintext never persisted |
-| Tenancy | `Organization`, `Team` | Every org-owned row carries `organizationId` |
-| RBAC | `Role`, `Permission`, `RolePermission`, `UserRole` | Permissions seeded from `@vaultstack/types` |
-| Automation | `ApiKey` | Hashed keys; prefix shown to users |
-| Audit | `AuditLog` | Append-only action log per organization |
-| Storage control plane | `StorageProvider`, `Bucket`, `StoragePolicy` | ACCESS policies remain unused at request time; LIFECYCLE policies are evaluated by the worker against metadata |
-| Storage data plane | `StorageObject`, `ObjectVersion`, `Upload`, `MultipartUpload`, `MultipartPart` | Metadata only; bytes in provider. Version ids are VaultStack-owned. |
-| Sharing (future) | `ShareLink` | Foundation for Phase 8; no anonymous route yet |
+| Domain                | Models                                                                         | Notes                                                                                                                                                                                                                                                                        |
+| --------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Identity              | `User`, `Session`                                                              | Sessions store hashed tokens; plaintext never persisted                                                                                                                                                                                                                      |
+| Tenancy               | `Organization`, `Team`, `TeamMember`                                           | Every org-owned row carries `organizationId`. Team shares require membership.                                                                                                                                                                                                |
+| Sharing               | `ShareLink`                                                                    | Public identifier is a hashed high-entropy token, never the sequential id. Password hashes, expiry, download limits, and revocation are enforced at read time.                                                                                                               |
+| RBAC                  | `Role`, `Permission`, `RolePermission`, `UserRole`                             | Permissions seeded from `@vaultstack/types`                                                                                                                                                                                                                                  |
+| Automation            | `ApiKey`                                                                       | Hashed keys; prefix shown to users                                                                                                                                                                                                                                           |
+| Audit                 | `AuditLog`                                                                     | Append-only action log per organization                                                                                                                                                                                                                                      |
+| Storage control plane | `StorageProvider`, `Bucket`, `StoragePolicy`                                   | `config` holds non-secret dialect/endpoint/bucket settings. Provider secrets are AES-256-GCM (`secretCiphertext` + `secretNonce`) and never returned by APIs. ACCESS policies remain unused at request time; LIFECYCLE policies are evaluated by the worker against metadata |
+| Storage data plane    | `StorageObject`, `ObjectVersion`, `Upload`, `MultipartUpload`, `MultipartPart` | Metadata only; bytes in provider. Version ids are VaultStack-owned.                                                                                                                                                                                                          |
 
 ## Cascade behavior
 
 - Deleting an **Organization** cascades to all org-owned resources.
 - Deleting a **User** cascades sessions, user roles, and API keys; audit logs keep the row with `userId` set null.
 - Deleting a **StorageProvider** is restricted while buckets or objects reference it (`onDelete: Restrict`).
+- Deleting a **Team** cascades members and team-scoped share links.
+- Deleting a **StorageObject** cascades its share links.
 - **MultipartPart** rows cascade when their parent multipart upload is deleted.
 
 ## Keeping this diagram current

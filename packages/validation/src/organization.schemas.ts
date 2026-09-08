@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { emailSchema, nameSchema, organizationNameSchema, passwordSchema } from './common.schemas.js';
+import {
+  emailSchema,
+  nameSchema,
+  organizationNameSchema,
+  passwordSchema,
+} from './common.schemas.js';
 
 export const createOrganizationBodySchema = z.object({
   name: organizationNameSchema,
@@ -52,6 +57,18 @@ export const organizationTeamParamsSchema = z.object({
   teamId: z.string().min(1),
 });
 
+export const addTeamMemberBodySchema = z
+  .object({
+    userId: z.string().min(1),
+  })
+  .strict();
+
+export const organizationTeamMemberParamsSchema = z.object({
+  organizationId: z.string().min(1),
+  teamId: z.string().min(1),
+  userId: z.string().min(1),
+});
+
 export const createRoleBodySchema = z.object({
   name: z.string().trim().min(1).max(80),
   description: z.string().trim().max(240).optional(),
@@ -100,6 +117,7 @@ export const auditLogQuerySchema = z.object({
 export type CreateOrganizationBody = z.infer<typeof createOrganizationBodySchema>;
 export type CreateUserBody = z.infer<typeof createUserBodySchema>;
 export type CreateTeamBody = z.infer<typeof createTeamBodySchema>;
+export type AddTeamMemberBody = z.infer<typeof addTeamMemberBodySchema>;
 export type CreateRoleBody = z.infer<typeof createRoleBodySchema>;
 export type AssignRoleBody = z.infer<typeof assignRoleBodySchema>;
 export type CreateApiKeyBody = z.infer<typeof createApiKeyBodySchema>;
