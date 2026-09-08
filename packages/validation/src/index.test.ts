@@ -3,6 +3,9 @@ import {
   apiErrorResponseSchema,
   completeMultipartBodySchema,
   confirmMultipartPartBodySchema,
+  createBackupJobBodySchema,
+  createBackupRestoreBodySchema,
+  createBackupScheduleBodySchema,
   createLifecyclePolicyBodySchema,
   createProjectBodySchema,
   createShareBodySchema,
@@ -232,5 +235,23 @@ describe('@vaultstack/validation', () => {
         kind: 'NOT_A_KIND',
       }).success,
     ).toBe(false);
+  });
+
+  it('validates backup job and schedule bodies', () => {
+    expect(
+      createBackupJobBodySchema.safeParse({
+        targets: ['VAULTSTACK_METADATA'],
+      }).success,
+    ).toBe(true);
+    expect(createBackupJobBodySchema.safeParse({ targets: [] }).success).toBe(false);
+    expect(
+      createBackupScheduleBodySchema.safeParse({
+        name: 'nightly',
+        targets: ['VAULTSTACK_METADATA', 'VAULTSTACK_OBJECT_METADATA'],
+        intervalMinutes: 1440,
+        retentionDays: 14,
+      }).success,
+    ).toBe(true);
+    expect(createBackupRestoreBodySchema.safeParse({ snapshotId: 'snap-1' }).success).toBe(true);
   });
 });

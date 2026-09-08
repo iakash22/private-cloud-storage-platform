@@ -200,3 +200,33 @@ export function artifactReleaseConflict(
 ): AppError {
   return new AppError(409, 'ARTIFACT_RELEASE_CONFLICT', message);
 }
+
+export function backupJobNotFound(): AppError {
+  return new AppError(404, 'BACKUP_JOB_NOT_FOUND', 'Backup job not found');
+}
+
+export function backupSnapshotNotFound(): AppError {
+  return new AppError(404, 'BACKUP_SNAPSHOT_NOT_FOUND', 'Backup snapshot not found');
+}
+
+export function backupScheduleNotFound(): AppError {
+  return new AppError(404, 'BACKUP_SCHEDULE_NOT_FOUND', 'Backup schedule not found');
+}
+
+export function backupRestoreNotFound(): AppError {
+  return new AppError(404, 'BACKUP_RESTORE_NOT_FOUND', 'Backup restore job not found');
+}
+
+export function backupInvalidState(message: string): AppError {
+  return new AppError(409, 'BACKUP_INVALID_STATE', message);
+}
+
+export function backupTargetForbidden(
+  message = 'Platform backup targets require SUPER_ADMIN',
+): AppError {
+  return new AppError(403, 'BACKUP_TARGET_FORBIDDEN', message);
+}
+
+export function backupVerificationFailed(message = 'Backup archive failed verification'): AppError {
+  return new AppError(400, 'BACKUP_VERIFICATION_FAILED', message);
+}

@@ -168,4 +168,26 @@ describe('VaultStackApiClient storage + auth', () => {
       credentials: 'include',
     });
   });
+
+  it('creates a backup job through the backups API', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: () => Promise.resolve({ job: { id: 'job-1' } }),
+    });
+
+    const client = new VaultStackApiClient({
+      baseUrl: 'http://localhost:3000',
+      fetchImpl,
+    });
+    client.setCsrfToken('csrf-token');
+    client.setOrganizationId('org-1');
+
+    await client.createBackupJob({ targets: ['VAULTSTACK_METADATA'] });
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://localhost:3000/api/v1/backups/jobs',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
 });

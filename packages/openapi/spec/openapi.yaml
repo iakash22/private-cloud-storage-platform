@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: VaultStack API
-  version: 0.9.0
+  version: 0.11.0
   description: |
     Self-hosted private cloud storage management platform.
 
@@ -52,6 +52,8 @@ tags:
     description: Inbound S3-compatible API (when enabled)
   - name: Artifacts
     description: CI/CD projects, builds, and artifact versions (bytes via StorageService)
+  - name: Backups
+    description: Backup jobs, schedules, snapshots, and restore plans (bytes via StorageService)
 
 paths:
   /health:
@@ -1713,6 +1715,255 @@ paths:
         '204':
           description: Deleted
 
+  /api/v1/backups/summary:
+    get:
+      tags: [Backups]
+      summary: Backup dashboard summary
+      operationId: getBackupSummary
+      security: [{ sessionCookie: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '200':
+          description: Job counts and latest snapshot
+
+  /api/v1/backups/schedules:
+    get:
+      tags: [Backups]
+      summary: List backup schedules
+      operationId: listBackupSchedules
+      security: [{ sessionCookie: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '200':
+          description: Schedules
+    post:
+      tags: [Backups]
+      summary: Create a backup schedule
+      operationId: createBackupSchedule
+      security:
+        [{ sessionCookie: [], csrfHeader: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBackupScheduleBody'
+      responses:
+        '201':
+          description: Created
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+  /api/v1/backups/schedules/{scheduleId}:
+    parameters:
+      - $ref: '#/components/parameters/backupScheduleId'
+    get:
+      tags: [Backups]
+      summary: Get a backup schedule
+      operationId: getBackupSchedule
+      security: [{ sessionCookie: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '200':
+          description: Schedule
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+    patch:
+      tags: [Backups]
+      summary: Update a backup schedule
+      operationId: updateBackupSchedule
+      security:
+        [{ sessionCookie: [], csrfHeader: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBackupScheduleBody'
+      responses:
+        '200':
+          description: Updated
+    delete:
+      tags: [Backups]
+      summary: Delete a backup schedule
+      operationId: deleteBackupSchedule
+      security:
+        [{ sessionCookie: [], csrfHeader: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '204':
+          description: Deleted
+
+  /api/v1/backups/jobs:
+    get:
+      tags: [Backups]
+      summary: List backup jobs
+      operationId: listBackupJobs
+      security: [{ sessionCookie: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '200':
+          description: Jobs
+    post:
+      tags: [Backups]
+      summary: Create a backup job
+      operationId: createBackupJob
+      security:
+        [{ sessionCookie: [], csrfHeader: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBackupJobBody'
+      responses:
+        '201':
+          description: Queued
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+  /api/v1/backups/jobs/{jobId}:
+    parameters:
+      - $ref: '#/components/parameters/backupJobId'
+    get:
+      tags: [Backups]
+      summary: Get a backup job
+      operationId: getBackupJob
+      security: [{ sessionCookie: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '200':
+          description: Job
+
+  /api/v1/backups/jobs/{jobId}/logs:
+    parameters:
+      - $ref: '#/components/parameters/backupJobId'
+    get:
+      tags: [Backups]
+      summary: List backup job logs
+      operationId: listBackupJobLogs
+      security: [{ sessionCookie: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '200':
+          description: Logs
+
+  /api/v1/backups/jobs/{jobId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/backupJobId'
+    post:
+      tags: [Backups]
+      summary: Cancel a queued or running backup job
+      operationId: cancelBackupJob
+      security:
+        [{ sessionCookie: [], csrfHeader: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '200':
+          description: Cancelled or cancel requested
+        '409':
+          $ref: '#/components/responses/ConflictError'
+
+  /api/v1/backups/jobs/{jobId}/retry:
+    parameters:
+      - $ref: '#/components/parameters/backupJobId'
+    post:
+      tags: [Backups]
+      summary: Retry a failed backup job
+      operationId: retryBackupJob
+      security:
+        [{ sessionCookie: [], csrfHeader: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '201':
+          description: New job queued
+        '409':
+          $ref: '#/components/responses/ConflictError'
+
+  /api/v1/backups/snapshots:
+    get:
+      tags: [Backups]
+      summary: List backup snapshots
+      operationId: listBackupSnapshots
+      security: [{ sessionCookie: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '200':
+          description: Snapshots
+
+  /api/v1/backups/snapshots/{snapshotId}:
+    parameters:
+      - $ref: '#/components/parameters/backupSnapshotId'
+    get:
+      tags: [Backups]
+      summary: Get a backup snapshot
+      operationId: getBackupSnapshot
+      security: [{ sessionCookie: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '200':
+          description: Snapshot
+    delete:
+      tags: [Backups]
+      summary: Delete a backup snapshot and its storage object
+      operationId: deleteBackupSnapshot
+      security:
+        [{ sessionCookie: [], csrfHeader: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '204':
+          description: Deleted
+
+  /api/v1/backups/snapshots/{snapshotId}/verify:
+    parameters:
+      - $ref: '#/components/parameters/backupSnapshotId'
+    post:
+      tags: [Backups]
+      summary: Re-verify a snapshot archive
+      operationId: verifyBackupSnapshot
+      security:
+        [{ sessionCookie: [], csrfHeader: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '200':
+          description: Verification result
+
+  /api/v1/backups/snapshots/{snapshotId}/restore:
+    parameters:
+      - $ref: '#/components/parameters/backupSnapshotId'
+    post:
+      tags: [Backups]
+      summary: Start a restore-plan job for a snapshot
+      operationId: restoreBackupSnapshot
+      security:
+        [{ sessionCookie: [], csrfHeader: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '201':
+          description: Restore job queued
+
+  /api/v1/backups/restore:
+    get:
+      tags: [Backups]
+      summary: List restore jobs
+      operationId: listBackupRestoreJobs
+      security: [{ sessionCookie: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '200':
+          description: Restore jobs
+    post:
+      tags: [Backups]
+      summary: Start a restore-plan job
+      operationId: createBackupRestoreJob
+      security:
+        [{ sessionCookie: [], csrfHeader: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBackupRestoreBody'
+      responses:
+        '201':
+          description: Restore job queued
+
+  /api/v1/backups/restore/{restoreId}:
+    parameters:
+      - $ref: '#/components/parameters/backupRestoreId'
+    get:
+      tags: [Backups]
+      summary: Get a restore job
+      operationId: getBackupRestoreJob
+      security: [{ sessionCookie: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '200':
+          description: Restore job
+
   /api/v1/s3/{proxy+}:
     parameters:
       - name: proxy
@@ -1854,6 +2105,30 @@ components:
         type: string
     artifactVersionId:
       name: versionId
+      in: path
+      required: true
+      schema:
+        type: string
+    backupScheduleId:
+      name: scheduleId
+      in: path
+      required: true
+      schema:
+        type: string
+    backupJobId:
+      name: jobId
+      in: path
+      required: true
+      schema:
+        type: string
+    backupSnapshotId:
+      name: snapshotId
+      in: path
+      required: true
+      schema:
+        type: string
+    backupRestoreId:
+      name: restoreId
       in: path
       required: true
       schema:
@@ -2388,4 +2663,74 @@ components:
       type: object
       properties:
         releaseTag:
+          type: string
+
+    CreateBackupJobBody:
+      type: object
+      required: [targets]
+      properties:
+        targets:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            enum:
+              [
+                POSTGRESQL,
+                MONGODB,
+                APP_CONFIG,
+                DOCKER_VOLUMES,
+                VAULTSTACK_METADATA,
+                VAULTSTACK_OBJECT_METADATA,
+              ]
+        scheduleId:
+          type: string
+
+    CreateBackupScheduleBody:
+      type: object
+      required: [name, targets]
+      properties:
+        name:
+          type: string
+        targets:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        enabled:
+          type: boolean
+        intervalMinutes:
+          type: integer
+        retentionDays:
+          type: integer
+          nullable: true
+        retentionCount:
+          type: integer
+          nullable: true
+
+    UpdateBackupScheduleBody:
+      type: object
+      properties:
+        name:
+          type: string
+        targets:
+          type: array
+          items:
+            type: string
+        enabled:
+          type: boolean
+        intervalMinutes:
+          type: integer
+        retentionDays:
+          type: integer
+          nullable: true
+        retentionCount:
+          type: integer
+          nullable: true
+
+    CreateBackupRestoreBody:
+      type: object
+      required: [snapshotId]
+      properties:
+        snapshotId:
           type: string

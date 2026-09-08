@@ -21,9 +21,12 @@ model User {
   auditLogs         AuditLog[]
   sessions          Session[]
   teamMembers       TeamMember[]
-  createdShareLinks ShareLink[]
-  createdProjects   Project[] @relation("ProjectCreatedBy")
-  createdBuilds     Build[]   @relation("BuildCreatedBy")
+  createdShareLinks        ShareLink[]
+  createdProjects          Project[]           @relation("ProjectCreatedBy")
+  createdBuilds            Build[]             @relation("BuildCreatedBy")
+  createdBackupSchedules   BackupSchedule[]    @relation("BackupScheduleCreatedBy")
+  createdBackupJobs        BackupJob[]         @relation("BackupJobCreatedBy")
+  createdBackupRestoreJobs BackupRestoreJob[]  @relation("BackupRestoreCreatedBy")
 }
 
 model Session {
@@ -68,10 +71,15 @@ model Organization {
   teamMembers      TeamMember[]
   serviceAccounts  ServiceAccount[]
   s3Credentials    S3AccessCredential[]
-  projects         Project[]
-  builds           Build[]
-  artifacts        Artifact[]
-  artifactVersions ArtifactVersion[]
+  projects           Project[]
+  builds             Build[]
+  artifacts          Artifact[]
+  artifactVersions   ArtifactVersion[]
+  backupSchedules    BackupSchedule[]
+  backupJobs         BackupJob[]
+  backupSnapshots    BackupSnapshot[]
+  backupJobLogs      BackupJobLog[]
+  backupRestoreJobs  BackupRestoreJob[]
 }
 
 model Team {
@@ -369,6 +377,7 @@ model StorageObject {
   versions         ObjectVersion[]
   shareLinks       ShareLink[]
   artifactVersions ArtifactVersion[]
+  backupSnapshots  BackupSnapshot[]
 
   @@unique([bucketId, key])
   @@index([organizationId])
@@ -761,4 +770,154 @@ model ArtifactVersion {
   @@index([artifactId, isCurrent])
   @@index([projectId, isRelease])
   @@index([organizationId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Backup engine (Phase 11)
+//
+// PostgreSQL holds job/snapshot metadata only. Archive bytes live in a
+// StorageObject (org bucket vs-backups) via StorageService.
+// ---------------------------------------------------------------------------
+
+enum BackupJobStatus {
+  QUEUED
+  RUNNING
+  VERIFYING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum BackupTarget {
+  POSTGRESQL
+  MONGODB
+  APP_CONFIG
+  DOCKER_VOLUMES
+  VAULTSTACK_METADATA
+  VAULTSTACK_OBJECT_METADATA
+}
+
+enum BackupLogLevel {
+  INFO
+  WARN
+  ERROR
+}
+
+model BackupSchedule {
+  id              String         @id @default(cuid())
+  organizationId  String
+  name            String
+  enabled         Boolean        @default(true)
+  targets         BackupTarget[]
+  intervalMinutes Int            @default(1440)
+  retentionDays   Int?
+  retentionCount  Int?
+  lastRunAt       DateTime?
+  nextRunAt       DateTime?
+  createdByUserId String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation("BackupScheduleCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  jobs         BackupJob[]
+  snapshots    BackupSnapshot[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@index([enabled, nextRunAt])
+}
+
+model BackupJob {
+  id               String          @id @default(cuid())
+  organizationId   String
+  scheduleId       String?
+  createdByUserId  String?
+  status           BackupJobStatus @default(QUEUED)
+  targets          BackupTarget[]
+  progressPercent  Int             @default(0)
+  currentStep      String?
+  errorMessage     String?
+  cancelRequested  Boolean         @default(false)
+  retryOfJobId     String?
+  startedAt        DateTime?
+  finishedAt       DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  schedule     BackupSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  createdBy    User?           @relation("BackupJobCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  retryOf      BackupJob?      @relation("BackupJobRetry", fields: [retryOfJobId], references: [id], onDelete: SetNull)
+  retries      BackupJob[]     @relation("BackupJobRetry")
+  snapshot     BackupSnapshot?
+  logs         BackupJobLog[]
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, status])
+  @@index([scheduleId])
+}
+
+model BackupSnapshot {
+  id                   String    @id @default(cuid())
+  organizationId       String
+  jobId                String    @unique
+  scheduleId           String?
+  storageObjectId      String?
+  manifestChecksum     String
+  size                 BigInt    @default(0)
+  verifiedAt           DateTime?
+  verificationPassed   Boolean   @default(false)
+  verificationError    String?
+  expiresAt            DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  organization  Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  job           BackupJob       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  schedule      BackupSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  storageObject StorageObject?  @relation(fields: [storageObjectId], references: [id], onDelete: Restrict)
+  restoreJobs   BackupRestoreJob[]
+
+  @@index([organizationId, createdAt])
+  @@index([expiresAt])
+}
+
+model BackupJobLog {
+  id             String         @id @default(cuid())
+  organizationId String
+  jobId          String
+  level          BackupLogLevel @default(INFO)
+  message        String
+  createdAt      DateTime       @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  job          BackupJob    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, createdAt])
+  @@index([organizationId])
+}
+
+model BackupRestoreJob {
+  id              String          @id @default(cuid())
+  organizationId  String
+  snapshotId      String
+  createdByUserId String?
+  status          BackupJobStatus @default(QUEUED)
+  progressPercent Int             @default(0)
+  currentStep     String?
+  restorePlan     Json?
+  errorMessage    String?
+  cancelRequested Boolean         @default(false)
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  snapshot     BackupSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  createdBy    User?          @relation("BackupRestoreCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([snapshotId])
 }

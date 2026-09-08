@@ -6,6 +6,7 @@ import { PermissionsService } from '../modules/permissions/services/permissions.
 import { ApiKeysService } from '../modules/auth/services/api-keys.service.js';
 import { AuditService } from '../modules/audit/services/audit.service.js';
 import { ArtifactsService } from '../modules/artifacts/services/artifacts.service.js';
+import { BackupsService } from '../modules/backups/services/backups.service.js';
 import { AuthService } from '../modules/auth/services/auth.service.js';
 import {
   AuthorizationService,
@@ -22,8 +23,11 @@ import {
 import type { EnvConfig } from '@vaultstack/config';
 import type { PrismaClient } from '@vaultstack/database';
 import type { Logger } from '@vaultstack/logger';
+import { Queue } from 'bullmq';
+import { Redis } from 'ioredis';
 import { bindCookieManager } from '../lib/cookies.js';
 import { CookieManager } from '../lib/cookie.manager.js';
+import { BACKUP_QUEUE_NAME, enqueueBackupPayload } from '../workers/backup.worker.js';
 
 export interface AppServices {
   sessions: SessionManager;
@@ -38,6 +42,7 @@ export interface AppServices {
   audit: AuditService;
   storage: StorageModule;
   artifacts: ArtifactsService;
+  backups: BackupsService;
   s3Credentials: S3CredentialService;
 }
 
@@ -60,6 +65,7 @@ export class AppContainer {
   readonly audit: AuditService;
   readonly storage: StorageModule;
   readonly artifacts: ArtifactsService;
+  readonly backups: BackupsService;
   readonly s3Credentials: S3CredentialService;
 
   constructor(
@@ -94,7 +100,24 @@ export class AppContainer {
       authorization: this.authorization,
     });
     this.artifacts = new ArtifactsService(prisma, this.storage);
+    this.backups = this.createBackupsService(prisma, config, logger);
     this.s3Credentials = createS3CredentialService(prisma, config.JWT_SECRET);
+  }
+
+  private createBackupsService(
+    prisma: PrismaClient,
+    config: EnvConfig,
+    logger: Logger,
+  ): BackupsService {
+    if (config.NODE_ENV === 'test' || config.BACKUP_PROCESS_INLINE) {
+      return new BackupsService(prisma, this.storage, config, logger);
+    }
+
+    const redis = new Redis(config.REDIS_URL, { maxRetriesPerRequest: null, lazyConnect: true });
+    const queue = new Queue(BACKUP_QUEUE_NAME, { connection: redis });
+    return new BackupsService(prisma, this.storage, config, logger, undefined, (payload) =>
+      enqueueBackupPayload(queue, payload),
+    );
   }
 }
 
@@ -118,6 +141,7 @@ export function createServices(
     audit: container.audit,
     storage: container.storage,
     artifacts: container.artifacts,
+    backups: container.backups,
     s3Credentials: container.s3Credentials,
   };
 }

@@ -18,6 +18,11 @@ import {
   createArtifactRetentionWorker,
   scheduleArtifactRetention,
 } from './artifact-retention.worker.js';
+import {
+  createBackupQueue,
+  createBackupWorker,
+  scheduleBackupMaintenance,
+} from './backup.worker.js';
 
 const config = loadEnv();
 const logger = createLogger({ name: 'api-worker', level: config.LOG_LEVEL });
@@ -50,13 +55,22 @@ const artifactWorker = createArtifactRetentionWorker({
   logger,
 });
 
+const backupQueue = createBackupQueue(connection);
+const backupWorker = createBackupWorker({
+  connection,
+  backups: container.backups,
+  logger,
+  concurrency: config.BACKUP_MAX_CONCURRENT_JOBS,
+});
+
 await connection.connect();
 await scheduleMultipartCleanup(queue);
 await scheduleLifecycle(lifecycleQueue);
 await scheduleArtifactRetention(artifactQueue);
+await scheduleBackupMaintenance(backupQueue);
 
 logger.info(
-  { queues: [queue.name, lifecycleQueue.name, artifactQueue.name] },
+  { queues: [queue.name, lifecycleQueue.name, artifactQueue.name, backupQueue.name] },
   'VaultStack storage workers listening',
 );
 
@@ -68,6 +82,8 @@ async function shutdown(signal: string): Promise<void> {
   await lifecycleQueue.close();
   await artifactWorker.close();
   await artifactQueue.close();
+  await backupWorker.close();
+  await backupQueue.close();
   await connection.quit();
   await prisma.$disconnect();
   process.exit(0);

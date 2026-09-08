@@ -245,11 +245,33 @@ Artifact error codes: `ARTIFACT_PROJECT_NOT_FOUND`, `ARTIFACT_BUILD_NOT_FOUND`,
 
 See [../artifacts/README.md](../artifacts/README.md).
 
+### Backups
+
+Metadata under `/api/v1/backups`. Archive bytes are `StorageObject` rows in the org `vs-backups` bucket.
+
+- `GET        /api/v1/backups/summary` — `backup.read`
+- `GET/POST   /api/v1/backups/schedules` — read / `backup.create`
+- `GET/PATCH/DELETE /api/v1/backups/schedules/:scheduleId`
+- `GET/POST   /api/v1/backups/jobs` — read / `backup.create`
+- `GET        /api/v1/backups/jobs/:jobId`
+- `GET        /api/v1/backups/jobs/:jobId/logs`
+- `POST       /api/v1/backups/jobs/:jobId/cancel` — `backup.create`
+- `POST       /api/v1/backups/jobs/:jobId/retry` — `backup.create`
+- `GET        /api/v1/backups/snapshots`
+- `GET/DELETE /api/v1/backups/snapshots/:snapshotId` — delete requires `backup.delete`
+- `POST       /api/v1/backups/snapshots/:snapshotId/verify` — `backup.create`
+- `POST       /api/v1/backups/snapshots/:snapshotId/restore` — `backup.restore`
+- `GET/POST   /api/v1/backups/restore` — `backup.restore`
+- `GET        /api/v1/backups/restore/:restoreId`
+
+Backup error codes: `BACKUP_JOB_NOT_FOUND`, `BACKUP_SNAPSHOT_NOT_FOUND`,
+`BACKUP_SCHEDULE_NOT_FOUND`, `BACKUP_RESTORE_NOT_FOUND`, `BACKUP_INVALID_STATE`,
+`BACKUP_TARGET_FORBIDDEN`, `BACKUP_VERIFICATION_FAILED`.
+
+See [../backups/README.md](../backups/README.md).
+
 ### S3-compatible gateway
 
 Mounted at `/api/v1/s3` when `S3_GATEWAY_ENABLED=true`. Phase 3 provides the
 protocol foundation only; see
 [../storage/s3-compatibility.md](../storage/s3-compatibility.md).
-
-Backups are not implemented yet. Permission keys for that domain are seeded for
-later phases.

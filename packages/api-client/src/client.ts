@@ -29,6 +29,14 @@ import {
   type InitiatedArtifactUpload,
   type ArtifactKindName,
   type BuildStatusName,
+  type PublicBackupJob,
+  type PublicBackupJobLog,
+  type PublicBackupRestoreJob,
+  type PublicBackupSchedule,
+  type PublicBackupSnapshot,
+  type PublicBackupSummary,
+  type PublicBackupVerification,
+  type BackupTargetName,
   type S3DialectName,
   type PublicTeam,
   type PublicTeamMember,
@@ -809,6 +817,180 @@ export class VaultStackApiClient {
 
   async deleteArtifact(artifactId: string): Promise<void> {
     await this.request<undefined>('DELETE', `/api/v1/artifacts/${artifactId}`);
+  }
+
+  async getBackupSummary(): Promise<PublicBackupSummary> {
+    const result = await this.request<{ summary: PublicBackupSummary }>(
+      'GET',
+      '/api/v1/backups/summary',
+    );
+    return result.summary;
+  }
+
+  async listBackupSchedules(): Promise<PublicBackupSchedule[]> {
+    const result = await this.request<{ schedules: PublicBackupSchedule[] }>(
+      'GET',
+      '/api/v1/backups/schedules',
+    );
+    return result.schedules;
+  }
+
+  async createBackupSchedule(input: {
+    name: string;
+    targets: BackupTargetName[];
+    enabled?: boolean;
+    intervalMinutes?: number;
+    retentionDays?: number | null;
+    retentionCount?: number | null;
+  }): Promise<PublicBackupSchedule> {
+    const result = await this.request<{ schedule: PublicBackupSchedule }>(
+      'POST',
+      '/api/v1/backups/schedules',
+      { body: input },
+    );
+    return result.schedule;
+  }
+
+  async getBackupSchedule(scheduleId: string): Promise<PublicBackupSchedule> {
+    const result = await this.request<{ schedule: PublicBackupSchedule }>(
+      'GET',
+      `/api/v1/backups/schedules/${scheduleId}`,
+    );
+    return result.schedule;
+  }
+
+  async updateBackupSchedule(
+    scheduleId: string,
+    input: {
+      name?: string;
+      targets?: BackupTargetName[];
+      enabled?: boolean;
+      intervalMinutes?: number;
+      retentionDays?: number | null;
+      retentionCount?: number | null;
+    },
+  ): Promise<PublicBackupSchedule> {
+    const result = await this.request<{ schedule: PublicBackupSchedule }>(
+      'PATCH',
+      `/api/v1/backups/schedules/${scheduleId}`,
+      { body: input },
+    );
+    return result.schedule;
+  }
+
+  async deleteBackupSchedule(scheduleId: string): Promise<void> {
+    await this.request<undefined>('DELETE', `/api/v1/backups/schedules/${scheduleId}`);
+  }
+
+  async listBackupJobs(): Promise<PublicBackupJob[]> {
+    const result = await this.request<{ jobs: PublicBackupJob[] }>('GET', '/api/v1/backups/jobs');
+    return result.jobs;
+  }
+
+  async createBackupJob(input: {
+    targets: BackupTargetName[];
+    scheduleId?: string;
+  }): Promise<PublicBackupJob> {
+    const result = await this.request<{ job: PublicBackupJob }>('POST', '/api/v1/backups/jobs', {
+      body: input,
+    });
+    return result.job;
+  }
+
+  async getBackupJob(jobId: string): Promise<PublicBackupJob> {
+    const result = await this.request<{ job: PublicBackupJob }>(
+      'GET',
+      `/api/v1/backups/jobs/${jobId}`,
+    );
+    return result.job;
+  }
+
+  async listBackupJobLogs(jobId: string): Promise<PublicBackupJobLog[]> {
+    const result = await this.request<{ logs: PublicBackupJobLog[] }>(
+      'GET',
+      `/api/v1/backups/jobs/${jobId}/logs`,
+    );
+    return result.logs;
+  }
+
+  async cancelBackupJob(jobId: string): Promise<PublicBackupJob> {
+    const result = await this.request<{ job: PublicBackupJob }>(
+      'POST',
+      `/api/v1/backups/jobs/${jobId}/cancel`,
+      { body: {} },
+    );
+    return result.job;
+  }
+
+  async retryBackupJob(jobId: string): Promise<PublicBackupJob> {
+    const result = await this.request<{ job: PublicBackupJob }>(
+      'POST',
+      `/api/v1/backups/jobs/${jobId}/retry`,
+      { body: {} },
+    );
+    return result.job;
+  }
+
+  async listBackupSnapshots(): Promise<PublicBackupSnapshot[]> {
+    const result = await this.request<{ snapshots: PublicBackupSnapshot[] }>(
+      'GET',
+      '/api/v1/backups/snapshots',
+    );
+    return result.snapshots;
+  }
+
+  async getBackupSnapshot(snapshotId: string): Promise<PublicBackupSnapshot> {
+    const result = await this.request<{ snapshot: PublicBackupSnapshot }>(
+      'GET',
+      `/api/v1/backups/snapshots/${snapshotId}`,
+    );
+    return result.snapshot;
+  }
+
+  async deleteBackupSnapshot(snapshotId: string): Promise<void> {
+    await this.request<undefined>('DELETE', `/api/v1/backups/snapshots/${snapshotId}`);
+  }
+
+  async verifyBackupSnapshot(snapshotId: string): Promise<PublicBackupVerification> {
+    return this.request<PublicBackupVerification>(
+      'POST',
+      `/api/v1/backups/snapshots/${snapshotId}/verify`,
+      { body: {} },
+    );
+  }
+
+  async listBackupRestoreJobs(): Promise<PublicBackupRestoreJob[]> {
+    const result = await this.request<{ restores: PublicBackupRestoreJob[] }>(
+      'GET',
+      '/api/v1/backups/restore',
+    );
+    return result.restores;
+  }
+
+  async createBackupRestore(input: { snapshotId: string }): Promise<PublicBackupRestoreJob> {
+    const result = await this.request<{ restore: PublicBackupRestoreJob }>(
+      'POST',
+      '/api/v1/backups/restore',
+      { body: input },
+    );
+    return result.restore;
+  }
+
+  async restoreBackupSnapshot(snapshotId: string): Promise<PublicBackupRestoreJob> {
+    const result = await this.request<{ restore: PublicBackupRestoreJob }>(
+      'POST',
+      `/api/v1/backups/snapshots/${snapshotId}/restore`,
+      { body: {} },
+    );
+    return result.restore;
+  }
+
+  async getBackupRestore(restoreId: string): Promise<PublicBackupRestoreJob> {
+    const result = await this.request<{ restore: PublicBackupRestoreJob }>(
+      'GET',
+      `/api/v1/backups/restore/${restoreId}`,
+    );
+    return result.restore;
   }
 
   uploadMultipartFile(

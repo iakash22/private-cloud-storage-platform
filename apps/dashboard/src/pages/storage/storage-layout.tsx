@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { Button, cn } from '@vaultstack/ui';
 import { useAuth } from '../../context/auth-context.js';
+import { canReadBackups } from '../../lib/backup-permissions.js';
 
 const navItems: {
   to: string;
@@ -17,7 +18,8 @@ const navItems: {
 ];
 
 export function StorageLayout() {
-  const { user, organizations, activeOrganizationId, logout, selectOrganization } = useAuth();
+  const { user, organizations, activeOrganizationId, permissions, logout, selectOrganization } =
+    useAuth();
   const navigate = useNavigate();
 
   return (
@@ -29,6 +31,16 @@ export function StorageLayout() {
             <h1 className="text-lg font-semibold text-slate-900">Storage Dashboard</h1>
           </div>
           <div className="flex items-center gap-3">
+            {canReadBackups(permissions) ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void navigate('/backups')}
+              >
+                Backups
+              </Button>
+            ) : null}
             {organizations.length > 1 ? (
               <select
                 aria-label="Active organization"

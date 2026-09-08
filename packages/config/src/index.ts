@@ -74,6 +74,18 @@ const envSchema = z.object({
   S3_GATEWAY_ENABLED: booleanFromString.default('false'),
   S3_GATEWAY_REGION: z.string().min(1).default('vaultstack'),
 
+  // Optional MongoDB connection used only by the backup engine when the
+  // MONGODB target is requested. Never returned by APIs.
+  MONGODB_URI: z.string().min(1).optional(),
+
+  // Comma-separated absolute paths the Docker-volume backup target may read.
+  BACKUP_DOCKER_VOLUME_PATHS: z.string().min(1).optional(),
+  BACKUP_TEMP_DIR: z.string().min(1).optional(),
+  BACKUP_MAX_CONCURRENT_JOBS: z.coerce.number().int().positive().max(8).default(1),
+  // When true, the API process runs backup jobs in-process after enqueueing.
+  // Used by Playwright and local smoke tests so a separate worker is optional.
+  BACKUP_PROCESS_INLINE: booleanFromString.default('false'),
+
   // Comma-separated browser origins allowed to call the API with cookies.
   // Unset: localhost dashboard origins in development/test, none in production.
   CORS_ORIGINS: z.string().optional(),

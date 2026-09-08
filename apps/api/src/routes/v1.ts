@@ -20,6 +20,7 @@ import { createStorageContentRouter } from '../modules/storage/storage-content.r
 import { createSharePublicRouter } from '../modules/storage/share-public.router.js';
 import { createStorageRouter } from '../modules/storage/storage.router.js';
 import { createArtifactsRouter } from '../modules/artifacts/artifacts.router.js';
+import { createBackupsRouter } from '../modules/backups/backups.router.js';
 import type { RateLimiter } from '../lib/rate-limit.js';
 
 export function createV1Router(
@@ -63,6 +64,7 @@ export function createV1Router(
 
   router.use('/storage', authenticate, createStorageRouter(container));
   router.use('/artifacts', authenticate, createArtifactsRouter(container));
+  router.use('/backups', authenticate, createBackupsRouter(container));
 
   if (config.S3_GATEWAY_ENABLED) {
     router.use('/s3', createS3GatewayRouter(container));

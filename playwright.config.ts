@@ -15,6 +15,7 @@ const devEnv = {
   API_RATE_LIMIT_MAX: '2000',
   STORAGE_DRIVER: 'local',
   STORAGE_LOCAL_ROOT: '/tmp/vaultstack-playwright-storage',
+  BACKUP_PROCESS_INLINE: 'true',
   MINIO_ENDPOINT: 'localhost',
   MINIO_PORT: '9000',
   MINIO_USE_SSL: 'false',

@@ -30,6 +30,8 @@ export function createTestConfig(overrides: Partial<EnvConfig> = {}): EnvConfig 
     S3_FORCE_PATH_STYLE: true,
     S3_GATEWAY_ENABLED: false,
     S3_GATEWAY_REGION: 'vaultstack',
+    BACKUP_MAX_CONCURRENT_JOBS: 1,
+    BACKUP_PROCESS_INLINE: false,
     ...overrides,
   };
 }

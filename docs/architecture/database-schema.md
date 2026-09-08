@@ -33,6 +33,11 @@ erDiagram
     Organization ||--o{ Build : "owns"
     Organization ||--o{ Artifact : "owns"
     Organization ||--o{ ArtifactVersion : "owns"
+    Organization ||--o{ BackupSchedule : "owns"
+    Organization ||--o{ BackupJob : "owns"
+    Organization ||--o{ BackupSnapshot : "owns"
+    Organization ||--o{ BackupJobLog : "owns"
+    Organization ||--o{ BackupRestoreJob : "owns"
 
     Team ||--o{ TeamMember : "has"
     Team ||--o{ ShareLink : "receives"
@@ -67,6 +72,14 @@ erDiagram
     Build ||--o{ Artifact : "produces"
     Build ||--o{ ArtifactVersion : "produces"
     Artifact ||--o{ ArtifactVersion : "versioned_as"
+
+    BackupSchedule ||--o{ BackupJob : "enqueues"
+    BackupSchedule ||--o{ BackupSnapshot : "retains"
+    BackupJob ||--o| BackupSnapshot : "produces"
+    BackupJob ||--o{ BackupJobLog : "records"
+    BackupJob ||--o{ BackupJob : "retried_as"
+    BackupSnapshot ||--o{ BackupRestoreJob : "restores"
+    StorageObject ||--o{ BackupSnapshot : "holds_bytes"
 
     MultipartUpload ||--o{ MultipartPart : "composed_of"
 
@@ -282,21 +295,71 @@ erDiagram
         boolean isRelease
         string releaseTag
     }
+
+    BackupSchedule {
+        string id PK
+        string organizationId FK
+        string name
+        boolean enabled
+        enum_array targets
+        int intervalMinutes
+        int retentionDays
+        int retentionCount
+    }
+
+    BackupJob {
+        string id PK
+        string organizationId FK
+        string scheduleId FK
+        enum status
+        enum_array targets
+        int progressPercent
+        boolean cancelRequested
+        string retryOfJobId FK
+    }
+
+    BackupSnapshot {
+        string id PK
+        string organizationId FK
+        string jobId FK
+        string storageObjectId FK
+        string manifestChecksum
+        bigint size
+        datetime verifiedAt
+        datetime expiresAt
+    }
+
+    BackupJobLog {
+        string id PK
+        string organizationId FK
+        string jobId FK
+        enum level
+        string message
+    }
+
+    BackupRestoreJob {
+        string id PK
+        string organizationId FK
+        string snapshotId FK
+        enum status
+        json restorePlan
+    }
 ```
 
 ## Domain groups
 
-| Domain                | Models                                                                         | Notes                                                                                                                                                                                                                                                                        |
-| --------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Identity              | `User`, `Session`                                                              | Sessions store hashed tokens; plaintext never persisted                                                                                                                                                                                                                      |
-| Tenancy               | `Organization`, `Team`, `TeamMember`                                           | Every org-owned row carries `organizationId`. Team shares require membership.                                                                                                                                                                                                |
-| Sharing               | `ShareLink`                                                                    | Public identifier is a hashed high-entropy token, never the sequential id. Password hashes, expiry, download limits, and revocation are enforced at read time.                                                                                                               |
-| RBAC                  | `Role`, `Permission`, `RolePermission`, `UserRole`                             | Permissions seeded from `@vaultstack/types`                                                                                                                                                                                                                                  |
-| Automation            | `ApiKey`                                                                       | Hashed keys; prefix shown to users                                                                                                                                                                                                                                           |
-| Audit                 | `AuditLog`                                                                     | Append-only action log per organization                                                                                                                                                                                                                                      |
-| Storage control plane | `StorageProvider`, `Bucket`, `StoragePolicy`                                   | `config` holds non-secret dialect/endpoint/bucket settings. Provider secrets are AES-256-GCM (`secretCiphertext` + `secretNonce`) and never returned by APIs. ACCESS policies remain unused at request time; LIFECYCLE policies are evaluated by the worker against metadata |
-| Storage data plane    | `StorageObject`, `ObjectVersion`, `Upload`, `MultipartUpload`, `MultipartPart` | Metadata only; bytes in provider. Version ids are VaultStack-owned.                                                                                                                                                                                                          |
-| CI/CD artifacts       | `Project`, `Build`, `Artifact`, `ArtifactVersion`                              | Metadata only. `ArtifactVersion.storageObjectId` references `StorageObject` (`onDelete: Restrict`). Bytes are uploaded/downloaded/deleted through StorageService.                                                                                                            |
+| Domain                | Models                                                                              | Notes                                                                                                                                                                                                                                                                        |
+| --------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Identity              | `User`, `Session`                                                                   | Sessions store hashed tokens; plaintext never persisted                                                                                                                                                                                                                      |
+| Tenancy               | `Organization`, `Team`, `TeamMember`                                                | Every org-owned row carries `organizationId`. Team shares require membership.                                                                                                                                                                                                |
+| Sharing               | `ShareLink`                                                                         | Public identifier is a hashed high-entropy token, never the sequential id. Password hashes, expiry, download limits, and revocation are enforced at read time.                                                                                                               |
+| RBAC                  | `Role`, `Permission`, `RolePermission`, `UserRole`                                  | Permissions seeded from `@vaultstack/types`                                                                                                                                                                                                                                  |
+| Automation            | `ApiKey`                                                                            | Hashed keys; prefix shown to users                                                                                                                                                                                                                                           |
+| Audit                 | `AuditLog`                                                                          | Append-only action log per organization                                                                                                                                                                                                                                      |
+| Storage control plane | `StorageProvider`, `Bucket`, `StoragePolicy`                                        | `config` holds non-secret dialect/endpoint/bucket settings. Provider secrets are AES-256-GCM (`secretCiphertext` + `secretNonce`) and never returned by APIs. ACCESS policies remain unused at request time; LIFECYCLE policies are evaluated by the worker against metadata |
+| Storage data plane    | `StorageObject`, `ObjectVersion`, `Upload`, `MultipartUpload`, `MultipartPart`      | Metadata only; bytes in provider. Version ids are VaultStack-owned.                                                                                                                                                                                                          |
+| CI/CD artifacts       | `Project`, `Build`, `Artifact`, `ArtifactVersion`                                   | Metadata only. `ArtifactVersion.storageObjectId` references `StorageObject` (`onDelete: Restrict`). Bytes are uploaded/downloaded/deleted through StorageService.                                                                                                            |
+| Backups               | `BackupSchedule`, `BackupJob`, `BackupSnapshot`, `BackupJobLog`, `BackupRestoreJob` | Metadata only. Snapshot archives are `StorageObject` rows in org bucket `vs-backups`. Credentials are never stored on backup rows. Restore jobs store a plan JSON; they do not execute live restores.                                                                        |
 
 ## Cascade behavior
 
@@ -306,6 +369,7 @@ erDiagram
 - Deleting a **Team** cascades members and team-scoped share links.
 - Deleting a **StorageObject** cascades its share links.
 - Deleting an **ArtifactVersion** is blocked while it still references a `StorageObject` (`onDelete: Restrict`). Application code unlinks and deletes bytes via `ObjectService.remove` first.
+- Deleting a **BackupSnapshot** is blocked while it still references a `StorageObject` (`onDelete: Restrict`). Application code unlinks and deletes bytes via `ObjectService.remove` first. Restore jobs restrict snapshot deletion while they exist.
 - **MultipartPart** rows cascade when their parent multipart upload is deleted.
 
 ## Keeping this diagram current

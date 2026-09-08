@@ -51,12 +51,13 @@ Business modules under `apps/api/src/modules/`:
 - `audit/`
 - `storage/` — buckets, objects, uploads, multipart, external providers
 - `artifacts/` — CI/CD projects, builds, artifact versions (bytes via StorageService)
+- `backups/` — backup jobs, schedules, snapshots, restore plans (bytes via StorageService)
 
 See [database schema diagram](./database-schema.md) for the full ER model and [../api/README.md](../api/README.md) for REST endpoints.
 
 ### Workers
 
-`apps/api/src/workers/` runs multipart cleanup, storage lifecycle, and artifact retention. `services/backup-worker` and `services/artifact-worker` remain BullMQ skeletons; artifact retention is applied in the API worker so it can reuse StorageService.
+`apps/api/src/workers/` runs multipart cleanup, storage lifecycle, artifact retention, and backup jobs (queue `backup-jobs`). `services/backup-worker` and `services/artifact-worker` remain compatibility shims; backup processing reuses StorageService from the API worker.
 
 ### Shared packages
 

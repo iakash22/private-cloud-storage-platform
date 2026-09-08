@@ -15,6 +15,9 @@ export { PrismaClient, Prisma } from '@prisma/client';
 export {
   ArtifactKind,
   ArtifactVersionStatus,
+  BackupJobStatus,
+  BackupLogLevel,
+  BackupTarget,
   BucketVersioningStatus,
   BuildStatus,
   ChecksumAlgorithm,

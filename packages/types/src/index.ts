@@ -60,7 +60,14 @@ export type ApiErrorCode =
   | 'ARTIFACT_BUILD_NOT_FOUND'
   | 'ARTIFACT_NOT_FOUND'
   | 'ARTIFACT_VERSION_NOT_FOUND'
-  | 'ARTIFACT_RELEASE_CONFLICT';
+  | 'ARTIFACT_RELEASE_CONFLICT'
+  | 'BACKUP_JOB_NOT_FOUND'
+  | 'BACKUP_SNAPSHOT_NOT_FOUND'
+  | 'BACKUP_SCHEDULE_NOT_FOUND'
+  | 'BACKUP_RESTORE_NOT_FOUND'
+  | 'BACKUP_INVALID_STATE'
+  | 'BACKUP_TARGET_FORBIDDEN'
+  | 'BACKUP_VERIFICATION_FAILED';
 
 export interface ApiErrorResponse {
   error: {
@@ -696,6 +703,127 @@ export interface PublicArtifactVersion {
   etag: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export type BackupJobStatusName =
+  'QUEUED' | 'RUNNING' | 'VERIFYING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+
+export type BackupTargetName =
+  | 'POSTGRESQL'
+  | 'MONGODB'
+  | 'APP_CONFIG'
+  | 'DOCKER_VOLUMES'
+  | 'VAULTSTACK_METADATA'
+  | 'VAULTSTACK_OBJECT_METADATA';
+
+export type BackupLogLevelName = 'INFO' | 'WARN' | 'ERROR';
+
+export interface PublicBackupSchedule {
+  id: string;
+  organizationId: string;
+  name: string;
+  enabled: boolean;
+  targets: BackupTargetName[];
+  intervalMinutes: number;
+  retentionDays: number | null;
+  retentionCount: number | null;
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PublicBackupJob {
+  id: string;
+  organizationId: string;
+  scheduleId: string | null;
+  createdByUserId: string | null;
+  status: BackupJobStatusName;
+  targets: BackupTargetName[];
+  progressPercent: number;
+  currentStep: string | null;
+  errorMessage: string | null;
+  cancelRequested: boolean;
+  retryOfJobId: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  snapshotId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PublicBackupJobLog {
+  id: string;
+  organizationId: string;
+  jobId: string;
+  level: BackupLogLevelName;
+  message: string;
+  createdAt: string;
+}
+
+export interface PublicBackupSnapshot {
+  id: string;
+  organizationId: string;
+  jobId: string;
+  scheduleId: string | null;
+  storageObjectId: string | null;
+  manifestChecksum: string;
+  size: number;
+  verifiedAt: string | null;
+  verificationPassed: boolean;
+  verificationError: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BackupRestorePlanComponent {
+  path: string;
+  checksum: string;
+  restorable: boolean;
+  notes: string;
+}
+
+export interface BackupRestorePlan {
+  snapshotId: string;
+  jobId: string;
+  targets: BackupTargetName[];
+  components: BackupRestorePlanComponent[];
+  warnings: string[];
+  destructive: boolean;
+}
+
+export interface PublicBackupRestoreJob {
+  id: string;
+  organizationId: string;
+  snapshotId: string;
+  createdByUserId: string | null;
+  status: BackupJobStatusName;
+  progressPercent: number;
+  currentStep: string | null;
+  restorePlan: BackupRestorePlan | null;
+  errorMessage: string | null;
+  cancelRequested: boolean;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PublicBackupSummary {
+  jobCounts: Record<BackupJobStatusName, number>;
+  snapshotCount: number;
+  scheduleCount: number;
+  restoreCount: number;
+  latestJob: PublicBackupJob | null;
+  latestSnapshot: PublicBackupSnapshot | null;
+}
+
+export interface PublicBackupVerification {
+  snapshot: PublicBackupSnapshot;
+  passed: boolean;
+  error: string | null;
 }
 
 export interface InitiatedArtifactUpload {
