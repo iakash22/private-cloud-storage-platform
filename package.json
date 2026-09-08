@@ -11,7 +11,8 @@
     "test": "turbo run test",
     "test:unit": "turbo run test:unit",
     "test:integration": "turbo run test:integration",
-    "test:e2e": "playwright test",
+    "test:e2e": "playwright install chromium && playwright test",
+    "playwright:install-deps": "playwright install-deps chromium",
     "db:generate": "pnpm --filter @vaultstack/database generate",
     "db:migrate": "pnpm --filter @vaultstack/database migrate",
     "db:seed": "pnpm --filter @vaultstack/database seed",
@@ -19,9 +20,9 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
     "prepare": "husky",
     "lint-staged": "lint-staged",
-    "docker:up": "docker compose --env-file .env -f infrastructure/docker/docker-compose.dev.yml up -d",
-    "docker:down": "docker compose --env-file .env -f infrastructure/docker/docker-compose.dev.yml down",
-    "docker:logs": "docker compose --env-file .env -f infrastructure/docker/docker-compose.dev.yml logs -f"
+    "docker:up": "bash infrastructure/docker/compose.sh up -d --wait",
+    "docker:down": "bash infrastructure/docker/compose.sh down",
+    "docker:logs": "bash infrastructure/docker/compose.sh logs -f"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

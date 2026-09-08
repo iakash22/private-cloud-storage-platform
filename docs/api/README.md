@@ -35,6 +35,8 @@ Common codes: `VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CON
 
 Browser clients authenticate with HTTP-only session cookies. Login and register set `vs_session` (HTTP-only) and `vs_csrf`. They do **not** return a bearer token.
 
+The dashboard origin must be allowlisted (`CORS_ORIGINS`, with localhost defaults in development) so credentialed `fetch` from `:5173` is not blocked by the browser.
+
 Mutating cookie-authenticated requests must send `x-csrf-token` matching the CSRF token from login/register/`GET /auth/me`.
 
 Programmatic clients may still use `Authorization: Bearer <api-key>`.
@@ -106,15 +108,28 @@ Buckets:
 - `POST   /api/v1/storage/buckets` — `storage.upload`
 - `GET    /api/v1/storage/buckets/:bucketId` — `storage.read`
 - `DELETE /api/v1/storage/buckets/:bucketId` — `storage.delete` (refuses a non-empty bucket)
+- `PUT    /api/v1/storage/buckets/:bucketId/versioning` — `storage.upload` (`UNVERSIONED` | `ENABLED` | `SUSPENDED`)
 
 Objects:
 
 - `GET    /api/v1/storage/buckets/:bucketId/objects` — `storage.read` (`prefix`, `delimiter`, `limit`, `cursor`)
 - `GET    /api/v1/storage/objects/:objectId` — `storage.read`
-- `POST   /api/v1/storage/objects/:objectId/download-url` — `storage.read`
-- `DELETE /api/v1/storage/objects/:objectId` — `storage.delete`
+- `POST   /api/v1/storage/objects/:objectId/download-url` — `storage.read` (optional `versionId`)
+- `DELETE /api/v1/storage/objects/:objectId` — `storage.delete` (delete marker when versioning is enabled; `?versionId=` permanently deletes that version)
+- `GET    /api/v1/storage/objects/:objectId/versions` — `storage.read`
+- `GET    /api/v1/storage/objects/:objectId/versions/:versionId` — `storage.read`
+- `POST   /api/v1/storage/objects/:objectId/versions/:versionId/restore` — `storage.upload`
+- `DELETE /api/v1/storage/objects/:objectId/versions/:versionId` — `storage.delete`
 - `POST   /api/v1/storage/objects/:objectId/copy` — `storage.upload`
 - `POST   /api/v1/storage/objects/:objectId/move` — `storage.upload` **and** `storage.delete`
+
+Lifecycle policies (provider-independent; evaluated by the storage worker):
+
+- `GET    /api/v1/storage/policies` — `storage.read`
+- `POST   /api/v1/storage/policies` — `storage.upload` (`EXPIRE_CURRENT`, `EXPIRE_NONCURRENT`, `ABORT_INCOMPLETE_MULTIPART`, `EXPIRE_TEMPORARY`)
+- `GET    /api/v1/storage/policies/:policyId` — `storage.read`
+- `PATCH  /api/v1/storage/policies/:policyId` — `storage.upload`
+- `DELETE /api/v1/storage/policies/:policyId` — `storage.delete`
 
 Uploads:
 
@@ -124,8 +139,13 @@ Uploads:
 
 Multipart uploads:
 
-- `POST   /api/v1/storage/multipart-uploads` — `storage.upload`
+- `GET    /api/v1/storage/multipart-uploads` — `storage.read` (initiator's resumable sessions)
+- `POST   /api/v1/storage/multipart-uploads` — `storage.upload` (requires declared `size`)
+- `GET    /api/v1/storage/multipart-uploads/:uploadId` — `storage.read`
+- `GET    /api/v1/storage/multipart-uploads/:uploadId/parts` — `storage.read`
 - `PUT    /api/v1/storage/multipart-uploads/:uploadId/parts?partNumber=N` — `storage.upload`
+- `POST   /api/v1/storage/multipart-uploads/:uploadId/parts/:partNumber/destination` — `storage.upload`
+- `POST   /api/v1/storage/multipart-uploads/:uploadId/parts/:partNumber/confirm` — `storage.upload`
 - `POST   /api/v1/storage/multipart-uploads/:uploadId/complete` — `storage.upload`
 - `DELETE /api/v1/storage/multipart-uploads/:uploadId` — `storage.upload`
 
@@ -134,6 +154,7 @@ so a signed URL works the way an S3 presigned URL does:
 
 - `GET /api/v1/storage/objects/:objectId/content?token=...` — supports `Range`
 - `PUT /api/v1/storage/uploads/:uploadId/content?token=...`
+- `PUT /api/v1/storage/multipart-uploads/:uploadId/parts/:partNumber/content?token=...`
 
 Responses return metadata only. Internal filesystem paths and physical keys are
 never included:

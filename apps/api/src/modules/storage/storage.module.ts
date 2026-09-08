@@ -17,6 +17,8 @@ import {
 import { createStorageMetrics, type StorageMetrics } from './services/storage.metrics.js';
 import { createStorageService, type StorageService } from './services/storage.service.js';
 import { createUploadService, type UploadService } from './services/upload.service.js';
+import { createPolicyRepository } from './repositories/policy.repository.js';
+import { createPolicyService, type PolicyService } from './services/policy.service.js';
 
 export interface StorageModuleDeps {
   prisma: PrismaClient;
@@ -32,6 +34,7 @@ export class StorageModule {
   readonly buckets: BucketService;
   readonly objects: ObjectService;
   readonly uploads: UploadService;
+  readonly policies: PolicyService;
   readonly tokens: StorageTokenService;
   readonly metrics: StorageMetrics;
 
@@ -66,6 +69,15 @@ export class StorageModule {
       storage: this.storage,
       tokens: this.tokens,
       metrics: this.metrics,
+      logger,
+    });
+
+    this.policies = createPolicyService({
+      prisma,
+      policies: createPolicyRepository(prisma),
+      storage: this.storage,
+      objects: this.objects,
+      uploads: this.uploads,
       logger,
     });
   }

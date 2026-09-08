@@ -1,4 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
 import { Readable } from 'node:stream';
 import { startTestMinio, type TestMinio } from '@vaultstack/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -17,6 +19,23 @@ async function collect(stream: Readable): Promise<Buffer> {
     chunks.push(Buffer.from(chunk as Buffer));
   }
   return Buffer.concat(chunks);
+}
+
+/** Node's fetch refuses a body shorter than Content-Length; http.request does not. */
+function putExact(url: string, headers: Record<string, string>, body: Buffer): Promise<{ ok: boolean; status: number }> {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const send = parsed.protocol === 'https:' ? httpsRequest : httpRequest;
+    const req = send(parsed, { method: 'PUT', headers }, (res) => {
+      res.resume();
+      res.on('end', () => {
+        const status = res.statusCode ?? 0;
+        resolve({ ok: status >= 200 && status < 300, status });
+      });
+    });
+    req.on('error', reject);
+    req.end(body);
+  });
 }
 
 /**
@@ -107,6 +126,8 @@ describe('Phase 3 S3-compatible provider (real MinIO)', () => {
   it('advertises native presigning and server-side copy', () => {
     expect(provider.capabilities.nativePresignedUrls).toBe(true);
     expect(provider.capabilities.serverSideCopy).toBe(true);
+    expect(provider.capabilities.directPartDestinations).toBe(true);
+    expect(provider.capabilities.providerPartInspection).toBe(true);
   });
 
   it('creates, gets, lists and deletes buckets', async () => {
@@ -289,6 +310,59 @@ describe('Phase 3 S3-compatible provider (real MinIO)', () => {
 
     const got = await provider.getObject(target);
     expect(got.size).toBe(result.size);
+  }, 120_000);
+
+  it('uploads parts through a presigned UploadPart URL and retries a failed part', async () => {
+    expect(provider.capabilities.directPartDestinations).toBe(true);
+    expect(provider.capabilities.providerPartInspection).toBe(true);
+
+    const target = location('multipart/presigned.bin');
+    const { providerUploadId } = await provider.initiateMultipartUpload({ ...target });
+    const partOne = Buffer.alloc(5 * 1024 * 1024, 7);
+    const partTwo = Buffer.from('presigned-tail');
+
+    const first = await provider.createPresignedPartUrl({
+      ...target,
+      providerUploadId,
+      partNumber: 1,
+      expiresInSeconds: 300,
+      contentLength: partOne.length,
+    });
+    expect(first.url).toContain('X-Amz-Signature');
+    expect(first.url).not.toContain(requireMinio().secretKey);
+
+    const failed = await putExact(first.url, first.headers ?? {}, partOne.subarray(0, 16));
+    expect(failed.ok).toBe(false);
+
+    const retried = await putExact(first.url, first.headers ?? {}, partOne);
+    expect(retried.status).toBe(200);
+
+    const second = await provider.createPresignedPartUrl({
+      ...target,
+      providerUploadId,
+      partNumber: 2,
+      expiresInSeconds: 300,
+      contentLength: partTwo.length,
+    });
+    const uploadedTwo = await putExact(second.url, second.headers ?? {}, partTwo);
+    expect(uploadedTwo.status).toBe(200);
+
+    const listed = await provider.listProviderParts({ ...target, providerUploadId });
+    expect(listed).toHaveLength(2);
+
+    const inspected = await provider.inspectPart({
+      ...target,
+      providerUploadId,
+      partNumber: 1,
+    });
+    expect(inspected?.size).toBe(partOne.length);
+
+    const result = await provider.completeMultipartUpload({
+      ...target,
+      providerUploadId,
+      parts: listed.map((part) => ({ partNumber: part.partNumber, etag: part.etag })),
+    });
+    expect(result.size).toBe(partOne.length + partTwo.length);
   }, 120_000);
 
   it('aborts a multipart upload without publishing an object', async () => {

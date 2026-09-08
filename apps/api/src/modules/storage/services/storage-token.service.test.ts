@@ -141,4 +141,39 @@ describe('storage token service', () => {
 
     expect(codeOf(() => service.verify(token, 'download'))).toBe('STORAGE_UPLOAD_EXPIRED');
   });
+
+  it('binds a multipart part token to organization, upload, and part number', () => {
+    const service = createStorageTokenService(SECRET);
+    const { token } = service.issue(
+      {
+        purpose: 'multipart-part',
+        organizationId: 'org-1',
+        subjectId: 'upload-1',
+        partNumber: 3,
+      },
+      300,
+    );
+
+    const verified = service.verify(token, 'multipart-part');
+    expect(verified.subjectId).toBe('upload-1');
+    expect(verified.partNumber).toBe(3);
+    expect(codeOf(() => service.verify(token, 'upload'))).toBe('STORAGE_ACCESS_DENIED');
+  });
+
+  it('binds a download token to a specific object version', () => {
+    const service = createStorageTokenService(SECRET);
+    const { token } = service.issue(
+      {
+        purpose: 'download',
+        organizationId: 'org-1',
+        subjectId: 'obj-1',
+        versionId: 'version-2',
+      },
+      300,
+    );
+
+    const verified = service.verify(token, 'download');
+    expect(verified.versionId).toBe('version-2');
+    expect(verified.subjectId).toBe('obj-1');
+  });
 });

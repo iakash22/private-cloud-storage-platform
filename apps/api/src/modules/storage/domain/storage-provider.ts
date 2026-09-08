@@ -1,6 +1,8 @@
 import type { StorageProviderTypeName } from '@vaultstack/types';
 import type {
   AbortMultipartInput,
+  CapacityCheckInput,
+  CapacityCheckResult,
   CompleteMultipartInput,
   CopyObjectInput,
   GetObjectInput,
@@ -8,13 +10,17 @@ import type {
   HeadObjectResult,
   InitiateMultipartInput,
   InitiateMultipartResult,
+  InspectPartInput,
   ListObjectsInput,
+  ListProviderPartsInput,
+  PresignedPartUrlInput,
   PresignedUrl,
   PresignedUrlInput,
   ProviderBucketRef,
   ProviderBucketSummary,
   ProviderHealth,
   ProviderObjectListPage,
+  ProviderPartInfo,
   PutObjectInput,
   PutObjectResult,
   StorageLocation,
@@ -49,6 +55,11 @@ export interface StorageProvider {
   uploadPart(input: UploadPartInput): Promise<UploadPartResult>;
   completeMultipartUpload(input: CompleteMultipartInput): Promise<PutObjectResult>;
   abortMultipartUpload(input: AbortMultipartInput): Promise<void>;
+  inspectPart(input: InspectPartInput): Promise<ProviderPartInfo | null>;
+  listProviderParts(input: ListProviderPartsInput): Promise<ProviderPartInfo[]>;
+  createPresignedPartUrl(input: PresignedPartUrlInput): Promise<PresignedUrl>;
+  checkCapacity(input: CapacityCheckInput): Promise<CapacityCheckResult>;
+  cleanupOrphanStaging(olderThan: Date): Promise<number>;
 
   createPresignedDownloadUrl(input: PresignedUrlInput): Promise<PresignedUrl>;
   createPresignedUploadUrl(input: PresignedUrlInput): Promise<PresignedUrl>;
@@ -63,4 +74,10 @@ export interface StorageProviderCapabilities {
   nativeVersioning: boolean;
   /** True when the backend performs server-side copies without streaming. */
   serverSideCopy: boolean;
+  /** True when the backend can mint a direct UploadPart destination. */
+  directPartDestinations: boolean;
+  /** True when the backend can list or inspect uploaded parts itself. */
+  providerPartInspection: boolean;
+  /** True when the backend can report remaining writable capacity. */
+  capacityChecks: boolean;
 }

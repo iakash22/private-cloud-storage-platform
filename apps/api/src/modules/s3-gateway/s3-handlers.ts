@@ -304,6 +304,7 @@ export class S3GatewayHandlers {
     const part = await this.storage.uploads.uploadPart({
       organizationId: principal.organizationId,
       uploadId,
+      userId: principal.principalId,
       partNumber: this.requirePartNumber(target),
       body: req,
     });

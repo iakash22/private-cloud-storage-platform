@@ -1,10 +1,18 @@
-import { X } from 'lucide-react';
+import { Pause, Play, RotateCcw, X } from 'lucide-react';
 import { formatBytes } from '../../lib/storage-utils.js';
 import { cn } from '../../lib/utils.js';
 import { Button } from '../button.js';
 import { Progress } from '../progress.js';
 
-export type UploadStatus = 'pending' | 'uploading' | 'completing' | 'completed' | 'failed' | 'cancelled';
+export type UploadStatus =
+  | 'pending'
+  | 'uploading'
+  | 'paused'
+  | 'awaiting-file'
+  | 'completing'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
 
 export interface UploadItem {
   id: string;
@@ -19,10 +27,19 @@ export interface UploadProgressProps {
   uploads: UploadItem[];
   onCancel?: (uploadId: string) => void;
   onRetry?: (uploadId: string) => void;
+  onPause?: (uploadId: string) => void;
+  onResume?: (uploadId: string) => void;
   className?: string;
 }
 
-export function UploadProgressPanel({ uploads, onCancel, onRetry, className }: UploadProgressProps) {
+export function UploadProgressPanel({
+  uploads,
+  onCancel,
+  onRetry,
+  onPause,
+  onResume,
+  className,
+}: UploadProgressProps) {
   if (uploads.length === 0) {
     return null;
   }
@@ -41,7 +58,33 @@ export function UploadProgressPanel({ uploads, onCancel, onRetry, className }: U
                 </p>
               </div>
               <div className="flex items-center gap-1">
-                {upload.status === 'uploading' && onCancel ? (
+                {upload.status === 'uploading' && onPause ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-label={`Pause upload ${upload.fileName}`}
+                    onClick={() => {
+                      onPause(upload.id);
+                    }}
+                  >
+                    <Pause aria-hidden className="h-4 w-4" />
+                  </Button>
+                ) : null}
+                {(upload.status === 'paused' || upload.status === 'awaiting-file') && onResume ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-label={`Resume upload ${upload.fileName}`}
+                    onClick={() => {
+                      onResume(upload.id);
+                    }}
+                  >
+                    <Play aria-hidden className="h-4 w-4" />
+                  </Button>
+                ) : null}
+                {(upload.status === 'uploading' || upload.status === 'paused') && onCancel ? (
                   <Button
                     type="button"
                     variant="outline"
@@ -59,10 +102,12 @@ export function UploadProgressPanel({ uploads, onCancel, onRetry, className }: U
                     type="button"
                     variant="outline"
                     size="sm"
+                    aria-label={`Retry upload ${upload.fileName}`}
                     onClick={() => {
                       onRetry(upload.id);
                     }}
                   >
+                    <RotateCcw aria-hidden className="h-4 w-4" />
                     Retry
                   </Button>
                 ) : null}

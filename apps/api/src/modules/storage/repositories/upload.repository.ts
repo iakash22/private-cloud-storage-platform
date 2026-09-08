@@ -6,6 +6,7 @@ import {
   type PrismaClient,
   type Upload,
 } from '@vaultstack/database';
+import type { MultipartUploadStatusName } from '@vaultstack/types';
 
 export interface CreateUploadRecord {
   organizationId: string;
@@ -76,6 +77,13 @@ export interface UploadRepository {
     checksum: string | null;
   }): Promise<MultipartPart>;
   listParts(organizationId: string, multipartUploadId: string): Promise<MultipartPart[]>;
+  listMultipartSessions(input: {
+    organizationId: string;
+    userId: string;
+    status?: MultipartUploadStatusName;
+    limit: number;
+    cursor?: string;
+  }): Promise<{ sessions: MultipartUpload[]; nextCursor: string | null }>;
   deleteMultipart(id: string): Promise<void>;
   findStaleUploads(now: Date): Promise<Upload[]>;
   findStaleMultipart(now: Date): Promise<MultipartUpload[]>;
@@ -196,6 +204,27 @@ export function createUploadRepository(prisma: PrismaClient): UploadRepository {
         where: { multipartUploadId, multipartUpload: { organizationId } },
         orderBy: { partNumber: 'asc' },
       });
+    },
+
+    async listMultipartSessions(input) {
+      const take = input.limit + 1;
+      const rows = await prisma.multipartUpload.findMany({
+        where: {
+          organizationId: input.organizationId,
+          userId: input.userId,
+          ...(input.status ? { status: input.status } : {}),
+          ...(input.cursor ? { id: { lt: input.cursor } } : {}),
+        },
+        orderBy: { id: 'desc' },
+        take,
+      });
+
+      const hasMore = rows.length > input.limit;
+      const sessions = hasMore ? rows.slice(0, input.limit) : rows;
+      return {
+        sessions,
+        nextCursor: hasMore ? (sessions.at(-1)?.id ?? null) : null,
+      };
     },
 
     async deleteMultipart(id) {

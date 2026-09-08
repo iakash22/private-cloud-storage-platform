@@ -228,6 +228,18 @@ enum StoragePolicyEffect {
   DENY
 }
 
+enum StoragePolicyKind {
+  ACCESS
+  LIFECYCLE
+}
+
+enum StorageLifecycleAction {
+  EXPIRE_CURRENT
+  EXPIRE_NONCURRENT
+  ABORT_INCOMPLETE_MULTIPART
+  EXPIRE_TEMPORARY
+}
+
 model StorageProvider {
   id             String                @id @default(cuid())
   organizationId String
@@ -305,6 +317,9 @@ model StorageObject {
   /// circular foreign key; ObjectVersion.isCurrent is the authoritative flag.
   currentVersionId String?
 
+  /// True when the current version is a delete marker. Hidden from default listings.
+  isDeleted Boolean @default(false)
+
   /// Server-generated physical location relative to the provider root.
   physicalKey String
 
@@ -323,6 +338,7 @@ model StorageObject {
   @@index([organizationId])
   @@index([bucketId, key])
   @@index([organizationId, createdAt])
+  @@index([bucketId, isDeleted, key])
 }
 
 model ObjectVersion {
@@ -332,7 +348,8 @@ model ObjectVersion {
   bucketId          String
   storageProviderId String
 
-  /// Provider version identifier where supported, otherwise server-generated.
+  /// VaultStack version identifier. Providers store opaque physical keys; this
+  /// id is not an S3 version id even when the backend reports nativeVersioning.
   versionId String
 
   size              BigInt
@@ -342,6 +359,7 @@ model ObjectVersion {
   checksum          String?
   physicalKey       String
   isCurrent         Boolean           @default(false)
+  isDeleteMarker    Boolean           @default(false)
   metadata          Json?
 
   createdAt DateTime @default(now())
@@ -354,6 +372,8 @@ model ObjectVersion {
   @@unique([objectId, versionId])
   @@index([organizationId])
   @@index([objectId, isCurrent])
+  @@index([organizationId, objectId, versionId])
+  @@index([bucketId, isCurrent, createdAt])
 }
 
 model Upload {
@@ -450,21 +470,28 @@ model MultipartPart {
   @@index([multipartUploadId])
 }
 
-/// Authorization foundation for later phases. Phase 3 authorizes storage
-/// operations through the existing RBAC permission system; these rows are not
-/// yet consulted at request time.
+/// ACCESS rows remain an authorization foundation and are not consulted at
+/// request time. LIFECYCLE rows are evaluated by the lifecycle worker against
+/// PostgreSQL metadata; providers only receive delete/abort of physical bytes.
 model StoragePolicy {
   id             String              @id @default(cuid())
   organizationId String
   bucketId       String?
   name           String
+  kind           StoragePolicyKind   @default(ACCESS)
   effect         StoragePolicyEffect @default(ALLOW)
+  enabled        Boolean             @default(true)
 
-  /// Permission keys such as storage.read or storage.upload.
+  /// Permission keys such as storage.read or storage.upload (ACCESS policies).
   actions String[]
 
   /// Optional object key prefix the policy applies to.
   keyPrefix String?
+
+  /// Age in days for LIFECYCLE rules. Unused for ACCESS policies.
+  days Int?
+
+  lifecycleAction StorageLifecycleAction?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -475,6 +502,7 @@ model StoragePolicy {
   @@unique([organizationId, name])
   @@index([organizationId])
   @@index([bucketId])
+  @@index([organizationId, kind, enabled])
 }
 
 /// Sharing foundation for Phase 8. Intentionally has no anonymous read path in

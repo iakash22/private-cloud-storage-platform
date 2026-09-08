@@ -3,6 +3,7 @@ import {
   apiErrorResponseSchema,
   completeMultipartBodySchema,
   confirmMultipartPartBodySchema,
+  createLifecyclePolicyBodySchema,
   healthResponseSchema,
   initiateMultipartBodySchema,
   listMultipartSessionsQuerySchema,
@@ -10,6 +11,7 @@ import {
   multipartPartQuerySchema,
   readinessResponseSchema,
   registerBodySchema,
+  updateBucketVersioningBodySchema,
 } from './index.js';
 
 describe('@vaultstack/validation', () => {
@@ -141,5 +143,25 @@ describe('@vaultstack/validation', () => {
     expect(
       listMultipartSessionsQuerySchema.safeParse({ status: 'FAILED' }).success,
     ).toBe(false);
+  });
+
+  it('validates lifecycle policy creation and bucket versioning updates', () => {
+    expect(
+      createLifecyclePolicyBodySchema.safeParse({
+        name: 'expire-tmp',
+        days: 7,
+        lifecycleAction: 'EXPIRE_CURRENT',
+      }).success,
+    ).toBe(true);
+    expect(
+      createLifecyclePolicyBodySchema.safeParse({
+        name: 'expire-tmp',
+        days: 0,
+        lifecycleAction: 'EXPIRE_CURRENT',
+      }).success,
+    ).toBe(false);
+    expect(
+      updateBucketVersioningBodySchema.safeParse({ versioning: 'SUSPENDED' }).success,
+    ).toBe(true);
   });
 });

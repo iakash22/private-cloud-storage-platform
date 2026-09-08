@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, rm, statfs } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ORGANIZATION_COOKIE_NAME } from '@vaultstack/types';
@@ -10,7 +10,7 @@ import { createApp } from '../app.js';
 import type { DependencyClients } from '../lib/dependencies.js';
 import { createMemoryRateLimiter } from '../lib/rate-limit.js';
 import { createTestConfig } from '../lib/test-config.js';
-import { authHeaders, errorBody, responseBody } from './helpers.js';
+import { authHeaders, errorBody, pathOf, responseBody } from './helpers.js';
 
 function createMockRedis(): DependencyClients['redis'] {
   return {
@@ -115,6 +115,7 @@ describe('Phase 3 storage engine (PostgreSQL + local filesystem)', () => {
         STORAGE_DRIVER: 'local',
         STORAGE_LOCAL_ROOT: storageRoot,
         STORAGE_MAX_OBJECT_SIZE_BYTES: 8 * 1024 * 1024,
+        STORAGE_MULTIPART_MIN_PART_SIZE_BYTES: 1024,
         LOGIN_RATE_LIMIT_MAX: 100,
       }),
       logger: { error: vi.fn(), info: vi.fn(), warn: vi.fn(), debug: vi.fn() } as never,
@@ -433,7 +434,7 @@ describe('Phase 3 storage engine (PostgreSQL + local filesystem)', () => {
       const initiated = await request(app)
         .post('/api/v1/storage/multipart-uploads')
         .set(tenant.headers)
-        .send({ bucketId, key: 'big.bin', contentType: 'application/octet-stream' });
+        .send({ bucketId, key: 'big.bin', contentType: 'application/octet-stream', size: 2048 });
       expect(initiated.status).toBe(201);
       const uploadId = responseBody<{ uploadId: string }>(initiated).uploadId;
 
@@ -473,7 +474,7 @@ describe('Phase 3 storage engine (PostgreSQL + local filesystem)', () => {
       const initiated = await request(app)
         .post('/api/v1/storage/multipart-uploads')
         .set(tenant.headers)
-        .send({ bucketId, key: 'abort.bin' });
+        .send({ bucketId, key: 'abort.bin', size: 256 });
       const uploadId = responseBody<{ uploadId: string }>(initiated).uploadId;
 
       await request(app)
@@ -493,7 +494,268 @@ describe('Phase 3 storage engine (PostgreSQL + local filesystem)', () => {
         .send({ parts: [{ partNumber: 1, etag: 'x' }] });
       expect(completeAfterAbort.status).toBeGreaterThanOrEqual(400);
     });
+
+    it('resumes through destination, token transfer, confirm, and session status', async () => {
+      const tenant = await register('mp-resume@example.com', 'Multipart Resume Org');
+      const bucketId = await createBucket(tenant, 'multipart-resume');
+      const body = Buffer.alloc(512, 7);
+
+      const initiated = await request(app)
+        .post('/api/v1/storage/multipart-uploads')
+        .set(tenant.headers)
+        .send({ bucketId, key: 'resume.bin', size: body.length });
+      expect(initiated.status).toBe(201);
+      const uploadId = responseBody<{ uploadId: string }>(initiated).uploadId;
+
+      const destination = await request(app)
+        .post(`/api/v1/storage/multipart-uploads/${uploadId}/parts/1/destination`)
+        .set(tenant.headers)
+        .send({ size: body.length });
+      expect(destination.status).toBe(200);
+      const transfer = responseBody<{
+        destination: { url: string; transport: string };
+      }>(destination).destination;
+      expect(transfer.transport).toBe('VAULTSTACK');
+
+      const uploaded = await request(app)
+        .put(pathOf(transfer.url))
+        .set('Content-Type', 'application/octet-stream')
+        .send(body);
+      expect(uploaded.status).toBe(200);
+      const stored = responseBody<{ part: { etag: string; size: number } }>(uploaded).part;
+
+      const confirmed = await request(app)
+        .post(`/api/v1/storage/multipart-uploads/${uploadId}/parts/1/confirm`)
+        .set(tenant.headers)
+        .send({ etag: stored.etag, size: stored.size });
+      expect(confirmed.status).toBe(200);
+
+      const session = await request(app)
+        .get(`/api/v1/storage/multipart-uploads/${uploadId}`)
+        .set(tenant.headers);
+      expect(session.status).toBe(200);
+      expect(responseBody<{ session: { parts: unknown[] } }>(session).session.parts).toHaveLength(1);
+
+      const completed = await request(app)
+        .post(`/api/v1/storage/multipart-uploads/${uploadId}/complete`)
+        .set(tenant.headers)
+        .send({ parts: [{ partNumber: 1, etag: stored.etag }] });
+      expect(completed.status).toBe(201);
+    });
+
   });
+
+  describe('large multipart streams', () => {
+    let largeApp: ReturnType<typeof createApp>;
+
+    beforeAll(() => {
+      largeApp = createApp({
+        config: createTestConfig({
+          DATABASE_URL: db!.databaseUrl,
+          STORAGE_DRIVER: 'local',
+          STORAGE_LOCAL_ROOT: storageRoot,
+          STORAGE_MAX_OBJECT_SIZE_BYTES: 256 * 1024 * 1024,
+          STORAGE_MULTIPART_MIN_PART_SIZE_BYTES: 1024 * 1024,
+          LOGIN_RATE_LIMIT_MAX: 100,
+        }),
+        logger: { error: vi.fn(), info: vi.fn(), warn: vi.fn(), debug: vi.fn() } as never,
+        prisma: db!.prisma,
+        clients: { prisma: db!.prisma, redis: createMockRedis() },
+        rateLimiter: createMemoryRateLimiter(),
+      });
+    });
+
+    async function registerLarge(email: string, organizationName: string): Promise<Tenant> {
+      const response = await request(largeApp).post('/api/v1/auth/register').send({
+        email,
+        password: 'password123',
+        name: 'Owner',
+        organizationName,
+      });
+      expect(response.status).toBe(201);
+      const membership = responseBody<{ memberships: { organizationId: string }[] }>(response)
+        .memberships[0];
+      if (!membership) {
+        throw new Error('Expected register response to include a membership');
+      }
+      return {
+        organizationId: membership.organizationId,
+        headers: {
+          ...authHeaders(response),
+          Cookie: `${authHeaders(response).Cookie}; ${ORGANIZATION_COOKIE_NAME}=${membership.organizationId}`,
+        },
+      };
+    }
+
+    it('streams a 100 MB multipart upload without retaining the whole object', async () => {
+      const tenant = await registerLarge('mp-100mb@example.com', 'Multipart 100MB Org');
+      const created = await request(largeApp)
+        .post('/api/v1/storage/buckets')
+        .set(tenant.headers)
+        .send({ name: 'multipart-100mb' });
+      const bucketId = responseBody<{ bucket: { id: string } }>(created).bucket.id;
+      const partSize = 10 * 1024 * 1024;
+      const partCount = 10;
+      const size = partSize * partCount;
+      const chunk = Buffer.alloc(partSize, 9);
+      const before = process.memoryUsage();
+
+      const initiated = await request(largeApp)
+        .post('/api/v1/storage/multipart-uploads')
+        .set(tenant.headers)
+        .send({ bucketId, key: 'hundred.bin', size });
+      const uploadId = responseBody<{ uploadId: string }>(initiated).uploadId;
+
+      const parts = [];
+      for (let partNumber = 1; partNumber <= partCount; partNumber += 1) {
+        const response = await request(largeApp)
+          .put(`/api/v1/storage/multipart-uploads/${uploadId}/parts?partNumber=${String(partNumber)}`)
+          .set(tenant.headers)
+          .set('Content-Type', 'application/octet-stream')
+          .send(chunk);
+        expect(response.status).toBe(200);
+        parts.push(responseBody<{ part: { partNumber: number; etag: string } }>(response).part);
+      }
+
+      const completed = await request(largeApp)
+        .post(`/api/v1/storage/multipart-uploads/${uploadId}/complete`)
+        .set(tenant.headers)
+        .send({ parts: parts.map((part) => ({ partNumber: part.partNumber, etag: part.etag })) });
+      expect(completed.status).toBe(201);
+      expect(responseBody<{ object: { size: number } }>(completed).object.size).toBe(size);
+
+      const after = process.memoryUsage();
+      expect(after.heapUsed - before.heapUsed).toBeLessThan(40 * 1024 * 1024);
+    }, 120_000);
+  });
+
+  describe.skipIf(!process.env.VAULTSTACK_LARGE_MULTIPART_TEST)(
+    'extended multipart sizes',
+    () => {
+      const sixGiB = 6 * 1024 * 1024 * 1024;
+      let hugeApp: ReturnType<typeof createApp>;
+
+      beforeAll(() => {
+        hugeApp = createApp({
+          config: createTestConfig({
+            DATABASE_URL: db!.databaseUrl,
+            STORAGE_DRIVER: 'local',
+            STORAGE_LOCAL_ROOT: storageRoot,
+            STORAGE_MAX_OBJECT_SIZE_BYTES: sixGiB,
+            STORAGE_MAX_REQUEST_SIZE_BYTES: 64 * 1024 * 1024,
+            STORAGE_MULTIPART_MIN_PART_SIZE_BYTES: 8 * 1024 * 1024,
+            STORAGE_UPLOAD_TTL_SECONDS: 14_400,
+            LOGIN_RATE_LIMIT_MAX: 100,
+          }),
+          logger: { error: vi.fn(), info: vi.fn(), warn: vi.fn(), debug: vi.fn() } as never,
+          prisma: db!.prisma,
+          clients: { prisma: db!.prisma, redis: createMockRedis() },
+          rateLimiter: createMemoryRateLimiter(),
+        });
+      });
+
+      async function registerHuge(email: string, organizationName: string): Promise<Tenant> {
+        const response = await request(hugeApp).post('/api/v1/auth/register').send({
+          email,
+          password: 'password123',
+          name: 'Owner',
+          organizationName,
+        });
+        expect(response.status).toBe(201);
+        const membership = responseBody<{ memberships: { organizationId: string }[] }>(response)
+          .memberships[0];
+        if (!membership) {
+          throw new Error('Expected register response to include a membership');
+        }
+        return {
+          organizationId: membership.organizationId,
+          headers: {
+            ...authHeaders(response),
+            Cookie: `${authHeaders(response).Cookie}; ${ORGANIZATION_COOKIE_NAME}=${membership.organizationId}`,
+          },
+        };
+      }
+
+      async function uploadGeneratedMultipart(input: {
+        tenant: Tenant;
+        bucketName: string;
+        key: string;
+        size: number;
+        partSize: number;
+      }): Promise<void> {
+        const created = await request(hugeApp)
+          .post('/api/v1/storage/buckets')
+          .set(input.tenant.headers)
+          .send({ name: input.bucketName });
+        expect(created.status).toBe(201);
+        const bucketId = responseBody<{ bucket: { id: string } }>(created).bucket.id;
+
+        const initiated = await request(hugeApp)
+          .post('/api/v1/storage/multipart-uploads')
+          .set(input.tenant.headers)
+          .send({ bucketId, key: input.key, size: input.size });
+        expect(initiated.status).toBe(201);
+        const uploadId = responseBody<{ uploadId: string }>(initiated).uploadId;
+
+        const chunk = Buffer.alloc(input.partSize, 3);
+        const parts = [];
+        let remaining = input.size;
+        let partNumber = 1;
+        while (remaining > 0) {
+          const slice = remaining >= chunk.length ? chunk : chunk.subarray(0, remaining);
+          const response = await request(hugeApp)
+            .put(
+              `/api/v1/storage/multipart-uploads/${uploadId}/parts?partNumber=${String(partNumber)}`,
+            )
+            .set(input.tenant.headers)
+            .set('Content-Type', 'application/octet-stream')
+            .send(slice);
+          expect(response.status).toBe(200);
+          parts.push(responseBody<{ part: { partNumber: number; etag: string } }>(response).part);
+          remaining -= slice.length;
+          partNumber += 1;
+        }
+
+        const completed = await request(hugeApp)
+          .post(`/api/v1/storage/multipart-uploads/${uploadId}/complete`)
+          .set(input.tenant.headers)
+          .send({ parts: parts.map((part) => ({ partNumber: part.partNumber, etag: part.etag })) });
+        expect(completed.status).toBe(201);
+        expect(responseBody<{ object: { size: number } }>(completed).object.size).toBe(input.size);
+      }
+
+      it('accepts a generated 1 GB stream when explicitly enabled', async () => {
+        const tenant = await registerHuge('mp-1gb@example.com', 'Multipart 1GB Org');
+        const before = process.memoryUsage();
+        await uploadGeneratedMultipart({
+          tenant,
+          bucketName: 'multipart-1gb',
+          key: 'gig.bin',
+          size: 1024 * 1024 * 1024,
+          partSize: 8 * 1024 * 1024,
+        });
+        const after = process.memoryUsage();
+        expect(after.heapUsed - before.heapUsed).toBeLessThan(80 * 1024 * 1024);
+      }, 600_000);
+
+      it('accepts a generated 5 GB stream when disk capacity allows', async (ctx) => {
+        const stats = await statfs(storageRoot);
+        const freeBytes = Number(stats.bavail) * Number(stats.bsize);
+        if (freeBytes < sixGiB) {
+          ctx.skip();
+        }
+
+        const tenant = await registerHuge('mp-5gb@example.com', 'Multipart 5GB Org');
+        await uploadGeneratedMultipart({
+          tenant,
+          bucketName: 'multipart-5gb',
+          key: 'five-gig.bin',
+          size: 5 * 1024 * 1024 * 1024,
+          partSize: 64 * 1024 * 1024,
+        });
+      }, 1_800_000);
+    },
+  );
 
   describe('security', () => {
     it('requires authentication for every storage route', async () => {
@@ -824,9 +1086,3 @@ describe('Phase 3 storage engine (PostgreSQL + local filesystem)', () => {
     });
   });
 });
-
-/** Strips the origin from an absolute URL so supertest can request the path. */
-function pathOf(url: string): string {
-  const parsed = new URL(url, 'http://127.0.0.1');
-  return `${parsed.pathname}${parsed.search}`;
-}

@@ -1,5 +1,5 @@
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, rm, stat, statfs, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { join, posix } from 'node:path';
 import { pipeline } from 'node:stream/promises';
@@ -27,6 +27,8 @@ import type {
 } from '../../domain/storage-provider.js';
 import type {
   AbortMultipartInput,
+  CapacityCheckInput,
+  CapacityCheckResult,
   CompleteMultipartInput,
   CopyObjectInput,
   GetObjectInput,
@@ -34,8 +36,11 @@ import type {
   HeadObjectResult,
   InitiateMultipartInput,
   InitiateMultipartResult,
+  InspectPartInput,
   IntegrityExpectation,
   ListObjectsInput,
+  ListProviderPartsInput,
+  PresignedPartUrlInput,
   PresignedUrl,
   PresignedUrlInput,
   ProviderBucketRef,
@@ -43,6 +48,7 @@ import type {
   ProviderHealth,
   ProviderObjectListPage,
   ProviderObjectSummary,
+  ProviderPartInfo,
   PutObjectInput,
   PutObjectResult,
   StorageLocation,
@@ -107,6 +113,9 @@ export class LocalFilesystemStorageProvider implements StorageProvider {
     nativePresignedUrls: false,
     nativeVersioning: false,
     serverSideCopy: false,
+    directPartDestinations: false,
+    providerPartInspection: true,
+    capacityChecks: true,
   };
 
   private readonly root: string;
@@ -440,12 +449,73 @@ export class LocalFilesystemStorageProvider implements StorageProvider {
 
     const totals = meter.totals();
     await writeFile(`${partPath}.md5`, totals.md5, 'utf8');
+    await writeFile(`${partPath}.sha256`, totals.sha256, 'utf8');
 
     return {
       partNumber: input.partNumber,
       size: totals.size,
       etag: totals.md5,
       checksum: totals.sha256,
+    };
+  }
+
+  async inspectPart(input: InspectPartInput): Promise<ProviderPartInfo | null> {
+    const dir = this.multipartDir(input.providerUploadId);
+    const partPath = join(dir, `${String(input.partNumber).padStart(5, '0')}.part`);
+    const stats = await stat(partPath).catch(() => null);
+    if (!stats) {
+      return null;
+    }
+
+    const [etag, checksumSha256] = await Promise.all([
+      readFile(`${partPath}.md5`, 'utf8').catch(() => ''),
+      readFile(`${partPath}.sha256`, 'utf8').catch(() => undefined),
+    ]);
+
+    return {
+      partNumber: input.partNumber,
+      size: stats.size,
+      etag,
+      ...(checksumSha256 ? { checksumSha256 } : {}),
+    };
+  }
+
+  async listProviderParts(input: ListProviderPartsInput): Promise<ProviderPartInfo[]> {
+    const dir = this.multipartDir(input.providerUploadId);
+    const entries = await readdir(dir).catch(() => []);
+    const parts: ProviderPartInfo[] = [];
+
+    for (const entry of entries) {
+      const match = /^(\d{5})\.part$/.exec(entry);
+      if (!match) {
+        continue;
+      }
+      const inspected = await this.inspectPart({
+        ...input,
+        partNumber: Number(match[1]),
+      });
+      if (inspected) {
+        parts.push(inspected);
+      }
+    }
+
+    return parts.sort((left, right) => left.partNumber - right.partNumber);
+  }
+
+  async createPresignedPartUrl(_input: PresignedPartUrlInput): Promise<PresignedUrl> {
+    await Promise.resolve();
+    throw storageProviderUnavailable(
+      'Local filesystem provider does not issue provider-native part destinations',
+    );
+  }
+
+  async checkCapacity(input: CapacityCheckInput): Promise<CapacityCheckResult> {
+    await this.ensureLayout();
+    const stats = await statfs(this.root);
+    const availableBytes = stats.bavail * stats.bsize;
+    return {
+      ok: availableBytes >= input.requiredBytes,
+      availableBytes,
     };
   }
 
@@ -561,6 +631,10 @@ export class LocalFilesystemStorageProvider implements StorageProvider {
         message: error instanceof Error ? error.message : 'Storage root is not writable',
       };
     }
+  }
+
+  async cleanupOrphanStaging(olderThan: Date): Promise<number> {
+    return this.cleanupStaleStaging(olderThan);
   }
 
   /** Removes staged parts and temp files older than the supplied cutoff. */

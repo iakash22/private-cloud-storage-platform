@@ -11,6 +11,8 @@ const devEnv = {
   DATABASE_URL: 'postgresql://vaultstack:vaultstack_dev@localhost:5432/vaultstack',
   REDIS_URL: 'redis://localhost:6379',
   JWT_SECRET: 'phase1-test-jwt-secret-value-32chars',
+  LOGIN_RATE_LIMIT_MAX: '100',
+  API_RATE_LIMIT_MAX: '2000',
   STORAGE_DRIVER: 'local',
   STORAGE_LOCAL_ROOT: '/tmp/vaultstack-playwright-storage',
   MINIO_ENDPOINT: 'localhost',
@@ -24,6 +26,7 @@ const devEnv = {
 
 export default defineConfig({
   testDir: './tests/e2e',
+  globalSetup: './tests/e2e/global-setup.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -41,7 +44,7 @@ export default defineConfig({
   webServer: [
     {
       command: 'pnpm --filter @vaultstack/api dev',
-      url: `http://127.0.0.1:${apiPort}/health`,
+      url: `http://127.0.0.1:${apiPort}/ready`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
       env: devEnv,

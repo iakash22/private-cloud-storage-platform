@@ -39,6 +39,9 @@ interface StorageProviderCapabilities {
   nativePresignedUrls: boolean; // backend signs its own URLs
   nativeVersioning: boolean; // backend tracks version ids
   serverSideCopy: boolean; // backend copies without streaming
+  directPartDestinations: boolean; // backend can mint UploadPart URLs
+  providerPartInspection: boolean; // backend can list or inspect uploaded parts
+  capacityChecks: boolean; // backend can report remaining writable space
 }
 ```
 
@@ -103,8 +106,37 @@ Organization
 ```
 
 Every storage row carries `organizationId`, and every repository query filters
-on it. `StoragePolicy` and `ShareLink` exist as foundations for later phases;
-Phase 3 authorizes exclusively through the Phase 2 RBAC system.
+on it. `StoragePolicy` ACCESS rows remain an authorization foundation and are
+not consulted at request time. `StoragePolicy` LIFECYCLE rows are evaluated by
+the dedicated worker against PostgreSQL metadata; providers only receive delete
+or abort of physical bytes.
+
+## Object versioning
+
+Version history is a control-plane concern. Each version has a VaultStack
+`versionId` and its own opaque `physicalKey`. The local filesystem has no native
+version ids (`nativeVersioning: false`). S3-compatible backends may (`nativeVersioning: true`), but VaultStack does not enable provider bucket versioning and does not pass provider version ids through `StorageProvider`. Both backends therefore store versions the same way: unique physical keys.
+
+Bucket states:
+
+- **UNVERSIONED** — a put replaces the current object and discards previous versions
+- **ENABLED** — every put keeps a version; deleting the current object writes a delete marker and hides the key from listings
+- **SUSPENDED** — existing history is kept; a new put replaces only the current version
+
+Restore copies the selected version's bytes into a new current version so history stays intact. Version lookups are always scoped by `organizationId`; a version id from another organization returns `STORAGE_OBJECT_NOT_FOUND`.
+
+## Lifecycle policies
+
+Lifecycle rules are provider-independent:
+
+| Action | Effect |
+| --- | --- |
+| `EXPIRE_CURRENT` | Delete the live object (delete marker if versioning is enabled) |
+| `EXPIRE_NONCURRENT` | Permanently delete an old version |
+| `ABORT_INCOMPLETE_MULTIPART` | Abort a stale multipart session |
+| `EXPIRE_TEMPORARY` | Abort an incomplete single-shot upload |
+
+The same worker process that drains expired multipart sessions also applies due lifecycle policies (`pnpm --filter @vaultstack/api worker:cleanup`). Backup retention and archival tiering are out of scope.
 
 The Prisma model is named `StorageObject` rather than `Object`, because a
 generated client export named `Object` collides with the TypeScript global.
@@ -136,6 +168,31 @@ storage credential.
 Upload state is persisted and moves through `PENDING → UPLOADING → COMPLETING →
 COMPLETED`, or to `FAILED`, `ABORTED`, or `EXPIRED`. Abandoned uploads and their
 staged bytes are reclaimed rather than kept forever.
+
+## Large multipart uploads
+
+Files above the dashboard threshold (8 MiB) use the resumable multipart flow:
+
+```
+POST /multipart-uploads
+POST /multipart-uploads/:id/parts/:n/destination
+PUT  destination URL          S3 presigned UploadPart, or a VaultStack part token
+POST /multipart-uploads/:id/parts/:n/confirm
+POST /multipart-uploads/:id/complete
+```
+
+Business logic branches on capabilities, never provider type. S3-compatible
+backends mint checksum-bound presigned part URLs. The local filesystem issues a
+short-lived HMAC token bound to organization, upload, and part number.
+
+The dashboard persists only non-secret session metadata plus a file fingerprint
+(`name:size:lastModified`). After a reload the user must re-select the matching
+file. In-session pause/resume stops scheduling new parts without storing bytes
+or transfer tokens.
+
+A dedicated BullMQ worker (`pnpm --filter @vaultstack/api worker:cleanup`)
+expires stale sessions, aborts provider multipart uploads, and removes local
+orphan staging. Run it as a separate process.
 
 ## Download flow
 

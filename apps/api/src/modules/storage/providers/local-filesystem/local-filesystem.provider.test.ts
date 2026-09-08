@@ -45,6 +45,9 @@ describe('LocalFilesystemStorageProvider', () => {
         nativePresignedUrls: false,
         nativeVersioning: false,
         serverSideCopy: false,
+        directPartDestinations: false,
+        providerPartInspection: true,
+        capacityChecks: true,
       });
     });
 
@@ -608,6 +611,49 @@ describe('LocalFilesystemStorageProvider', () => {
           expiresInSeconds: 60,
         }),
       ).rejects.toThrow(AppError);
+
+      await expect(
+        provider.createPresignedPartUrl({
+          ...location('org-1/ab/obj-1/ver-1'),
+          providerUploadId: 'upload-1',
+          partNumber: 1,
+          expiresInSeconds: 60,
+        }),
+      ).rejects.toThrow(AppError);
+    });
+  });
+
+  describe('part inspection and capacity', () => {
+    it('inspects a stored part after an atomic write', async () => {
+      const target = location('org-1/ab/obj-mp/ver-1');
+      const { providerUploadId } = await provider.initiateMultipartUpload({ ...target });
+      const body = Buffer.from('inspect-me');
+      const uploaded = await provider.uploadPart({
+        ...target,
+        providerUploadId,
+        partNumber: 1,
+        body: Readable.from([body]),
+        maxSizeBytes: MAX_SIZE,
+      });
+
+      const inspected = await provider.inspectPart({
+        ...target,
+        providerUploadId,
+        partNumber: 1,
+      });
+
+      expect(inspected).toMatchObject({
+        partNumber: 1,
+        size: body.length,
+        etag: uploaded.etag,
+        checksumSha256: uploaded.checksum,
+      });
+    });
+
+    it('reports enough capacity for a modest write', async () => {
+      const check = await provider.checkCapacity({ requiredBytes: 1024 });
+      expect(check.ok).toBe(true);
+      expect(check.availableBytes).toBeGreaterThan(1024);
     });
   });
 

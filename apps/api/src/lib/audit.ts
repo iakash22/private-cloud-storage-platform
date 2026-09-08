@@ -18,7 +18,7 @@ export async function writeAuditLog(
   await prisma.auditLog.create({
     data: {
       organizationId: input.organizationId,
-      userId: input.userId ?? null,
+      userId: await resolveAuditUserId(prisma, input.userId),
       action: input.action,
       resourceType: input.resourceType,
       resourceId: input.resourceId ?? null,
@@ -27,6 +27,27 @@ export async function writeAuditLog(
       userAgent: input.userAgent ?? null,
     },
   });
+}
+
+async function resolveAuditUserId(
+  prisma: PrismaClient,
+  userId: string | null | undefined,
+): Promise<string | null> {
+  if (!userId) {
+    return null;
+  }
+
+  // Unit tests often stub Prisma without a `user` delegate.
+  const users = (prisma as { user?: Pick<PrismaClient['user'], 'findUnique'> }).user;
+  if (!users) {
+    return userId;
+  }
+
+  const user = await users.findUnique({
+    where: { id: userId },
+    select: { id: true },
+  });
+  return user?.id ?? null;
 }
 
 export function requestMeta(req: { ip?: string; get: (name: string) => string | undefined }) {

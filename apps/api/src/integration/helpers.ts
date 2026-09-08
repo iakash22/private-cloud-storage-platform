@@ -62,3 +62,9 @@ export function authHeaders(response: Response): { Cookie: string; [CSRF_HEADER_
     [CSRF_HEADER_NAME]: csrfFromResponse(response),
   };
 }
+
+/** Strips the origin from an absolute URL so supertest can request the path and query. */
+export function pathOf(url: string): string {
+  const parsed = new URL(url, 'http://127.0.0.1');
+  return `${parsed.pathname}${parsed.search}`;
+}

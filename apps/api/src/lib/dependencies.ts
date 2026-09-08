@@ -9,10 +9,15 @@ export interface DependencyClients {
 }
 
 export function createRedisClient(config: EnvConfig): Redis {
-  return new Redis(config.REDIS_URL, {
+  const redis = new Redis(config.REDIS_URL, {
     maxRetriesPerRequest: 1,
     lazyConnect: true,
   });
+  // ioredis emits 'error' while reconnecting. Without a listener Node prints
+  // "Unhandled error event" even though checkRedis and the rate limiter catch
+  // the same failures. Readiness still reports redis as error.
+  redis.on('error', () => undefined);
+  return redis;
 }
 
 export async function checkPostgres(prisma: PrismaClient): Promise<DependencyCheck> {

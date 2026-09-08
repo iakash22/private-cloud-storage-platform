@@ -59,7 +59,7 @@ export function FilesPage() {
 
   const { page, loading, error, refresh, loadMore } = useObjectList(bucketId, prefix);
   const { object } = useSelectedObject(selectedEntry?.kind === 'file' ? selectedEntry.id : undefined);
-  const { uploads, enqueueFiles, cancelUpload, retryUpload } = useUploadQueue({
+  const { uploads, enqueueFiles, cancelUpload, retryUpload, pauseUpload, resumeUpload } = useUploadQueue({
     onComplete: () => {
       void refresh();
     },
@@ -272,6 +272,8 @@ export function FilesPage() {
             cancelUpload(uploadId);
           }}
           onRetryUpload={retryUpload}
+          onPauseUpload={pauseUpload}
+          onResumeUpload={resumeUpload}
           onRetry={() => {
             void refresh();
           }}

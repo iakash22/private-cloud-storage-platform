@@ -1,3 +1,4 @@
+import type { IncomingMessage } from 'node:http';
 import { Readable } from 'node:stream';
 import {
   AbortMultipartUploadCommand,
@@ -12,18 +13,22 @@ import {
   HeadObjectCommand,
   ListBucketsCommand,
   ListObjectsV2Command,
+  ListPartsCommand,
   PutObjectCommand,
   UploadPartCommand,
   type S3Client,
 } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { STORAGE_PROVIDER_TYPES, type StorageProviderTypeName } from '@vaultstack/types';
 import {
+  storageBucketNotFound,
   storageObjectNotFound,
+  storageObjectTooLarge,
   storageProviderUnavailable,
   storageUploadFailed,
 } from '../../../../lib/errors.js';
-import { IntegrityMeter, normalizeEtag } from '../../domain/integrity.js';
+import { IntegrityMeter, ObjectTooLargeError, normalizeEtag } from '../../domain/integrity.js';
 import type {
   StorageProvider,
   StorageProviderCapabilities,
@@ -35,15 +40,21 @@ import type {
   GetObjectInput,
   GetObjectResult,
   HeadObjectResult,
+  CapacityCheckInput,
+  CapacityCheckResult,
   InitiateMultipartInput,
   InitiateMultipartResult,
+  InspectPartInput,
   ListObjectsInput,
+  ListProviderPartsInput,
+  PresignedPartUrlInput,
   PresignedUrl,
   PresignedUrlInput,
   ProviderBucketRef,
   ProviderBucketSummary,
   ProviderHealth,
   ProviderObjectListPage,
+  ProviderPartInfo,
   PutObjectInput,
   PutObjectResult,
   StorageLocation,
@@ -74,6 +85,9 @@ export class S3CompatibleStorageProvider implements StorageProvider {
     nativePresignedUrls: true,
     nativeVersioning: true,
     serverSideCopy: true,
+    directPartDestinations: true,
+    providerPartInspection: true,
+    capacityChecks: false,
   };
 
   private readonly client: S3Client;
@@ -138,23 +152,37 @@ export class S3CompatibleStorageProvider implements StorageProvider {
   async putObject(input: PutObjectInput): Promise<PutObjectResult> {
     // The meter enforces the size ceiling and produces the checksum while the
     // body streams to the endpoint, so large objects are never buffered.
-    const meter = new IntegrityMeter(input.maxSizeBytes);
-    const body = input.body.pipe(meter);
     const contentType = input.contentType ?? 'application/octet-stream';
+    const contentLength = contentLengthOf(input.body, input.expect?.size);
+    const { meter, result: response } = await this.sendMetered(
+      input.body,
+      input.maxSizeBytes,
+      (body) => {
+        const params = {
+          Bucket: input.physicalBucket,
+          Key: input.physicalKey,
+          Body: body,
+          ContentType: contentType,
+          Metadata: input.metadata,
+          ...(contentLength === undefined ? {} : { ContentLength: contentLength }),
+        };
 
-    const response = await this.guard(
-      () =>
-        this.client.send(
-          new PutObjectCommand({
-            Bucket: input.physicalBucket,
-            Key: input.physicalKey,
-            Body: body,
-            ContentType: contentType,
-            Metadata: input.metadata,
-            ...(input.expect?.size === undefined ? {} : { ContentLength: input.expect.size }),
-          }),
-          { abortSignal: input.signal },
-        ),
+        if (contentLength !== undefined) {
+          return this.client.send(new PutObjectCommand(params), { abortSignal: input.signal });
+        }
+
+        // AWS SDK v3 refuses unknown-length streams on PutObject. Upload
+        // switches to multipart so MinIO and other S3-compatible endpoints
+        // still receive a well-formed request.
+        const upload = new Upload({ client: this.client, params });
+        if (input.signal) {
+          const abort = (): void => {
+            void upload.abort();
+          };
+          input.signal.addEventListener('abort', abort, { once: true });
+        }
+        return upload.done();
+      },
       'Object upload failed',
     );
 
@@ -272,16 +300,24 @@ export class S3CompatibleStorageProvider implements StorageProvider {
 
   async listObjects(input: ListObjectsInput): Promise<ProviderObjectListPage> {
     const response = await this.guard(
-      () =>
-        this.client.send(
-          new ListObjectsV2Command({
-            Bucket: input.physicalBucket,
-            Prefix: input.prefix,
-            Delimiter: input.delimiter,
-            MaxKeys: input.maxKeys,
-            ContinuationToken: input.cursor,
-          }),
-        ),
+      async () => {
+        try {
+          return await this.client.send(
+            new ListObjectsV2Command({
+              Bucket: input.physicalBucket,
+              Prefix: input.prefix,
+              Delimiter: input.delimiter,
+              MaxKeys: input.maxKeys,
+              ContinuationToken: input.cursor,
+            }),
+          );
+        } catch (error) {
+          if (isNoSuchBucketError(error)) {
+            throw storageBucketNotFound();
+          }
+          throw error;
+        }
+      },
       'Objects could not be listed',
     );
 
@@ -329,21 +365,25 @@ export class S3CompatibleStorageProvider implements StorageProvider {
   }
 
   async uploadPart(input: UploadPartInput): Promise<UploadPartResult> {
-    const meter = new IntegrityMeter(input.maxSizeBytes);
-    const body = input.body.pipe(meter);
-
-    const response = await this.guard(
-      () =>
-        this.client.send(
+    const contentLength = contentLengthOf(input.body);
+    const { meter, result: response } = await this.sendMetered(
+      input.body,
+      input.maxSizeBytes,
+      async (body) => {
+        const payload = contentLength === undefined ? await collectStream(body) : body;
+        const length = Buffer.isBuffer(payload) ? payload.length : contentLength;
+        return this.client.send(
           new UploadPartCommand({
             Bucket: input.physicalBucket,
             Key: input.physicalKey,
             UploadId: input.providerUploadId,
             PartNumber: input.partNumber,
-            Body: body,
+            Body: payload,
+            ...(length === undefined ? {} : { ContentLength: length }),
           }),
           { abortSignal: input.signal },
-        ),
+        );
+      },
       'Part upload failed',
     );
 
@@ -398,6 +438,101 @@ export class S3CompatibleStorageProvider implements StorageProvider {
         ),
       'Multipart upload could not be aborted',
     );
+  }
+
+  async inspectPart(input: InspectPartInput): Promise<ProviderPartInfo | null> {
+    const parts = await this.listProviderParts(input);
+    return parts.find((part) => part.partNumber === input.partNumber) ?? null;
+  }
+
+  async listProviderParts(input: ListProviderPartsInput): Promise<ProviderPartInfo[]> {
+    const collected: ProviderPartInfo[] = [];
+    let marker: string | undefined;
+
+    for (;;) {
+      const response = await this.guard(
+        () =>
+          this.client.send(
+            new ListPartsCommand({
+              Bucket: input.physicalBucket,
+              Key: input.physicalKey,
+              UploadId: input.providerUploadId,
+              PartNumberMarker: marker,
+            }),
+          ),
+        'Multipart parts could not be listed',
+      );
+
+      for (const part of response.Parts ?? []) {
+        if (part.PartNumber === undefined) {
+          continue;
+        }
+        collected.push({
+          partNumber: part.PartNumber,
+          size: part.Size ?? 0,
+          etag: normalizeEtag(part.ETag ?? ''),
+          ...(part.ChecksumSHA256 ? { checksumSha256: part.ChecksumSHA256 } : {}),
+        });
+      }
+
+      if (!response.IsTruncated || response.NextPartNumberMarker === undefined) {
+        break;
+      }
+      marker = response.NextPartNumberMarker;
+    }
+
+    return collected;
+  }
+
+  async createPresignedPartUrl(input: PresignedPartUrlInput): Promise<PresignedUrl> {
+    const checksumSha256 = input.checksumSha256
+      ? Buffer.from(input.checksumSha256, 'hex').toString('base64')
+      : undefined;
+    const command = new UploadPartCommand({
+      Bucket: input.physicalBucket,
+      Key: input.physicalKey,
+      UploadId: input.providerUploadId,
+      PartNumber: input.partNumber,
+      ...(input.contentLength === undefined ? {} : { ContentLength: input.contentLength }),
+      ...(checksumSha256 ? { ChecksumSHA256: checksumSha256 } : {}),
+    });
+
+    const signableHeaders = new Set<string>();
+    if (input.contentLength !== undefined) {
+      signableHeaders.add('content-length');
+    }
+    if (checksumSha256) {
+      signableHeaders.add('x-amz-checksum-sha256');
+    }
+
+    const url = await this.guard(
+      () =>
+        getSignedUrl(this.client, command, {
+          expiresIn: input.expiresInSeconds,
+          ...(signableHeaders.size > 0 ? { signableHeaders } : {}),
+        }),
+      'Part upload URL could not be generated',
+    );
+
+    return {
+      url,
+      method: 'PUT',
+      expiresAt: new Date(Date.now() + input.expiresInSeconds * 1000),
+      headers: {
+        ...(input.contentLength === undefined
+          ? {}
+          : { 'content-length': String(input.contentLength) }),
+        ...(checksumSha256 ? { 'x-amz-checksum-sha256': checksumSha256 } : {}),
+      },
+    };
+  }
+
+  checkCapacity(_input: CapacityCheckInput): Promise<CapacityCheckResult> {
+    return Promise.resolve({ ok: true });
+  }
+
+  cleanupOrphanStaging(_olderThan: Date): Promise<number> {
+    return Promise.resolve(0);
   }
 
   // --- presigned URLs ----------------------------------------------------
@@ -473,6 +608,44 @@ export class S3CompatibleStorageProvider implements StorageProvider {
   }
 
   /**
+   * Streams `source` through an integrity meter into an SDK call. Size-ceiling
+   * failures are raised as STORAGE_OBJECT_TOO_LARGE instead of an unhandled
+   * stream error after the AWS client detaches.
+   */
+  private async sendMetered<T>(
+    source: Readable,
+    maxSizeBytes: number,
+    send: (body: Readable) => Promise<T>,
+    message: string,
+  ): Promise<{ result: T; meter: IntegrityMeter }> {
+    const meter = new IntegrityMeter(maxSizeBytes);
+    let rejectPending: ((error: unknown) => void) | undefined;
+    const aborted = new Promise<never>((_, reject) => {
+      rejectPending = reject;
+    });
+
+    meter.on('error', (error: Error) => {
+      source.unpipe(meter);
+      if (!source.destroyed) {
+        source.destroy();
+      }
+      rejectPending?.(error);
+    });
+
+    const sendPromise = send(source.pipe(meter));
+
+    try {
+      const result = await this.guard(() => Promise.race([sendPromise, aborted]), message);
+      rejectPending = undefined;
+      return { result, meter };
+    } catch (error) {
+      rejectPending = undefined;
+      void sendPromise.catch(() => undefined);
+      throw error;
+    }
+  }
+
+  /**
    * Runs an SDK call and replaces any AWS/MinIO error with a stable VaultStack
    * error, so vendor error shapes never reach an API response.
    */
@@ -480,6 +653,10 @@ export class S3CompatibleStorageProvider implements StorageProvider {
     try {
       return await operation();
     } catch (error) {
+      const tooLarge = findObjectTooLarge(error);
+      if (tooLarge) {
+        throw storageObjectTooLarge(tooLarge.maxSizeBytes);
+      }
       if (isAppError(error)) {
         throw error;
       }
@@ -489,6 +666,48 @@ export class S3CompatibleStorageProvider implements StorageProvider {
       throw storageProviderUnavailable(message);
     }
   }
+}
+
+function findObjectTooLarge(error: unknown): ObjectTooLargeError | undefined {
+  let current: unknown = error;
+  for (let depth = 0; depth < 8; depth += 1) {
+    if (current instanceof ObjectTooLargeError) {
+      return current;
+    }
+    if (!(current instanceof Error)) {
+      return undefined;
+    }
+    current = current.cause;
+  }
+  return undefined;
+}
+
+function contentLengthOf(body: Readable, expected?: number): number | undefined {
+  if (expected !== undefined) {
+    return expected;
+  }
+
+  const header = (body as IncomingMessage).headers['content-length'];
+  if (typeof header === 'string' && header.length > 0) {
+    const parsed = Number.parseInt(header, 10);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+
+  return undefined;
+}
+
+async function collectStream(source: Readable): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of source) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array));
+  }
+  return Buffer.concat(chunks);
+}
+
+function isNoSuchBucketError(error: unknown): boolean {
+  return (error as { name?: string } | null)?.name === 'NoSuchBucket';
 }
 
 function isAppError(error: unknown): boolean {

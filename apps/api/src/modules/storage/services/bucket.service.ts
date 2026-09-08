@@ -34,6 +34,13 @@ export interface BucketService {
     userId: string,
     meta: RequestMeta,
   ): Promise<void>;
+  setVersioning(
+    organizationId: string,
+    bucketId: string,
+    versioning: 'UNVERSIONED' | 'ENABLED' | 'SUSPENDED',
+    userId: string,
+    meta: RequestMeta,
+  ): Promise<PublicBucket>;
 }
 
 export function createBucketService(deps: {
@@ -154,6 +161,35 @@ export function createBucketService(deps: {
         ipAddress: meta.ipAddress,
         userAgent: meta.userAgent,
       });
+    },
+
+    async setVersioning(organizationId, bucketId, versioning, userId, meta) {
+      const bucket = await buckets.findById(organizationId, bucketId);
+      if (!bucket) {
+        throw storageBucketNotFound();
+      }
+
+      const next =
+        versioning === 'ENABLED'
+          ? BucketVersioningStatus.ENABLED
+          : versioning === 'SUSPENDED'
+            ? BucketVersioningStatus.SUSPENDED
+            : BucketVersioningStatus.UNVERSIONED;
+
+      const updated = await buckets.updateVersioning(organizationId, bucketId, next);
+
+      await writeAuditLog(prisma, {
+        organizationId,
+        userId,
+        action: 'storage.bucket.versioning_updated',
+        resourceType: 'bucket',
+        resourceId: bucketId,
+        metadata: { from: bucket.versioning, to: next },
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      });
+
+      return serializeBucket(updated);
     },
   };
 }

@@ -2,6 +2,7 @@ import express, { type Express } from 'express';
 import type { EnvConfig } from '@vaultstack/config';
 import type { PrismaClient } from '@vaultstack/database';
 import type { Logger } from '@vaultstack/logger';
+import { createCorsMiddleware } from './middleware/cors.js';
 import { createErrorHandler, createNotFoundHandler } from './middleware/error-handler.js';
 import { createRequestLogger } from './middleware/request-logger.js';
 import { requestIdMiddleware } from './middleware/request-id.js';
@@ -40,6 +41,7 @@ export function createApp(options: CreateAppOptions): Express {
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
   app.use(requestIdMiddleware);
+  app.use(createCorsMiddleware(options.config));
 
   // Object bytes must reach the storage provider as a stream. The JSON parser
   // is skipped for byte-transfer routes so it cannot consume the request body

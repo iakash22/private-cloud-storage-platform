@@ -164,6 +164,40 @@ export interface PresignedUrlInput extends StorageLocation {
   downloadFilename?: string;
 }
 
+export interface PresignedPartUrlInput extends StorageLocation {
+  providerUploadId: string;
+  partNumber: number;
+  expiresInSeconds: number;
+  contentLength?: number;
+  /** Hex SHA-256; providers that support it bind this into the signature. */
+  checksumSha256?: string;
+}
+
+export interface InspectPartInput extends StorageLocation {
+  providerUploadId: string;
+  partNumber: number;
+}
+
+export interface ListProviderPartsInput extends StorageLocation {
+  providerUploadId: string;
+}
+
+export interface ProviderPartInfo {
+  partNumber: number;
+  size: number;
+  etag: string;
+  checksumSha256?: string;
+}
+
+export interface CapacityCheckInput {
+  requiredBytes: number;
+}
+
+export interface CapacityCheckResult {
+  ok: boolean;
+  availableBytes?: number;
+}
+
 export interface PresignedUrl {
   url: string;
   method: 'GET' | 'PUT';

@@ -19,5 +19,9 @@ export function createS3Client(connection: S3ConnectionConfig): S3Client {
       accessKeyId: connection.accessKeyId,
       secretAccessKey: connection.secretAccessKey,
     },
+    // AWS SDK v3 defaults to flexible checksums (CRC32) on every request.
+    // MinIO, R2, and other S3-compatible endpoints often reject those headers.
+    requestChecksumCalculation: 'WHEN_REQUIRED',
+    responseChecksumValidation: 'WHEN_REQUIRED',
   });
 }

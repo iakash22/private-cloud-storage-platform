@@ -92,6 +92,9 @@ importers:
       '@vaultstack/validation':
         specifier: workspace:*
         version: link:../../packages/validation
+      bullmq:
+        specifier: ^5.34.5
+        version: 5.81.4
       express:
         specifier: ^4.21.2
         version: 4.22.2

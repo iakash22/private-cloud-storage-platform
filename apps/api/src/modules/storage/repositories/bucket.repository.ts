@@ -21,6 +21,11 @@ export interface BucketRepository {
   findByName(organizationId: string, name: string): Promise<Bucket | null>;
   delete(organizationId: string, id: string): Promise<void>;
   countObjects(organizationId: string, bucketId: string): Promise<number>;
+  updateVersioning(
+    organizationId: string,
+    id: string,
+    versioning: BucketVersioningStatus,
+  ): Promise<Bucket>;
 }
 
 export function createBucketRepository(prisma: PrismaClient): BucketRepository {
@@ -52,6 +57,17 @@ export function createBucketRepository(prisma: PrismaClient): BucketRepository {
 
     async countObjects(organizationId, bucketId) {
       return prisma.storageObject.count({ where: { organizationId, bucketId } });
+    },
+
+    async updateVersioning(organizationId, id, versioning) {
+      const updated = await prisma.bucket.updateMany({
+        where: { id, organizationId },
+        data: { versioning },
+      });
+      if (updated.count === 0) {
+        throw new Error('Bucket not found while updating versioning');
+      }
+      return prisma.bucket.findFirstOrThrow({ where: { id, organizationId } });
     },
   };
 }

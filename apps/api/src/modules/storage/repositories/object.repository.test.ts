@@ -42,7 +42,7 @@ describe('object repository listings', () => {
     });
 
     expect(findMany.mock.calls[0]?.[0]).toMatchObject({
-      where: { organizationId: ORG, bucketId: BUCKET },
+      where: { organizationId: ORG, bucketId: BUCKET, isDeleted: false },
     });
   });
 

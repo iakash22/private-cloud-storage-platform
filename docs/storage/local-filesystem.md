@@ -69,8 +69,9 @@ structure.
 
 Each write lands under a fresh `<version-id>` directory, so previous bytes stay
 intact and `ObjectVersion` rows can point at real data. The current version is
-identified by `ObjectVersion.isCurrent`. This is a foundation: full lifecycle
-and version-management features belong to a later phase.
+identified by `ObjectVersion.isCurrent`. Delete markers have no bytes. Version
+listing, restore, and lifecycle expiration are handled by the storage service
+and worker; this provider only stores opaque physical keys.
 
 ## Path safety
 

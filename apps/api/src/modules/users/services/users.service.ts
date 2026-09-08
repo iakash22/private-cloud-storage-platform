@@ -149,7 +149,7 @@ export class UsersService {
       if (targetIsSuperAdmin && !actorIsSuperAdmin) {
         throw forbidden('Only SUPER_ADMIN can disable a SUPER_ADMIN');
       }
-      if ((await countSuperAdmins(this.prisma, organizationId)) <= 1) {
+      if (targetIsSuperAdmin && (await countSuperAdmins(this.prisma, organizationId)) <= 1) {
         throw forbidden('Cannot disable the last SUPER_ADMIN');
       }
     }

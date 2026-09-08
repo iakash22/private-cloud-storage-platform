@@ -100,4 +100,36 @@ describe('VaultStackApiClient storage + auth', () => {
     const requestInit = completeUploadCall?.[1] as HttpRequestInit | undefined;
     expect(requestInit?.headers?.[CSRF_HEADER_NAME]).toBe('csrf-token');
   });
+
+  it('initiates a multipart session with the declared size', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: () =>
+        Promise.resolve({
+          uploadId: 'mp-1',
+          providerUploadId: 'provider-1',
+          key: 'big.bin',
+          session: { id: 'mp-1', status: 'INITIATED', declaredSize: 20 },
+        }),
+    });
+
+    const client = new VaultStackApiClient({
+      baseUrl: 'http://localhost:3000',
+      fetchImpl,
+    });
+    client.setCsrfToken('csrf-token');
+
+    const initiated = await client.initiateMultipart({
+      bucketId: 'bucket-1',
+      key: 'big.bin',
+      size: 20,
+    });
+
+    expect(initiated.uploadId).toBe('mp-1');
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://localhost:3000/api/v1/storage/multipart-uploads',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
 });

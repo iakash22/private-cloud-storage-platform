@@ -17,6 +17,8 @@ export interface StorageMetricsSnapshot {
   failedUploads: number;
   activeUploads: number;
   multipartUploads: number;
+  multipartParts: number;
+  multipartCleanups: number;
   providerErrors: number;
 }
 
@@ -36,6 +38,13 @@ export interface StorageMetrics {
     durationMs: number;
   }): void;
   multipartCompleted(input: { organizationId: string; bucketId: string; parts: number }): void;
+  partUploaded(input: {
+    organizationId: string;
+    bucketId: string;
+    partNumber: number;
+    bytes: number;
+  }): void;
+  multipartCleanup(input: { uploads: number; multipart: number }): void;
   providerError(input: { providerType: string; operation: string }): void;
   snapshot(): StorageMetricsSnapshot;
 }
@@ -49,6 +58,8 @@ export function createStorageMetrics(logger: Logger): StorageMetrics {
     failedUploads: 0,
     activeUploads: 0,
     multipartUploads: 0,
+    multipartParts: 0,
+    multipartCleanups: 0,
     providerErrors: 0,
   };
 
@@ -116,6 +127,35 @@ export function createStorageMetrics(logger: Logger): StorageMetrics {
           parts: input.parts,
         },
         'Multipart upload completed',
+      );
+    },
+
+    partUploaded(input) {
+      counters.multipartParts += 1;
+      counters.bytesUploaded += input.bytes;
+
+      logger.info(
+        {
+          event: 'storage.multipart.part_uploaded',
+          organizationId: input.organizationId,
+          bucketId: input.bucketId,
+          partNumber: input.partNumber,
+          bytes: input.bytes,
+        },
+        'Multipart part uploaded',
+      );
+    },
+
+    multipartCleanup(input) {
+      counters.multipartCleanups += 1;
+
+      logger.info(
+        {
+          event: 'storage.multipart.cleanup',
+          uploads: input.uploads,
+          multipart: input.multipart,
+        },
+        'Expired storage sessions cleaned up',
       );
     },
 

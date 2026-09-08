@@ -30,13 +30,24 @@ function future(): Date {
 interface Harness {
   service: UploadService;
   provider: {
-    capabilities: { nativePresignedUrls: boolean };
+    capabilities: {
+      nativePresignedUrls: boolean;
+      directPartDestinations: boolean;
+      providerPartInspection: boolean;
+      capacityChecks: boolean;
+    };
     uploadPart: ReturnType<typeof vi.fn>;
     completeMultipartUpload: ReturnType<typeof vi.fn>;
     headObject: ReturnType<typeof vi.fn>;
     deleteObject: ReturnType<typeof vi.fn>;
     putObject: ReturnType<typeof vi.fn>;
     createPresignedUploadUrl: ReturnType<typeof vi.fn>;
+    createPresignedPartUrl: ReturnType<typeof vi.fn>;
+    inspectPart: ReturnType<typeof vi.fn>;
+    listProviderParts: ReturnType<typeof vi.fn>;
+    checkCapacity: ReturnType<typeof vi.fn>;
+    cleanupOrphanStaging: ReturnType<typeof vi.fn>;
+    abortMultipartUpload: ReturnType<typeof vi.fn>;
   };
   uploads: Record<string, ReturnType<typeof vi.fn>>;
   objects: Record<string, ReturnType<typeof vi.fn>>;
@@ -59,7 +70,12 @@ function harness(
   } = {},
 ): Harness {
   const provider = {
-    capabilities: { nativePresignedUrls: overrides.nativePresignedUrls ?? false },
+    capabilities: {
+      nativePresignedUrls: overrides.nativePresignedUrls ?? false,
+      directPartDestinations: overrides.nativePresignedUrls ?? false,
+      providerPartInspection: overrides.nativePresignedUrls ?? false,
+      capacityChecks: false,
+    },
     uploadPart: vi.fn(
       async (input: { partNumber: number; body: Readable; maxSizeBytes: number }) => {
         // Mirrors the real providers: the meter aborts as soon as the budget the
@@ -107,6 +123,21 @@ function harness(
         expiresAt: future(),
       }),
     ),
+    createPresignedPartUrl: vi.fn(() =>
+      Promise.resolve({
+        url: 'https://s3.example/signed-part',
+        method: 'PUT' as const,
+        expiresAt: future(),
+        headers: { 'content-length': '10' },
+      }),
+    ),
+    inspectPart: vi.fn(() =>
+      Promise.resolve({ partNumber: 1, size: 10, etag: 'etag-1' }),
+    ),
+    listProviderParts: vi.fn(() => Promise.resolve([])),
+    checkCapacity: vi.fn(() => Promise.resolve({ ok: true })),
+    cleanupOrphanStaging: vi.fn(() => Promise.resolve(0)),
+    abortMultipartUpload: vi.fn(() => Promise.resolve(undefined)),
   };
 
   const uploadRow = {
@@ -130,8 +161,11 @@ function harness(
     organizationId: ORG,
     bucketId: BUCKET,
     key: 'docs/big.bin',
+    userId: 'user-1',
     status: MultipartUploadStatus.UPLOADING,
     contentType: null,
+    declaredSize: null,
+    lastActivityAt: new Date(),
     providerUploadId: 'provider-upload-1',
     stagingKey: `${ORG}/ab/object-2/version-2`,
     expiresAt: future(),
@@ -153,9 +187,21 @@ function harness(
     expireStale: vi.fn(() => Promise.resolve(0)),
     createMultipart: vi.fn(() => Promise.resolve(multipartRow)),
     findMultipartById: vi.fn(() => Promise.resolve(multipartRow)),
+    findMultipartWithParts: vi.fn(() => Promise.resolve({ ...multipartRow, parts })),
     setMultipartStatus: vi.fn(() => Promise.resolve(multipartRow)),
-    upsertPart: vi.fn(() => Promise.resolve(parts[0])),
+    touchMultipart: vi.fn(() => Promise.resolve(multipartRow)),
+    upsertPart: vi.fn((input: Record<string, unknown>) =>
+      Promise.resolve({
+        partNumber: input.partNumber,
+        size: input.size,
+        etag: input.etag,
+        checksum: input.checksum ?? null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
+    ),
     listParts: vi.fn(() => Promise.resolve(parts)),
+    listMultipartSessions: vi.fn(() => Promise.resolve({ sessions: [multipartRow], nextCursor: null })),
     deleteMultipart: vi.fn(() => Promise.resolve(undefined)),
     findStaleMultipart: vi.fn(() => Promise.resolve([])),
   };
@@ -169,7 +215,7 @@ function harness(
     limits: LIMITS,
     resolveBucket: vi.fn(() =>
       Promise.resolve({
-        bucket: { id: BUCKET },
+        bucket: { id: BUCKET, versioning: 'UNVERSIONED' },
         providerRecord: { id: 'provider-record-1' },
         provider,
       }),
@@ -186,6 +232,40 @@ function harness(
   const prisma = {
     auditLog: { create: vi.fn(() => Promise.resolve(undefined)) },
     upload: { update: vi.fn(() => Promise.resolve(uploadRow)) },
+    $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma)),
+    storageObject: {
+      create: vi.fn(async (args: { data: Record<string, unknown> }) => ({
+        ...args.data,
+        isDeleted: false,
+        currentVersionId: 'version-1',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })),
+      update: vi.fn(async (args: { data: Record<string, unknown> }) => ({
+        id: 'object-1',
+        organizationId: ORG,
+        bucketId: BUCKET,
+        key: 'docs/report.pdf',
+        size: BigInt(10),
+        contentType: 'application/octet-stream',
+        etag: 'etag',
+        checksumAlgorithm: 'SHA256',
+        checksum: 'a'.repeat(64),
+        currentVersionId: 'version-1',
+        isDeleted: false,
+        physicalKey: `${ORG}/ab/object-1/version-1`,
+        metadata: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        ...args.data,
+      })),
+    },
+    objectVersion: {
+      updateMany: vi.fn(() => Promise.resolve({ count: 0 })),
+      create: vi.fn(async (args: { data: Record<string, unknown> }) => args.data),
+      findMany: vi.fn(() => Promise.resolve([])),
+      deleteMany: vi.fn(() => Promise.resolve({ count: 0 })),
+    },
   };
 
   const service = createUploadService({
@@ -208,6 +288,8 @@ function harness(
       uploadCompleted: vi.fn(),
       downloadCompleted: vi.fn(),
       multipartCompleted: vi.fn(),
+      partUploaded: vi.fn(),
+      multipartCleanup: vi.fn(),
     } as never,
     logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() } as never,
   });
@@ -235,6 +317,7 @@ describe('upload service size enforcement', () => {
       await service.uploadPart({
         organizationId: ORG,
         uploadId: 'multipart-1',
+        userId: 'user-1',
         partNumber: 2,
         body: Readable.from([Buffer.alloc(50)]),
       });
@@ -252,6 +335,7 @@ describe('upload service size enforcement', () => {
         service.uploadPart({
           organizationId: ORG,
           uploadId: 'multipart-1',
+          userId: 'user-1',
           partNumber: 2,
           body: Readable.from([Buffer.alloc(500)]),
         }),
@@ -271,6 +355,7 @@ describe('upload service size enforcement', () => {
         service.uploadPart({
           organizationId: ORG,
           uploadId: 'multipart-1',
+          userId: 'user-1',
           partNumber: 2,
           body: Readable.from([Buffer.alloc(500)]),
         }),
@@ -286,6 +371,7 @@ describe('upload service size enforcement', () => {
         service.uploadPart({
           organizationId: ORG,
           uploadId: 'multipart-1',
+          userId: 'user-1',
           partNumber: 2,
           body: Readable.from([Buffer.alloc(1)]),
         }),
@@ -307,6 +393,7 @@ describe('upload service size enforcement', () => {
       await service.uploadPart({
         organizationId: ORG,
         uploadId: 'multipart-1',
+        userId: 'user-1',
         partNumber: 2,
         body: Readable.from([Buffer.alloc(100)]),
       });
@@ -447,6 +534,150 @@ describe('upload service size enforcement', () => {
 
       expect(code).toBe('STORAGE_OBJECT_TOO_LARGE');
       expect(provider.createPresignedUploadUrl).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('multipart authorization and destinations', () => {
+    it('hides a multipart session from a different initiator', async () => {
+      const { service } = harness();
+
+      const code = await codeOf(() =>
+        service.getMultipartSession({
+          organizationId: ORG,
+          uploadId: 'multipart-1',
+          userId: 'other-user',
+        }),
+      );
+
+      expect(code).toBe('STORAGE_ACCESS_DENIED');
+    });
+
+    it('rejects a spoofed part number', async () => {
+      const { service } = harness();
+
+      const code = await codeOf(() =>
+        service.createPartDestination({
+          organizationId: ORG,
+          uploadId: 'multipart-1',
+          userId: 'user-1',
+          partNumber: 10_001,
+          size: 10,
+          baseUrl: 'https://vaultstack.example',
+          meta: META,
+        }),
+      );
+
+      expect(code).toBe('STORAGE_MULTIPART_INVALID_PART');
+    });
+
+    it('issues a VaultStack part token when the provider cannot sign parts', async () => {
+      const { service } = harness();
+
+      const destination = await service.createPartDestination({
+        organizationId: ORG,
+        uploadId: 'multipart-1',
+        userId: 'user-1',
+        partNumber: 1,
+        size: 10,
+        baseUrl: 'https://vaultstack.example',
+        meta: META,
+      });
+
+      expect(destination.transport).toBe('VAULTSTACK');
+      expect(destination.url).toContain('/parts/1/content?token=');
+    });
+
+    it('checks remaining capacity from stored parts, not the original declared size', async () => {
+      const { service, provider } = harness({
+        multipart: { declaredSize: BigInt(100) },
+        parts: [{ partNumber: 1, size: 90, etag: 'etag-1' }],
+      });
+      provider.capabilities.capacityChecks = true;
+
+      await service.createPartDestination({
+        organizationId: ORG,
+        uploadId: 'multipart-1',
+        userId: 'user-1',
+        partNumber: 2,
+        baseUrl: 'https://vaultstack.example',
+        meta: META,
+      });
+
+      expect(provider.checkCapacity).toHaveBeenCalledWith({ requiredBytes: 10 });
+    });
+
+    it('issues a provider-signed part URL when the backend supports it', async () => {
+      const { service, provider } = harness({ nativePresignedUrls: true });
+
+      const destination = await service.createPartDestination({
+        organizationId: ORG,
+        uploadId: 'multipart-1',
+        userId: 'user-1',
+        partNumber: 1,
+        size: 10,
+        baseUrl: 'https://vaultstack.example',
+        meta: META,
+      });
+
+      expect(destination.transport).toBe('DIRECT');
+      expect(provider.createPresignedPartUrl).toHaveBeenCalledWith(
+        expect.objectContaining({ partNumber: 1, contentLength: 10 }),
+      );
+    });
+
+    it('confirms a provider-inspected part and records it', async () => {
+      const { service, uploads } = harness({ nativePresignedUrls: true });
+
+      const part = await service.confirmPart({
+        organizationId: ORG,
+        uploadId: 'multipart-1',
+        userId: 'user-1',
+        partNumber: 1,
+        etag: 'etag-1',
+        size: 10,
+        meta: META,
+      });
+
+      expect(part.partNumber).toBe(1);
+      expect(uploads.upsertPart).toHaveBeenCalled();
+    });
+
+    it('refuses to abort a completed multipart upload', async () => {
+      const { service } = harness({
+        multipart: { status: MultipartUploadStatus.COMPLETED },
+      });
+
+      const code = await codeOf(() =>
+        service.abortMultipart({
+          organizationId: ORG,
+          uploadId: 'multipart-1',
+          userId: 'user-1',
+          meta: META,
+        }),
+      );
+
+      expect(code).toBe('STORAGE_UPLOAD_INVALID_STATE');
+    });
+
+    it('requires the exact stored part set at completion', async () => {
+      const { service } = harness({
+        parts: [
+          { partNumber: 1, size: 10, etag: 'etag-1' },
+          { partNumber: 2, size: 10, etag: 'etag-2' },
+        ],
+      });
+
+      const code = await codeOf(() =>
+        service.completeMultipart({
+          organizationId: ORG,
+          uploadId: 'multipart-1',
+          userId: 'user-1',
+          parts: [{ partNumber: 1, etag: 'etag-1' }],
+          meta: META,
+        }),
+      );
+
+      expect(code).toBe('STORAGE_MULTIPART_INVALID_PART');
     });
   });
 });

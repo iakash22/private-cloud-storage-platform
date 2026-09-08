@@ -7,10 +7,12 @@ export function renderListBucketsXml(buckets: PublicBucket[]): string {
       ID: 'vaultstack',
       DisplayName: 'VaultStack',
     },
-    Buckets: buckets.map((bucket) => ({
-      Name: bucket.name,
-      CreationDate: bucket.createdAt,
-    })),
+    Buckets: {
+      Bucket: buckets.map((bucket) => ({
+        Name: bucket.name,
+        CreationDate: bucket.createdAt,
+      })),
+    },
   });
 }
 

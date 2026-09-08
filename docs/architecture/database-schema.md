@@ -146,6 +146,7 @@ erDiagram
         bigint size
         string etag
         string currentVersionId
+        boolean isDeleted
         string physicalKey
     }
 
@@ -156,6 +157,7 @@ erDiagram
         string storageProviderId FK
         string versionId
         boolean isCurrent
+        boolean isDeleteMarker
         string physicalKey
     }
 
@@ -189,7 +191,11 @@ erDiagram
         string id PK
         string organizationId FK
         string bucketId FK
+        enum kind
         enum effect
+        boolean enabled
+        int days
+        enum lifecycleAction
         string_array actions
     }
 
@@ -211,8 +217,8 @@ erDiagram
 | RBAC | `Role`, `Permission`, `RolePermission`, `UserRole` | Permissions seeded from `@vaultstack/types` |
 | Automation | `ApiKey` | Hashed keys; prefix shown to users |
 | Audit | `AuditLog` | Append-only action log per organization |
-| Storage control plane | `StorageProvider`, `Bucket`, `StoragePolicy` | Provider credentials stay in server env, not DB |
-| Storage data plane | `StorageObject`, `ObjectVersion`, `Upload`, `MultipartUpload`, `MultipartPart` | Metadata only; bytes in provider |
+| Storage control plane | `StorageProvider`, `Bucket`, `StoragePolicy` | ACCESS policies remain unused at request time; LIFECYCLE policies are evaluated by the worker against metadata |
+| Storage data plane | `StorageObject`, `ObjectVersion`, `Upload`, `MultipartUpload`, `MultipartPart` | Metadata only; bytes in provider. Version ids are VaultStack-owned. |
 | Sharing (future) | `ShareLink` | Foundation for Phase 8; no anonymous route yet |
 
 ## Cascade behavior

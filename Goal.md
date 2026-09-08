@@ -1,11 +1,11 @@
 PHASE 0   Foundation                         ✅
 PHASE 1   Backend + Database                 ✅
 PHASE 2   Authentication + RBAC             ✅
-PHASE 3   Storage Engine + S3 Compatibility  🔨 CURRENT
-PHASE 4   Storage Dashboard
-PHASE 5   S3 Access + Service Authentication
-PHASE 6   Multipart + Large Files
-PHASE 7   Versioning + Lifecycle
+PHASE 3   Storage Engine + S3 Compatibility  ✅
+PHASE 4   Storage Dashboard                  ✅
+PHASE 5   S3 Access + Service Authentication ✅
+PHASE 6   Multipart + Large Files            ✅
+PHASE 7   Versioning + Lifecycle             🔨 CURRENT
 PHASE 8   File Sharing
 PHASE 9   External Storage Providers
 PHASE 10  CI/CD Artifact Storage

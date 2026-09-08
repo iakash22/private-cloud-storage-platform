@@ -1,13 +1,10 @@
 import type { Readable } from 'node:stream';
-import {
-  BucketVersioningStatus,
-  ChecksumAlgorithm,
-  type PrismaClient,
-  type StorageObject,
-} from '@vaultstack/database';
+import { ChecksumAlgorithm, type PrismaClient, type StorageObject } from '@vaultstack/database';
 import type { Logger } from '@vaultstack/logger';
 import type {
   PublicObjectListPage,
+  PublicObjectVersion,
+  PublicObjectVersionListPage,
   PublicPresignedUrl,
   PublicStorageObject,
 } from '@vaultstack/types';
@@ -19,13 +16,15 @@ import {
   storageSizeMismatch,
   validationError,
 } from '../../../lib/errors.js';
-import { serializeStorageObject } from '../mappers/storage.mapper.js';
+import { serializeObjectVersion, serializeStorageObject } from '../mappers/storage.mapper.js';
 import { ObjectTooLargeError } from '../domain/integrity.js';
 import { assertValidKeyPrefix, assertValidObjectKey } from '../domain/object-key.js';
 import type { GetObjectResult } from '../domain/storage.types.js';
+import { usesDeleteMarkers } from '../domain/versioning.js';
 import type { ObjectRepository } from '../repositories/object.repository.js';
 import type { RequestMeta } from './bucket.service.js';
 import { publishObjectVersion } from './publish-object.js';
+import { deleteVersionBytes, reclaimSupersededVersions } from './reclaim-versions.js';
 import type { StorageMetrics } from './storage.metrics.js';
 import type { StorageService } from './storage.service.js';
 import type { StorageTokenService } from './storage-token.service.js';
@@ -62,19 +61,38 @@ export interface ObjectService {
   openDownload(
     organizationId: string,
     objectId: string,
-    options?: { range?: { start: number; end?: number }; signal?: AbortSignal },
+    options?: {
+      range?: { start: number; end?: number };
+      signal?: AbortSignal;
+      versionId?: string;
+    },
   ): Promise<{ object: StorageObject; stream: GetObjectResult }>;
   createDownloadUrl(
     organizationId: string,
     objectId: string,
     baseUrl: string,
+    versionId?: string,
   ): Promise<PublicPresignedUrl>;
   remove(
     organizationId: string,
     objectId: string,
     userId: string,
     meta: RequestMeta,
+    versionId?: string,
   ): Promise<void>;
+  listVersions(organizationId: string, objectId: string): Promise<PublicObjectVersionListPage>;
+  getVersion(
+    organizationId: string,
+    objectId: string,
+    versionId: string,
+  ): Promise<PublicObjectVersion>;
+  restoreVersion(
+    organizationId: string,
+    objectId: string,
+    versionId: string,
+    userId: string,
+    meta: RequestMeta,
+  ): Promise<PublicStorageObject>;
   copy(input: {
     organizationId: string;
     objectId: string;
@@ -115,6 +133,95 @@ export function createObjectService(deps: {
     return { object, ...resolved };
   }
 
+  async function requireLiveObject(organizationId: string, objectId: string) {
+    const found = await requireObject(organizationId, objectId);
+    if (found.object.isDeleted) {
+      throw storageObjectNotFound();
+    }
+    return found;
+  }
+
+  async function requireVersion(organizationId: string, objectId: string, versionId: string) {
+    const found = await requireObject(organizationId, objectId);
+    const version = await objects.findVersion(organizationId, objectId, versionId);
+    if (!version) {
+      throw storageObjectNotFound();
+    }
+    return { ...found, version };
+  }
+
+  async function deletePermanentVersion(
+    organizationId: string,
+    objectId: string,
+    versionId: string,
+    userId: string,
+    meta: RequestMeta,
+  ): Promise<void> {
+    const { object, bucket, provider, version } = await requireVersion(
+      organizationId,
+      objectId,
+      versionId,
+    );
+
+    await prisma.objectVersion.deleteMany({
+      where: { organizationId, objectId, versionId },
+    });
+
+    await deleteVersionBytes(
+      {
+        provider,
+        locationFor: (key) => storage.locationFor(bucket, key),
+        logger,
+        objectId,
+      },
+      version,
+    );
+
+    const remaining = await objects.listVersions(organizationId, objectId);
+    if (remaining.length === 0) {
+      await objects.delete(organizationId, objectId);
+    } else if (version.isCurrent) {
+      const next = remaining[0];
+      if (next) {
+        await prisma.$transaction(async (tx) => {
+          await tx.objectVersion.updateMany({
+            where: { objectId, isCurrent: true },
+            data: { isCurrent: false },
+          });
+          await tx.objectVersion.updateMany({
+            where: { organizationId, objectId, versionId: next.versionId },
+            data: { isCurrent: true },
+          });
+          await tx.storageObject.update({
+            where: { id: objectId },
+            data: {
+              size: next.size,
+              contentType: next.contentType,
+              etag: next.etag,
+              checksumAlgorithm: next.checksumAlgorithm,
+              checksum: next.checksum,
+              physicalKey: next.physicalKey,
+              currentVersionId: next.versionId,
+              isDeleted: next.isDeleteMarker,
+              ...(next.metadata ? { metadata: next.metadata } : {}),
+            },
+          });
+        });
+      }
+    }
+
+    await writeAuditLog(prisma, {
+      organizationId,
+      userId,
+      action: 'storage.object.version_deleted',
+      resourceType: 'object',
+      resourceId: objectId,
+      metadata: { bucketId: object.bucketId, key: object.key, versionId },
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+  }
+
   const service: ObjectService = {
     async list(organizationId, bucketId, options) {
       // Validates the bucket belongs to this organization before listing.
@@ -147,14 +254,14 @@ export function createObjectService(deps: {
     },
 
     async get(organizationId, objectId) {
-      const { object } = await requireObject(organizationId, objectId);
+      const { object } = await requireLiveObject(organizationId, objectId);
       return serializeStorageObject(object);
     },
 
     async findByKey(organizationId, bucketId, key) {
       const normalizedKey = assertValidObjectKey(key, limits.maxKeyLength);
       const object = await objects.findByKey(organizationId, bucketId, normalizedKey);
-      if (!object) {
+      if (!object || object.isDeleted) {
         throw storageObjectNotFound();
       }
       return serializeStorageObject(object);
@@ -245,7 +352,6 @@ export function createObjectService(deps: {
       };
 
       let saved: StorageObject;
-      const previousPhysicalKey = existing?.physicalKey;
 
       try {
         // Filesystem writes cannot join a PostgreSQL transaction, so the
@@ -276,32 +382,18 @@ export function createObjectService(deps: {
         throw error;
       }
 
-      // Unversioned buckets keep exactly one copy, so the superseded bytes are
-      // reclaimed once the new version is durably recorded.
-      if (
-        resolved.bucket.versioning === BucketVersioningStatus.UNVERSIONED &&
-        previousPhysicalKey &&
-        previousPhysicalKey !== physicalKey
-      ) {
-        await prisma.objectVersion
-          .deleteMany({ where: { objectId: saved.id, isCurrent: false } })
-          .catch(() => undefined);
-
-        await resolved.provider
-          .deleteObject(storage.locationFor(resolved.bucket, previousPhysicalKey))
-          .catch((error: unknown) => {
-            // An orphaned physical object is a storage leak, not a correctness
-            // problem: the metadata already points at the new version.
-            logger.warn(
-              {
-                event: 'storage.object.orphaned_bytes',
-                objectId: saved.id,
-                reason: error instanceof Error ? error.name : 'unknown',
-              },
-              'Superseded object bytes could not be removed',
-            );
-          });
-      }
+      // Unversioned buckets keep exactly one copy. Suspended buckets replace
+      // only the current version and keep older history from when versioning
+      // was enabled. Enabled buckets retain every version.
+      await reclaimSupersededVersions({
+        prisma,
+        provider: resolved.provider,
+        locationFor: (key) => storage.locationFor(resolved.bucket, key),
+        organizationId: options.organizationId,
+        objectId: saved.id,
+        versioning: resolved.bucket.versioning,
+        logger,
+      });
 
       metrics.uploadCompleted({
         organizationId: options.organizationId,
@@ -323,8 +415,25 @@ export function createObjectService(deps: {
     },
 
     async openDownload(organizationId, objectId, options) {
-      const { object, bucket, provider } = await requireObject(organizationId, objectId);
+      if (options?.versionId) {
+        const { object, bucket, provider, version } = await requireVersion(
+          organizationId,
+          objectId,
+          options.versionId,
+        );
+        if (version.isDeleteMarker || version.physicalKey.length === 0) {
+          throw storageObjectNotFound();
+        }
 
+        const stream = await provider.getObject({
+          ...storage.locationFor(bucket, version.physicalKey),
+          range: options.range,
+          signal: options.signal,
+        });
+        return { object, stream };
+      }
+
+      const { object, bucket, provider } = await requireLiveObject(organizationId, objectId);
       const stream = await provider.getObject({
         ...storage.locationFor(bucket, object.physicalKey),
         range: options?.range,
@@ -339,10 +448,45 @@ export function createObjectService(deps: {
      *
      * For providers that sign natively the provider's own presigned URL is
      * used; otherwise VaultStack issues an HMAC token scoped to this one
-     * object. Either way the browser receives no storage credentials.
+     * object (and optional version). Either way the browser receives no
+     * storage credentials.
      */
-    async createDownloadUrl(organizationId, objectId, baseUrl) {
-      const { object, bucket, provider } = await requireObject(organizationId, objectId);
+    async createDownloadUrl(organizationId, objectId, baseUrl, versionId) {
+      if (versionId) {
+        const { object, bucket, provider, version } = await requireVersion(
+          organizationId,
+          objectId,
+          versionId,
+        );
+        if (version.isDeleteMarker || version.physicalKey.length === 0) {
+          throw storageObjectNotFound();
+        }
+
+        if (provider.capabilities.nativePresignedUrls) {
+          const presigned = await provider.createPresignedDownloadUrl({
+            ...storage.locationFor(bucket, version.physicalKey),
+            expiresInSeconds: limits.presignedUrlTtlSeconds,
+            downloadFilename: object.key.split('/').at(-1),
+          });
+          return {
+            url: presigned.url,
+            method: presigned.method,
+            expiresAt: presigned.expiresAt.toISOString(),
+          };
+        }
+
+        const issued = tokens.issue(
+          { purpose: 'download', organizationId, subjectId: object.id, versionId },
+          limits.presignedUrlTtlSeconds,
+        );
+        return {
+          url: `${baseUrl}/api/v1/storage/objects/${object.id}/content?token=${issued.token}`,
+          method: 'GET',
+          expiresAt: issued.expiresAt.toISOString(),
+        };
+      }
+
+      const { object, bucket, provider } = await requireLiveObject(organizationId, objectId);
 
       if (provider.capabilities.nativePresignedUrls) {
         const presigned = await provider.createPresignedDownloadUrl({
@@ -370,32 +514,58 @@ export function createObjectService(deps: {
       };
     },
 
-    async remove(organizationId, objectId, userId, meta) {
-      const { object, bucket, provider } = await requireObject(organizationId, objectId);
-      const versions = await prisma.objectVersion.findMany({
-        where: { objectId: object.id },
-        select: { physicalKey: true },
-      });
+    async remove(organizationId, objectId, userId, meta, versionId) {
+      if (versionId) {
+        await deletePermanentVersion(organizationId, objectId, versionId, userId, meta);
+        return;
+      }
 
-      // Metadata is removed first: a missing row makes the object unreadable
-      // immediately, whereas deleting bytes first would leave rows pointing at
-      // data that no longer exists.
+      const { object, bucket, provider } = await requireObject(organizationId, objectId);
+
+      if (usesDeleteMarkers(bucket.versioning) && !object.isDeleted) {
+        const markerVersionId = storage.newVersionId();
+        await publishObjectVersion(prisma, {
+          organizationId,
+          bucketId: object.bucketId,
+          storageProviderId: object.storageProviderId,
+          objectId: object.id,
+          existingId: object.id,
+          key: object.key,
+          versionId: markerVersionId,
+          physicalKey: '',
+          size: BigInt(0),
+          contentType: object.contentType,
+          etag: '',
+          checksum: null,
+          isDeleteMarker: true,
+        });
+
+        await writeAuditLog(prisma, {
+          organizationId,
+          userId,
+          action: 'storage.object.delete_marker',
+          resourceType: 'object',
+          resourceId: objectId,
+          metadata: { bucketId: object.bucketId, key: object.key, versionId: markerVersionId },
+          ipAddress: meta.ipAddress,
+          userAgent: meta.userAgent,
+        });
+        return;
+      }
+
+      const versions = await objects.listVersions(organizationId, objectId);
       await objects.delete(organizationId, objectId);
 
-      const physicalKeys = new Set([object.physicalKey, ...versions.map((v) => v.physicalKey)]);
-      for (const physicalKey of physicalKeys) {
-        await provider
-          .deleteObject(storage.locationFor(bucket, physicalKey))
-          .catch((error: unknown) => {
-            logger.warn(
-              {
-                event: 'storage.object.orphaned_bytes',
-                objectId,
-                reason: error instanceof Error ? error.name : 'unknown',
-              },
-              'Object bytes could not be removed after metadata deletion',
-            );
-          });
+      for (const version of versions) {
+        await deleteVersionBytes(
+          {
+            provider,
+            locationFor: (key) => storage.locationFor(bucket, key),
+            logger,
+            objectId,
+          },
+          version,
+        );
       }
 
       await writeAuditLog(prisma, {
@@ -410,8 +580,81 @@ export function createObjectService(deps: {
       });
     },
 
+    async listVersions(organizationId, objectId) {
+      const { object } = await requireObject(organizationId, objectId);
+      const versions = await objects.listVersions(organizationId, objectId);
+      return {
+        objectId: object.id,
+        key: object.key,
+        versions: versions.map(serializeObjectVersion),
+      };
+    },
+
+    async getVersion(organizationId, objectId, versionId) {
+      const { version } = await requireVersion(organizationId, objectId, versionId);
+      return serializeObjectVersion(version);
+    },
+
+    async restoreVersion(organizationId, objectId, versionId, userId, meta) {
+      const { object, bucket, provider, version } = await requireVersion(
+        organizationId,
+        objectId,
+        versionId,
+      );
+      if (version.isDeleteMarker || version.physicalKey.length === 0) {
+        throw validationError('A delete marker cannot be restored');
+      }
+
+      const restoredVersionId = storage.newVersionId();
+      const physicalKey = storage.physicalKeyFor({
+        organizationId,
+        objectId: object.id,
+        versionId: restoredVersionId,
+      });
+
+      const result = await provider.copyObject({
+        source: storage.locationFor(bucket, version.physicalKey),
+        destination: storage.locationFor(bucket, physicalKey),
+        contentType: version.contentType,
+      });
+
+      const saved = await publishObjectVersion(prisma, {
+        organizationId,
+        bucketId: object.bucketId,
+        storageProviderId: object.storageProviderId,
+        objectId: object.id,
+        existingId: object.id,
+        key: object.key,
+        versionId: restoredVersionId,
+        physicalKey,
+        size: BigInt(result.size || Number(version.size)),
+        contentType: result.contentType,
+        etag: result.etag || version.etag,
+        checksum:
+          result.checksum.algorithm === 'SHA256' && result.checksum.value
+            ? result.checksum.value
+            : version.checksum,
+      }).catch(async (error: unknown) => {
+        await provider.deleteObject(storage.locationFor(bucket, physicalKey)).catch(() => undefined);
+        throw error;
+      });
+
+      await writeAuditLog(prisma, {
+        organizationId,
+        userId,
+        action: 'storage.object.version_restored',
+        resourceType: 'object',
+        resourceId: object.id,
+        metadata: { sourceVersionId: versionId, restoredVersionId },
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      });
+
+      return serializeStorageObject(saved);
+    },
+
     async copy(input) {
-      const source = await requireObject(input.organizationId, input.objectId);
+      const source = await requireLiveObject(input.organizationId, input.objectId);
       const destinationKey = assertValidObjectKey(input.destinationKey, limits.maxKeyLength);
       const destination = await storage.resolveBucket(
         input.organizationId,
@@ -461,6 +704,16 @@ export function createObjectService(deps: {
         throw error;
       });
 
+      await reclaimSupersededVersions({
+        prisma,
+        provider: destination.provider,
+        locationFor: (key) => storage.locationFor(destination.bucket, key),
+        organizationId: input.organizationId,
+        objectId: saved.id,
+        versioning: destination.bucket.versioning,
+        logger,
+      });
+
       await writeAuditLog(prisma, {
         organizationId: input.organizationId,
         userId: input.userId,
@@ -488,7 +741,7 @@ export function createObjectService(deps: {
      * the source is never removed before the destination is confirmed.
      */
     async move(input) {
-      const source = await requireObject(input.organizationId, input.objectId);
+      const source = await requireLiveObject(input.organizationId, input.objectId);
       const destinationKey = assertValidObjectKey(input.destinationKey, limits.maxKeyLength);
 
       if (source.object.bucketId === input.destinationBucketId) {

@@ -7,12 +7,16 @@ import { storageAccessDenied, storageUploadExpired } from '../../../lib/errors.j
  * providers with no signing endpoint of their own (the local filesystem).
  */
 
-export type StorageTokenPurpose = 'download' | 'upload';
+export type StorageTokenPurpose = 'download' | 'upload' | 'multipart-part';
 
 export interface StorageTokenClaims {
   purpose: StorageTokenPurpose;
   organizationId: string;
   subjectId: string;
+  /** Present only on part-scoped transfer tokens. */
+  partNumber?: number;
+  /** Present only on version-scoped download tokens. */
+  versionId?: string;
   expiresAt: Date;
 }
 
@@ -22,6 +26,8 @@ interface EncodedClaims {
   s: string;
   e: number;
   n: string;
+  pn?: number;
+  v?: string;
 }
 
 function base64UrlEncode(value: Buffer | string): string {
@@ -43,6 +49,8 @@ export class StorageTokenManager {
       s: claims.subjectId,
       e: Math.floor(expiresAt.getTime() / 1000),
       n: randomBytes(8).toString('hex'),
+      ...(claims.partNumber === undefined ? {} : { pn: claims.partNumber }),
+      ...(claims.versionId === undefined ? {} : { v: claims.versionId }),
     };
 
     const payload = base64UrlEncode(JSON.stringify(encoded));
@@ -73,6 +81,10 @@ export class StorageTokenManager {
       throw storageAccessDenied('Storage token was issued for a different operation');
     }
 
+    if (purpose === 'multipart-part' && (typeof claims.pn !== 'number' || claims.pn < 1)) {
+      throw storageAccessDenied('Storage token is not bound to a multipart part');
+    }
+
     const expiresAt = new Date(claims.e * 1000);
     if (expiresAt.getTime() <= Date.now()) {
       throw storageUploadExpired();
@@ -82,6 +94,8 @@ export class StorageTokenManager {
       purpose: claims.p,
       organizationId: claims.g,
       subjectId: claims.s,
+      ...(claims.pn === undefined ? {} : { partNumber: claims.pn }),
+      ...(claims.v === undefined ? {} : { versionId: claims.v }),
       expiresAt,
     };
   }

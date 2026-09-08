@@ -20,6 +20,7 @@ export interface PublishObjectInput {
   etag: string;
   checksum: string | null;
   metadata?: Record<string, string>;
+  isDeleteMarker?: boolean;
 }
 
 /**
@@ -71,13 +72,17 @@ export async function publishObjectVersion(
         storageProviderId: input.storageProviderId,
         versionId: input.versionId,
         isCurrent: true,
+        isDeleteMarker: input.isDeleteMarker === true,
         ...shared,
       },
     });
 
     return tx.storageObject.update({
       where: { id: row.id },
-      data: { currentVersionId: version.versionId },
+      data: {
+        currentVersionId: version.versionId,
+        isDeleted: input.isDeleteMarker === true,
+      },
     });
   });
 }

@@ -6,6 +6,8 @@ Phase 2 authentication is cookie-based. Authorization remains server-side.
 
 Browser sessions use a random token stored only in an **HTTP-only**, `SameSite=Lax` cookie named `vs_session`. The raw token is hashed (SHA-256) in PostgreSQL. It is never returned in JSON and must not be stored in `localStorage`.
 
+The dashboard is a separate origin (`:5173` vs `:3000`). The API reflects allowed `Origin` values with `Access-Control-Allow-Credentials: true`. Development defaults to `http://localhost:5173` and `http://127.0.0.1:5173`. Production sends no CORS headers unless `CORS_ORIGINS` is set. No `cors` package is used; the allowlist lives in `apps/api/src/middleware/cors.ts`.
+
 A companion `vs_csrf` cookie (readable by JavaScript) plus the `x-csrf-token` header protect cookie-authenticated `POST`/`PATCH`/`PUT`/`DELETE` requests (double-submit CSRF). Bearer JWT and API keys skip CSRF because they are not sent automatically by the browser.
 
 On login the previous session token, if any, is revoked and a new session is issued (session fixation protection). Logout revokes the session and clears both cookies. Expired or revoked sessions cannot call `/api/v1/auth/me`.
@@ -20,7 +22,7 @@ Passwords, session tokens, CSRF tokens, cookies, and key hashes are redacted fro
 
 Login is limited per IP + email and per IP (Redis in production, in-memory in tests) to slow brute-force attempts. `/api/v1` also has a general per-IP limit. Limited responses use `429` with `RATE_LIMITED` and a `Retry-After` header.
 
-No extra npm packages were added for cookies or rate limiting: hashing and cookie serialization live in `@vaultstack/auth`, and the limiter is a small Redis/`Map` helper in the API.
+No extra npm packages were added for cookies, rate limiting, or CORS: hashing and cookie serialization live in `@vaultstack/auth`, the limiter is a small Redis/`Map` helper in the API, and browser origins are allowlisted in a small Express middleware.
 
 ## Authorization
 

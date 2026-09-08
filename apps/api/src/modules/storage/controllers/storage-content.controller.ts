@@ -29,6 +29,7 @@ export class StorageContentController {
     const { object, stream } = await storage.objects.openDownload(claims.organizationId, objectId, {
       range: parseRange(req.header('range')),
       signal: controller.signal,
+      ...(claims.versionId ? { versionId: claims.versionId } : {}),
     });
 
     res.setHeader('Content-Type', stream.contentType);
@@ -63,13 +64,16 @@ export class StorageContentController {
   uploadContent: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const { token } = uploadContentQuerySchema.parse(req.query);
     const controller = new AbortController();
-    const onClose = (): void => {
+    // Abort only if the client disconnects before we finish. `req` emits
+    // `close` after a successful body read, which would otherwise cancel a
+    // still-running disk write and mark the upload failed.
+    const onDisconnect = (): void => {
       if (!res.writableEnded) {
         controller.abort();
       }
     };
-    req.on('aborted', onClose);
-    req.on('close', onClose);
+    req.on('aborted', onDisconnect);
+    res.on('close', onDisconnect);
 
     try {
       const upload = await this.container.storage.uploads.receive({
@@ -80,8 +84,34 @@ export class StorageContentController {
       });
       res.status(200).json({ upload });
     } finally {
-      req.off('aborted', onClose);
-      req.off('close', onClose);
+      req.off('aborted', onDisconnect);
+      res.off('close', onDisconnect);
+    }
+  });
+
+  uploadPartContent: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const { token } = uploadContentQuerySchema.parse(req.query);
+    const controller = new AbortController();
+    const onDisconnect = (): void => {
+      if (!res.writableEnded) {
+        controller.abort();
+      }
+    };
+    req.on('aborted', onDisconnect);
+    res.on('close', onDisconnect);
+
+    try {
+      const part = await this.container.storage.uploads.receivePart({
+        uploadId: routeParam(req, 'uploadId'),
+        partNumber: Number(routeParam(req, 'partNumber')),
+        token,
+        body: req,
+        signal: controller.signal,
+      });
+      res.status(200).json({ part });
+    } finally {
+      req.off('aborted', onDisconnect);
+      res.off('close', onDisconnect);
     }
   });
 }

@@ -3,11 +3,15 @@ import {
   ALL_PERMISSIONS,
   ALL_SYSTEM_ROLES,
   PERMISSIONS,
+  STORAGE_LIFECYCLE_ACTIONS,
+  STORAGE_POLICY_KINDS,
   SYSTEM_ROLE_PERMISSIONS,
   SYSTEM_ROLES,
   type HealthResponse,
   type MultipartPartTransferDescriptor,
   type PublicMultipartSessionDetail,
+  type PublicObjectVersion,
+  type PublicStoragePolicy,
 } from './index.js';
 
 describe('@vaultstack/types', () => {
@@ -80,5 +84,37 @@ describe('@vaultstack/types', () => {
     expect(transfer).not.toHaveProperty('credentials');
     expect(transfer.method).toBe('PUT');
     expect(session.parts[0]?.partNumber).toBe(1);
+  });
+
+  it('exposes browser-safe object version and lifecycle policy contracts', () => {
+    const version: PublicObjectVersion = {
+      versionId: 'version-1',
+      size: 12,
+      contentType: 'text/plain',
+      etag: 'etag-1',
+      checksumAlgorithm: 'SHA256',
+      checksum: 'a'.repeat(64),
+      isCurrent: true,
+      isDeleteMarker: false,
+      createdAt: '2026-09-08T01:00:00.000Z',
+    };
+    const policy: PublicStoragePolicy = {
+      id: 'policy-1',
+      organizationId: 'organization-1',
+      bucketId: 'bucket-1',
+      name: 'expire-old-versions',
+      kind: STORAGE_POLICY_KINDS.LIFECYCLE,
+      effect: 'ALLOW',
+      enabled: true,
+      actions: [],
+      keyPrefix: 'tmp/',
+      days: 7,
+      lifecycleAction: STORAGE_LIFECYCLE_ACTIONS.EXPIRE_NONCURRENT,
+      createdAt: '2026-09-08T01:00:00.000Z',
+      updatedAt: '2026-09-08T01:00:00.000Z',
+    };
+
+    expect(version).not.toHaveProperty('physicalKey');
+    expect(policy.lifecycleAction).toBe('EXPIRE_NONCURRENT');
   });
 });

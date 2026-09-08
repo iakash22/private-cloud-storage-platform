@@ -21,6 +21,73 @@ export const createBucketBodySchema = z.object({
   versioning: z.enum(['UNVERSIONED', 'ENABLED']).optional(),
 });
 
+export const updateBucketVersioningBodySchema = z
+  .object({
+    versioning: z.enum(['UNVERSIONED', 'ENABLED', 'SUSPENDED']),
+  })
+  .strict();
+
+export const objectVersionParamsSchema = z
+  .object({
+    objectId: z.string().min(1),
+    versionId: z.string().min(1).max(128),
+  })
+  .strict();
+
+export const deleteObjectQuerySchema = z
+  .object({
+    versionId: z.string().min(1).max(128).optional(),
+  })
+  .strict();
+
+export const downloadUrlBodySchema = z.preprocess(
+  (value) => value ?? {},
+  z
+    .object({
+      versionId: z.string().min(1).max(128).optional(),
+    })
+    .strict(),
+);
+
+export const storagePolicyIdParamsSchema = z
+  .object({
+    policyId: z.string().min(1),
+  })
+  .strict();
+
+export const createLifecyclePolicyBodySchema = z
+  .object({
+    name: z.string().trim().min(1).max(128),
+    bucketId: z.string().min(1).optional(),
+    keyPrefix: z.string().min(1).max(1024).optional(),
+    days: z.coerce.number().int().min(1).max(3650),
+    lifecycleAction: z.enum([
+      'EXPIRE_CURRENT',
+      'EXPIRE_NONCURRENT',
+      'ABORT_INCOMPLETE_MULTIPART',
+      'EXPIRE_TEMPORARY',
+    ]),
+    enabled: z.boolean().optional(),
+  })
+  .strict();
+
+export const updateLifecyclePolicyBodySchema = z
+  .object({
+    name: z.string().trim().min(1).max(128).optional(),
+    keyPrefix: z.string().min(1).max(1024).nullable().optional(),
+    days: z.coerce.number().int().min(1).max(3650).optional(),
+    lifecycleAction: z
+      .enum([
+        'EXPIRE_CURRENT',
+        'EXPIRE_NONCURRENT',
+        'ABORT_INCOMPLETE_MULTIPART',
+        'EXPIRE_TEMPORARY',
+      ])
+      .optional(),
+    enabled: z.boolean().optional(),
+  })
+  .strict();
+
 export const bucketIdParamsSchema = z.object({
   bucketId: z.string().min(1),
 });
@@ -85,6 +152,7 @@ export const uploadPartQuerySchema = multipartPartQuerySchema;
 
 export const multipartPartDestinationBodySchema = z
   .object({
+    size: z.coerce.number().int().positive().optional(),
     checksumSha256: sha256ChecksumSchema.optional(),
   })
   .strict();
@@ -142,3 +210,9 @@ export type CompleteMultipartBody = z.infer<typeof completeMultipartBodySchema>;
 export type MultipartSessionStatus = z.infer<typeof multipartSessionStatusSchema>;
 export type MultipartSessionStatusParams = z.infer<typeof multipartSessionStatusParamsSchema>;
 export type ListMultipartSessionsQuery = z.infer<typeof listMultipartSessionsQuerySchema>;
+export type UpdateBucketVersioningBody = z.infer<typeof updateBucketVersioningBodySchema>;
+export type ObjectVersionParams = z.infer<typeof objectVersionParamsSchema>;
+export type DeleteObjectQuery = z.infer<typeof deleteObjectQuerySchema>;
+export type DownloadUrlBody = z.infer<typeof downloadUrlBodySchema>;
+export type CreateLifecyclePolicyBody = z.infer<typeof createLifecyclePolicyBodySchema>;
+export type UpdateLifecyclePolicyBody = z.infer<typeof updateLifecyclePolicyBodySchema>;

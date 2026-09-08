@@ -81,6 +81,8 @@ describe('Phase 5 S3 gateway authentication and access control', () => {
         accessKeyId: credential.accessKeyId,
         secretAccessKey: credential.secretAccessKey,
       },
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+      responseChecksumValidation: 'WHEN_REQUIRED',
     });
   }
 

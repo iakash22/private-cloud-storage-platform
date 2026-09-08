@@ -22,6 +22,20 @@ Phase 3 adds the storage engine. These are the only new packages.
 | `@aws-sdk/s3-request-presigner` | Generates provider-native presigned URLs, so the browser uploads and downloads directly without ever receiving storage credentials     |
 | `@aws-sdk/lib-storage`          | Managed multipart upload helper for large streamed objects to S3-compatible backends                                                   |
 
+## Phase 6
+
+| Package  | Why                                                                                          |
+| -------- | -------------------------------------------------------------------------------------------- |
+| `bullmq` | Dedicated cleanup worker for expired multipart sessions, provider aborts, and orphan staging |
+
+The worker is a separate process from the API:
+
+```bash
+pnpm --filter @vaultstack/api worker:cleanup
+```
+
+It uses `REDIS_URL` and repeats every 60 seconds. The same process runs multipart session cleanup and lifecycle policy evaluation. Do not run the worker in the API request process.
+
 All three are confined to `apps/api/src/integrations/minio/` and
 `apps/api/src/modules/storage/providers/s3-compatible/`. The local filesystem
 provider — the primary production backend — uses only the Node standard library,

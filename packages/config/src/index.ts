@@ -73,6 +73,10 @@ const envSchema = z.object({
   // credential signing lands in a later phase.
   S3_GATEWAY_ENABLED: booleanFromString.default('false'),
   S3_GATEWAY_REGION: z.string().min(1).default('vaultstack'),
+
+  // Comma-separated browser origins allowed to call the API with cookies.
+  // Unset: localhost dashboard origins in development/test, none in production.
+  CORS_ORIGINS: z.string().optional(),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

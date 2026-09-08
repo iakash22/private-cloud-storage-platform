@@ -12,11 +12,17 @@ export interface UploadWithProgressOptions {
   signal?: AbortSignal;
 }
 
+export interface UploadTransferResult {
+  etag?: string;
+  size?: number;
+  checksumSha256?: string;
+}
+
 export function uploadBlobWithProgress(
   initiated: InitiatedUpload,
   file: File | Blob,
   options: UploadWithProgressOptions = {},
-): Promise<void> {
+): Promise<UploadTransferResult> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open(initiated.method, initiated.uploadUrl, true);
@@ -47,7 +53,7 @@ export function uploadBlobWithProgress(
 
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
-        resolve();
+        resolve(readTransferResult(xhr));
         return;
       }
 
@@ -75,4 +81,21 @@ export function uploadBlobWithProgress(
 
     xhr.send(file);
   });
+}
+
+function readTransferResult(xhr: XMLHttpRequest): UploadTransferResult {
+  const headerEtag = xhr.getResponseHeader('etag') ?? xhr.getResponseHeader('ETag') ?? undefined;
+  try {
+    const body = JSON.parse(xhr.responseText) as {
+      part?: { etag?: string; size?: number; checksumSha256?: string };
+      upload?: { checksum?: string };
+    };
+    return {
+      etag: body.part?.etag ?? headerEtag?.replaceAll('"', ''),
+      size: body.part?.size,
+      checksumSha256: body.part?.checksumSha256 ?? body.upload?.checksum,
+    };
+  } catch {
+    return { etag: headerEtag?.replaceAll('"', '') };
+  }
 }

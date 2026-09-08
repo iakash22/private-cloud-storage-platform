@@ -610,6 +610,27 @@ paths:
         '204':
           description: Bucket deleted
 
+  /api/v1/storage/buckets/{bucketId}/versioning:
+    parameters:
+      - $ref: '#/components/parameters/bucketId'
+    put:
+      tags: [Storage]
+      summary: Update bucket versioning
+      operationId: setBucketVersioning
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBucketVersioningBody'
+      responses:
+        '200':
+          description: Bucket versioning updated
+
   /api/v1/storage/buckets/{bucketId}/objects:
     parameters:
       - $ref: '#/components/parameters/bucketId'
@@ -670,7 +691,151 @@ paths:
         - bearerApiKey: []
       responses:
         '204':
-          description: Object deleted
+          description: Object deleted, or a delete marker created when versioning is enabled
+      parameters:
+        - name: versionId
+          in: query
+          schema:
+            type: string
+          description: Permanently delete this version instead of the current object
+
+  /api/v1/storage/objects/{objectId}/versions:
+    parameters:
+      - $ref: '#/components/parameters/objectId'
+    get:
+      tags: [Storage]
+      summary: List object versions
+      operationId: listObjectVersions
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Version list for one object, including delete markers
+
+  /api/v1/storage/objects/{objectId}/versions/{versionId}:
+    parameters:
+      - $ref: '#/components/parameters/objectId'
+      - name: versionId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Storage]
+      summary: Get one object version
+      operationId: getObjectVersion
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Version metadata
+    delete:
+      tags: [Storage]
+      summary: Permanently delete one object version
+      operationId: deleteObjectVersion
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      responses:
+        '204':
+          description: Version deleted
+
+  /api/v1/storage/objects/{objectId}/versions/{versionId}/restore:
+    parameters:
+      - $ref: '#/components/parameters/objectId'
+      - name: versionId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      tags: [Storage]
+      summary: Restore an object version as the new current version
+      operationId: restoreObjectVersion
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: New current version created from the selected version
+
+  /api/v1/storage/policies:
+    get:
+      tags: [Storage]
+      summary: List storage policies
+      operationId: listStoragePolicies
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      parameters:
+        - name: bucketId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Policy list
+    post:
+      tags: [Storage]
+      summary: Create a lifecycle policy
+      operationId: createLifecyclePolicy
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLifecyclePolicyBody'
+      responses:
+        '201':
+          description: Lifecycle policy created
+
+  /api/v1/storage/policies/{policyId}:
+    parameters:
+      - name: policyId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Storage]
+      summary: Get a storage policy
+      operationId: getStoragePolicy
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Policy metadata
+    patch:
+      tags: [Storage]
+      summary: Update a lifecycle policy
+      operationId: updateStoragePolicy
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Policy updated
+    delete:
+      tags: [Storage]
+      summary: Delete a storage policy
+      operationId: deleteStoragePolicy
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      responses:
+        '204':
+          description: Policy deleted
 
   /api/v1/storage/objects/{objectId}/download-url:
     parameters:
@@ -784,6 +949,30 @@ paths:
           description: Upload aborted
 
   /api/v1/storage/multipart-uploads:
+    get:
+      tags: [Storage]
+      summary: List resumable multipart sessions
+      operationId: listMultipartSessions
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Organization-scoped multipart sessions for the current user
     post:
       tags: [Storage]
       summary: Initiate multipart upload
@@ -805,14 +994,26 @@ paths:
   /api/v1/storage/multipart-uploads/{uploadId}/parts:
     parameters:
       - $ref: '#/components/parameters/uploadId'
-      - name: partNumber
-        in: query
-        required: true
-        schema:
-          type: integer
-          minimum: 1
-          maximum: 10000
+    get:
+      tags: [Storage]
+      summary: List recorded multipart parts
+      operationId: listMultipartParts
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Recorded parts for resume
     put:
+      parameters:
+        - name: partNumber
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10000
       tags: [Storage]
       summary: Upload multipart part bytes
       operationId: uploadMultipartPart
@@ -855,6 +1056,17 @@ paths:
   /api/v1/storage/multipart-uploads/{uploadId}:
     parameters:
       - $ref: '#/components/parameters/uploadId'
+    get:
+      tags: [Storage]
+      summary: Get multipart session status and recorded parts
+      operationId: getMultipartSession
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Browser-safe multipart session
     delete:
       tags: [Storage]
       summary: Abort multipart upload
@@ -866,6 +1078,104 @@ paths:
       responses:
         '204':
           description: Multipart upload aborted
+
+  /api/v1/storage/multipart-uploads/{uploadId}/parts/{partNumber}/destination:
+    parameters:
+      - $ref: '#/components/parameters/uploadId'
+      - name: partNumber
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 10000
+    post:
+      tags: [Storage]
+      summary: Issue a short-lived part destination
+      operationId: createMultipartPartDestination
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                size:
+                  type: integer
+                checksumSha256:
+                  type: string
+      responses:
+        '200':
+          description: Direct or VaultStack part transfer descriptor
+
+  /api/v1/storage/multipart-uploads/{uploadId}/parts/{partNumber}/confirm:
+    parameters:
+      - $ref: '#/components/parameters/uploadId'
+      - name: partNumber
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 10000
+    post:
+      tags: [Storage]
+      summary: Confirm a transferred multipart part
+      operationId: confirmMultipartPart
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [etag, size]
+              properties:
+                etag:
+                  type: string
+                size:
+                  type: integer
+                checksumSha256:
+                  type: string
+      responses:
+        '200':
+          description: Recorded part metadata
+
+  /api/v1/storage/multipart-uploads/{uploadId}/parts/{partNumber}/content:
+    parameters:
+      - $ref: '#/components/parameters/uploadId'
+      - name: partNumber
+        in: path
+        required: true
+        schema:
+          type: integer
+      - name: token
+        in: query
+        required: true
+        schema:
+          type: string
+    put:
+      tags: [Storage Transfer]
+      summary: Upload one multipart part by scoped token
+      operationId: uploadMultipartPartContent
+      description: Authorized by a part-scoped HMAC token, not a session cookie.
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Part stored
 
   /api/v1/storage/objects/{objectId}/content:
     parameters:
@@ -1251,6 +1561,37 @@ components:
           type: string
           enum: [UNVERSIONED, ENABLED]
 
+    UpdateBucketVersioningBody:
+      type: object
+      required: [versioning]
+      properties:
+        versioning:
+          type: string
+          enum: [UNVERSIONED, ENABLED, SUSPENDED]
+
+    CreateLifecyclePolicyBody:
+      type: object
+      required: [name, days, lifecycleAction]
+      properties:
+        name:
+          type: string
+        bucketId:
+          type: string
+        keyPrefix:
+          type: string
+        days:
+          type: integer
+          minimum: 1
+        lifecycleAction:
+          type: string
+          enum:
+            - EXPIRE_CURRENT
+            - EXPIRE_NONCURRENT
+            - ABORT_INCOMPLETE_MULTIPART
+            - EXPIRE_TEMPORARY
+        enabled:
+          type: boolean
+
     StorageObject:
       type: object
       properties:
@@ -1269,6 +1610,10 @@ components:
           type: string
         checksum:
           type: string
+        versionId:
+          type: string
+        isDeleted:
+          type: boolean
         createdAt:
           type: string
           format: date-time
@@ -1307,7 +1652,7 @@ components:
 
     InitiateMultipartBody:
       type: object
-      required: [bucketId, key]
+      required: [bucketId, key, size]
       properties:
         bucketId:
           type: string
@@ -1315,6 +1660,9 @@ components:
           type: string
         contentType:
           type: string
+        size:
+          type: integer
+          minimum: 0
 
     CompleteMultipartBody:
       type: object

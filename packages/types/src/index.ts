@@ -317,7 +317,69 @@ export interface PublicStorageObject {
   checksumAlgorithm: string;
   checksum: string | null;
   versionId: string | null;
+  isDeleted: boolean;
   metadata: Record<string, string> | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PublicObjectVersion {
+  versionId: string;
+  size: number;
+  contentType: string;
+  etag: string;
+  checksumAlgorithm: string;
+  checksum: string | null;
+  isCurrent: boolean;
+  isDeleteMarker: boolean;
+  createdAt: string;
+}
+
+export interface PublicObjectVersionListPage {
+  objectId: string;
+  key: string;
+  versions: PublicObjectVersion[];
+}
+
+export const BUCKET_VERSIONING_STATUSES = {
+  UNVERSIONED: 'UNVERSIONED',
+  ENABLED: 'ENABLED',
+  SUSPENDED: 'SUSPENDED',
+} as const;
+
+export type BucketVersioningStatusName =
+  (typeof BUCKET_VERSIONING_STATUSES)[keyof typeof BUCKET_VERSIONING_STATUSES];
+
+export const STORAGE_POLICY_KINDS = {
+  ACCESS: 'ACCESS',
+  LIFECYCLE: 'LIFECYCLE',
+} as const;
+
+export type StoragePolicyKindName =
+  (typeof STORAGE_POLICY_KINDS)[keyof typeof STORAGE_POLICY_KINDS];
+
+export const STORAGE_LIFECYCLE_ACTIONS = {
+  EXPIRE_CURRENT: 'EXPIRE_CURRENT',
+  EXPIRE_NONCURRENT: 'EXPIRE_NONCURRENT',
+  ABORT_INCOMPLETE_MULTIPART: 'ABORT_INCOMPLETE_MULTIPART',
+  EXPIRE_TEMPORARY: 'EXPIRE_TEMPORARY',
+} as const;
+
+export type StorageLifecycleActionName =
+  (typeof STORAGE_LIFECYCLE_ACTIONS)[keyof typeof STORAGE_LIFECYCLE_ACTIONS];
+
+export interface PublicStoragePolicy {
+  id: string;
+  organizationId: string;
+  bucketId: string | null;
+  name: string;
+  kind: StoragePolicyKindName;
+  effect: string;
+  enabled: boolean;
+  actions: string[];
+  keyPrefix: string | null;
+  days: number | null;
+  lifecycleAction: StorageLifecycleActionName | null;
   createdAt: string;
   updatedAt: string;
 }

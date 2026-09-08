@@ -38,6 +38,8 @@ export interface FileExplorerProps {
   uploads?: UploadItem[];
   onCancelUpload?: (uploadId: string) => void;
   onRetryUpload?: (uploadId: string) => void;
+  onPauseUpload?: (uploadId: string) => void;
+  onResumeUpload?: (uploadId: string) => void;
   onRetry?: () => void;
   uploadDisabled?: boolean;
   showUploader?: boolean;
@@ -113,6 +115,8 @@ export function FileExplorer({
   uploads = [],
   onCancelUpload,
   onRetryUpload,
+  onPauseUpload,
+  onResumeUpload,
   onRetry,
   uploadDisabled = false,
   showUploader = false,
@@ -147,7 +151,13 @@ export function FileExplorer({
       />
 
       {showUploader ? <FileUploader onFilesSelected={onFilesSelected} disabled={uploadDisabled} /> : null}
-      <UploadProgressPanel uploads={uploads} onCancel={onCancelUpload} onRetry={onRetryUpload} />
+      <UploadProgressPanel
+        uploads={uploads}
+        onCancel={onCancelUpload}
+        onRetry={onRetryUpload}
+        onPause={onPauseUpload}
+        onResume={onResumeUpload}
+      />
 
       {loading ? (
         <div className="space-y-2">

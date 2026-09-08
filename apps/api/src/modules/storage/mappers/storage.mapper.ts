@@ -3,9 +3,13 @@ import type {
   PublicMultipartPart,
   PublicMultipartSession,
   PublicMultipartSessionDetail,
+  PublicObjectVersion,
   PublicStorageObject,
+  PublicStoragePolicy,
   PublicStorageProvider,
   PublicUpload,
+  StorageLifecycleActionName,
+  StoragePolicyKindName,
   StorageProviderTypeName,
   UploadStatusName,
 } from '@vaultstack/types';
@@ -65,6 +69,7 @@ export function serializeStorageObject(object: {
   checksumAlgorithm: string;
   checksum: string | null;
   currentVersionId: string | null;
+  isDeleted: boolean;
   metadata: Prisma.JsonValue;
   createdAt: Date;
   updatedAt: Date;
@@ -79,9 +84,66 @@ export function serializeStorageObject(object: {
     checksumAlgorithm: object.checksumAlgorithm,
     checksum: object.checksum,
     versionId: object.currentVersionId,
+    isDeleted: object.isDeleted,
     metadata: asStringMetadata(object.metadata),
     createdAt: object.createdAt.toISOString(),
     updatedAt: object.updatedAt.toISOString(),
+  };
+}
+
+export function serializeObjectVersion(version: {
+  versionId: string;
+  size: bigint;
+  contentType: string;
+  etag: string;
+  checksumAlgorithm: string;
+  checksum: string | null;
+  isCurrent: boolean;
+  isDeleteMarker: boolean;
+  createdAt: Date;
+}): PublicObjectVersion {
+  return {
+    versionId: version.versionId,
+    size: Number(version.size),
+    contentType: version.contentType,
+    etag: version.etag,
+    checksumAlgorithm: version.checksumAlgorithm,
+    checksum: version.checksum,
+    isCurrent: version.isCurrent,
+    isDeleteMarker: version.isDeleteMarker,
+    createdAt: version.createdAt.toISOString(),
+  };
+}
+
+export function serializeStoragePolicy(policy: {
+  id: string;
+  organizationId: string;
+  bucketId: string | null;
+  name: string;
+  kind: string;
+  effect: string;
+  enabled: boolean;
+  actions: string[];
+  keyPrefix: string | null;
+  days: number | null;
+  lifecycleAction: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): PublicStoragePolicy {
+  return {
+    id: policy.id,
+    organizationId: policy.organizationId,
+    bucketId: policy.bucketId,
+    name: policy.name,
+    kind: policy.kind as StoragePolicyKindName,
+    effect: policy.effect,
+    enabled: policy.enabled,
+    actions: policy.actions,
+    keyPrefix: policy.keyPrefix,
+    days: policy.days,
+    lifecycleAction: policy.lifecycleAction as StorageLifecycleActionName | null,
+    createdAt: policy.createdAt.toISOString(),
+    updatedAt: policy.updatedAt.toISOString(),
   };
 }
 

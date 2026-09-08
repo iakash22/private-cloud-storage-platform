@@ -1,6 +1,48 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type APIRequestContext, type APIResponse } from '@playwright/test';
 
 const apiBase = 'http://127.0.0.1:3000';
+const MULTIPART_THRESHOLD_BYTES = 8 * 1024 * 1024;
+
+async function expectOk(response: APIResponse, label: string): Promise<void> {
+  if (response.ok()) {
+    return;
+  }
+
+  throw new Error(`${label} failed: ${response.status()} ${await response.text()}`);
+}
+
+function cookieHeader(response: APIResponse): string {
+  return response
+    .headersArray()
+    .filter((header) => header.name.toLowerCase() === 'set-cookie')
+    .map((header) => header.value.split(';')[0])
+    .join('; ');
+}
+
+async function registerOwner(
+  request: APIRequestContext,
+  email: string,
+  organizationName: string,
+): Promise<{ cookies: string; csrfToken: string; organizationId: string }> {
+  const response = await request.post(`${apiBase}/api/v1/auth/register`, {
+    data: {
+      email,
+      password: 'password123',
+      name: 'Owner',
+      organizationName,
+    },
+  });
+  await expectOk(response, 'register');
+  const body = (await response.json()) as {
+    organization: { id: string };
+    csrfToken: string;
+  };
+  return {
+    cookies: cookieHeader(response),
+    csrfToken: body.csrfToken,
+    organizationId: body.organization.id,
+  };
+}
 
 test.describe('VaultStack storage dashboard', () => {
   test('login → storage → bucket → upload → list → metadata → download → delete', async ({
@@ -21,13 +63,15 @@ test.describe('VaultStack storage dashboard', () => {
     await page.getByLabel('Password').fill(password);
     await page.getByRole('button', { name: 'Create account' }).click();
 
-    await expect(page.getByRole('heading', { name: 'Storage overview' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Storage overview' })).toBeVisible({
+      timeout: 15_000,
+    });
 
-    await page.getByRole('link', { name: 'Buckets' }).click();
+    await page.getByRole('link', { name: 'Buckets', exact: true }).click();
     await page.getByRole('button', { name: 'Create bucket' }).click();
     await page.getByLabel('Bucket name').fill(bucketName);
-    await page.getByRole('button', { name: 'Create' }).click();
-    await expect(page.getByText(bucketName)).toBeVisible();
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    await expect(page.getByRole('button', { name: bucketName })).toBeVisible();
 
     await page.getByRole('link', { name: 'Files' }).click();
     await page.getByLabel('Select bucket').selectOption({ label: bucketName });
@@ -45,24 +89,20 @@ test.describe('VaultStack storage dashboard', () => {
     await expect(page.getByText('Object details')).toBeVisible();
     await expect(page.getByText(fileName).first()).toBeVisible();
 
-    const downloadPromise = page.waitForEvent('popup');
+    const downloadPromise = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Download' }).first().click();
-    const downloadPage = await downloadPromise;
-    await expect(downloadPage).toHaveURL(/content\?token=/);
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toMatch(/hello-e2e/);
 
     await page.getByRole('button', { name: `Delete ${fileName}` }).click();
-    await page.getByRole('button', { name: 'Delete' }).click();
+    await page.getByRole('button', { name: 'Delete', exact: true }).click();
     await expect(page.getByText('This folder is empty')).toBeVisible({ timeout: 10_000 });
 
     const loginResponse = await request.post(`${apiBase}/api/v1/auth/login`, {
       data: { email, password },
     });
-    expect(loginResponse.ok()).toBeTruthy();
-    const loginCookies = loginResponse
-      .headersArray()
-      .filter((header) => header.name.toLowerCase() === 'set-cookie')
-      .map((header) => header.value.split(';')[0])
-      .join('; ');
+    await expectOk(loginResponse, 'login');
+    const loginCookies = cookieHeader(loginResponse);
 
     const me = await request.get(`${apiBase}/api/v1/auth/me`, {
       headers: { Cookie: loginCookies },
@@ -95,11 +135,8 @@ test.describe('VaultStack storage dashboard', () => {
         organizationName: 'Other Org',
       },
     });
-    const otherCookies = otherRegister
-      .headersArray()
-      .filter((header) => header.name.toLowerCase() === 'set-cookie')
-      .map((header) => header.value.split(';')[0])
-      .join('; ');
+    await expectOk(otherRegister, 'cross-org register');
+    const otherCookies = cookieHeader(otherRegister);
     const otherCsrf = ((await otherRegister.json()) as { csrfToken: string }).csrfToken;
 
     const crossOrg = await request.get(`${apiBase}/api/v1/storage/buckets/${bucketId}`, {
@@ -112,7 +149,8 @@ test.describe('VaultStack storage dashboard', () => {
     expect(crossOrg.status()).toBe(403);
   });
 
-  test('shows upload failure and progress for large uploads', async ({ page }) => {
+  test('shows upload progress for large multipart uploads', async ({ page }) => {
+    test.setTimeout(120_000);
     const email = `storage-large-${Date.now()}@example.com`;
     const password = 'password123';
     const bucketName = `large-bucket-${Date.now()}`;
@@ -125,16 +163,19 @@ test.describe('VaultStack storage dashboard', () => {
     await page.getByLabel('Password').fill(password);
     await page.getByRole('button', { name: 'Create account' }).click();
 
-    await page.getByRole('link', { name: 'Buckets' }).click();
+    await expect(page.getByRole('heading', { name: 'Storage overview' })).toBeVisible({
+      timeout: 15_000,
+    });
+    await page.getByRole('link', { name: 'Buckets', exact: true }).click();
     await page.getByRole('button', { name: 'Create bucket' }).click();
     await page.getByLabel('Bucket name').fill(bucketName);
-    await page.getByRole('button', { name: 'Create' }).click();
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
 
     await page.getByRole('link', { name: 'Files' }).click();
     await page.getByLabel('Select bucket').selectOption({ label: bucketName });
     await page.getByRole('button', { name: 'Upload' }).click();
 
-    const largeBuffer = Buffer.alloc(512 * 1024, 'a');
+    const largeBuffer = Buffer.alloc(MULTIPART_THRESHOLD_BYTES, 'a');
     await page.locator('input[type="file"]').setInputFiles({
       name: 'large.bin',
       mimeType: 'application/octet-stream',
@@ -142,7 +183,8 @@ test.describe('VaultStack storage dashboard', () => {
     });
 
     await expect(page.getByText('Uploads')).toBeVisible();
-    await expect(page.getByText(/uploading|completed/i)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/uploading|completing|completed/i)).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText('completed')).toBeVisible({ timeout: 60_000 });
   });
 
   test('rejects unauthorized delete attempts via API', async ({ request }) => {
@@ -150,67 +192,45 @@ test.describe('VaultStack storage dashboard', () => {
     const viewerEmail = `viewer-${Date.now()}@example.com`;
     const password = 'password123';
 
-    const ownerRegister = await request.post(`${apiBase}/api/v1/auth/register`, {
-      data: {
-        email: ownerEmail,
-        password,
-        name: 'Owner',
-        organizationName: 'Delete Test Org',
-      },
-    });
-    expect(ownerRegister.ok()).toBeTruthy();
-
-    const ownerBody = (await ownerRegister.json()) as {
-      organization: { id: string };
-      csrfToken: string;
+    const owner = await registerOwner(request, ownerEmail, 'Delete Test Org');
+    const ownerHeaders = {
+      Cookie: owner.cookies,
+      'x-csrf-token': owner.csrfToken,
+      'x-vaultstack-organization': owner.organizationId,
     };
-    const ownerCookies = ownerRegister
-      .headersArray()
-      .filter((header) => header.name.toLowerCase() === 'set-cookie')
-      .map((header) => header.value.split(';')[0])
-      .join('; ');
 
     const bucketResponse = await request.post(`${apiBase}/api/v1/storage/buckets`, {
-      headers: {
-        Cookie: ownerCookies,
-        'x-csrf-token': ownerBody.csrfToken,
-        'x-vaultstack-organization': ownerBody.organization.id,
-      },
+      headers: ownerHeaders,
       data: { name: `delete-test-${Date.now()}` },
     });
+    await expectOk(bucketResponse, 'create bucket');
     const bucketId = ((await bucketResponse.json()) as { bucket: { id: string } }).bucket.id;
 
     const initiate = await request.post(`${apiBase}/api/v1/storage/uploads/initiate`, {
-      headers: {
-        Cookie: ownerCookies,
-        'x-csrf-token': ownerBody.csrfToken,
-        'x-vaultstack-organization': ownerBody.organization.id,
-      },
+      headers: ownerHeaders,
       data: { bucketId, key: 'protected.txt', contentType: 'text/plain', size: 4 },
     });
+    await expectOk(initiate, 'initiate upload');
     const initiated = (await initiate.json()) as { upload: { id: string }; uploadUrl: string };
-    await request.put(initiated.uploadUrl, { data: 'data' });
+    const put = await request.put(initiated.uploadUrl, {
+      headers: { 'Content-Type': 'text/plain' },
+      data: Buffer.from('data'),
+    });
+    await expectOk(put, 'put upload bytes');
     const complete = await request.post(
       `${apiBase}/api/v1/storage/uploads/${initiated.upload.id}/complete`,
       {
-        headers: {
-          Cookie: ownerCookies,
-          'x-csrf-token': ownerBody.csrfToken,
-          'x-vaultstack-organization': ownerBody.organization.id,
-        },
+        headers: ownerHeaders,
         data: {},
       },
     );
+    await expectOk(complete, 'complete upload');
     const objectId = ((await complete.json()) as { object: { id: string } }).object.id;
 
     const viewerCreate = await request.post(
-      `${apiBase}/api/v1/organizations/${ownerBody.organization.id}/users`,
+      `${apiBase}/api/v1/organizations/${owner.organizationId}/users`,
       {
-        headers: {
-          Cookie: ownerCookies,
-          'x-csrf-token': ownerBody.csrfToken,
-          'x-vaultstack-organization': ownerBody.organization.id,
-        },
+        headers: ownerHeaders,
         data: {
           email: viewerEmail,
           password,
@@ -219,23 +239,20 @@ test.describe('VaultStack storage dashboard', () => {
         },
       },
     );
-    expect(viewerCreate.ok()).toBeTruthy();
+    await expectOk(viewerCreate, 'create viewer');
 
     const viewerLogin = await request.post(`${apiBase}/api/v1/auth/login`, {
       data: { email: viewerEmail, password },
     });
+    await expectOk(viewerLogin, 'viewer login');
     const viewerBody = (await viewerLogin.json()) as { csrfToken: string };
-    const viewerCookies = viewerLogin
-      .headersArray()
-      .filter((header) => header.name.toLowerCase() === 'set-cookie')
-      .map((header) => header.value.split(';')[0])
-      .join('; ');
+    const viewerCookies = cookieHeader(viewerLogin);
 
     const deleteAttempt = await request.delete(`${apiBase}/api/v1/storage/objects/${objectId}`, {
       headers: {
         Cookie: viewerCookies,
         'x-csrf-token': viewerBody.csrfToken,
-        'x-vaultstack-organization': ownerBody.organization.id,
+        'x-vaultstack-organization': owner.organizationId,
       },
     });
 

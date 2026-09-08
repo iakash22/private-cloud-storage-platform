@@ -3,20 +3,27 @@ import { hashToken } from '@vaultstack/auth';
 import { MultipartUploadStatus, UploadStatus, type PrismaClient } from '@vaultstack/database';
 import type { Logger } from '@vaultstack/logger';
 import type {
+  MultipartPartTransferDescriptor,
+  MultipartUploadStatusName,
   PublicMultipartPart,
+  PublicMultipartSession,
   PublicMultipartSessionDetail,
+  PublicMultipartSessionListPage,
   PublicStorageObject,
   PublicUpload,
 } from '@vaultstack/types';
+import { MULTIPART_TRANSFER_TRANSPORTS } from '@vaultstack/types';
 import { writeAuditLog } from '../../../lib/audit.js';
 import {
   AppError,
+  storageAccessDenied,
   storageChecksumMismatch,
   storageChecksumUnverifiable,
   storageMultipartInvalidPart,
   storageMultipartNotFound,
   storageObjectNotFound,
   storageObjectTooLarge,
+  storageProviderUnavailable,
   storageSizeMismatch,
   storageUploadExpired,
   storageUploadInvalidState,
@@ -25,16 +32,18 @@ import {
 } from '../../../lib/errors.js';
 import {
   serializeMultipartPart,
+  serializeMultipartSession,
   serializeMultipartSessionDetail,
   serializeStorageObject,
   serializeUpload,
 } from '../mappers/storage.mapper.js';
-import { ObjectTooLargeError } from '../domain/integrity.js';
+import { ObjectTooLargeError, normalizeEtag } from '../domain/integrity.js';
 import { assertValidObjectKey } from '../domain/object-key.js';
 import type { UploadRepository } from '../repositories/upload.repository.js';
 import type { ObjectRepository } from '../repositories/object.repository.js';
 import type { RequestMeta } from './bucket.service.js';
 import { publishObjectVersion } from './publish-object.js';
+import { reclaimSupersededVersions } from './reclaim-versions.js';
 import type { StorageMetrics } from './storage.metrics.js';
 import type { StorageService } from './storage.service.js';
 import type { StorageTokenService } from './storage-token.service.js';
@@ -91,7 +100,12 @@ export interface UploadService {
     meta: RequestMeta;
   }): Promise<void>;
 
-  initiateMultipart(input: InitiateMultipartInput): Promise<{ uploadId: string; providerUploadId: string; key: string }>;
+  initiateMultipart(input: InitiateMultipartInput): Promise<{
+    uploadId: string;
+    providerUploadId: string;
+    key: string;
+    session: PublicMultipartSession;
+  }>;
   uploadPart(input: {
     organizationId: string;
     uploadId: string;
@@ -99,7 +113,34 @@ export interface UploadService {
     partNumber: number;
     body: Readable;
     signal?: AbortSignal;
-  }): Promise<{ partNumber: number; etag: string; size: number }>;
+  }): Promise<{ partNumber: number; etag: string; size: number; checksumSha256?: string }>;
+  createPartDestination(input: {
+    organizationId: string;
+    uploadId: string;
+    userId: string;
+    partNumber: number;
+    size?: number;
+    checksumSha256?: string;
+    baseUrl: string;
+    meta: RequestMeta;
+  }): Promise<MultipartPartTransferDescriptor>;
+  confirmPart(input: {
+    organizationId: string;
+    uploadId: string;
+    userId: string;
+    partNumber: number;
+    etag: string;
+    size: number;
+    checksumSha256?: string;
+    meta: RequestMeta;
+  }): Promise<PublicMultipartPart>;
+  receivePart(input: {
+    uploadId: string;
+    partNumber: number;
+    token: string;
+    body: Readable;
+    signal?: AbortSignal;
+  }): Promise<PublicMultipartPart>;
   completeMultipart(input: {
     organizationId: string;
     uploadId: string;
@@ -128,6 +169,13 @@ export interface UploadService {
     uploadId: string;
     userId: string;
   }): Promise<PublicMultipartPart[]>;
+  listMultipartSessions(input: {
+    organizationId: string;
+    userId: string;
+    status?: MultipartUploadStatusName;
+    limit?: number;
+    cursor?: string;
+  }): Promise<PublicMultipartSessionListPage>;
 
   /** Expires abandoned uploads and reclaims their staged bytes. */
   cleanupExpired(): Promise<{ uploads: number; multipart: number }>;
@@ -402,7 +450,6 @@ export function createUploadService(deps: {
       }
 
       const existing = await objects.findByKey(row.organizationId, row.bucketId, row.key);
-      const previousPhysicalKey = existing?.physicalKey;
       const objectId = existing?.id ?? deriveObjectId(row.stagingKey);
       const versionId = deriveVersionId(row.stagingKey);
 
@@ -430,11 +477,15 @@ export function createUploadService(deps: {
 
       await uploads.markCompleted(row.id, saved.id, BigInt(head.size), row.checksum ?? '');
 
-      if (previousPhysicalKey && previousPhysicalKey !== row.stagingKey) {
-        await resolved.provider
-          .deleteObject(storage.locationFor(resolved.bucket, previousPhysicalKey))
-          .catch(() => undefined);
-      }
+      await reclaimSupersededVersions({
+        prisma,
+        provider: resolved.provider,
+        locationFor: (key) => storage.locationFor(resolved.bucket, key),
+        organizationId: row.organizationId,
+        objectId: saved.id,
+        versioning: resolved.bucket.versioning,
+        logger,
+      });
 
       metrics.uploadCompleted({
         organizationId: row.organizationId,
@@ -497,6 +548,7 @@ export function createUploadService(deps: {
         throw storageObjectTooLarge(limits.maxObjectSizeBytes);
       }
       const resolved = await storage.resolveBucket(input.organizationId, input.bucketId);
+      await assertCapacity(resolved.provider, input.declaredSize ?? 0);
 
       const existing = await objects.findByKey(input.organizationId, input.bucketId, key);
       const objectId = existing?.id ?? storage.newObjectId();
@@ -537,7 +589,12 @@ export function createUploadService(deps: {
         userAgent: input.meta.userAgent,
       });
 
-      return { uploadId: row.id, providerUploadId: row.providerUploadId, key };
+      return {
+        uploadId: row.id,
+        providerUploadId: row.providerUploadId,
+        key,
+        session: serializeMultipartSession(row),
+      };
     },
 
     async uploadPart(input) {
@@ -594,6 +651,8 @@ export function createUploadService(deps: {
         throw storageObjectTooLarge(limits.maxObjectSizeBytes);
       }
 
+      await assertCapacity(resolved.provider, remainingBytes);
+
       await uploads.setMultipartStatus(
         row.organizationId,
         row.id,
@@ -621,7 +680,7 @@ export function createUploadService(deps: {
         throw error;
       }
 
-      await uploads.upsertPart({
+      const recorded = await uploads.upsertPart({
         multipartUploadId: row.id,
         partNumber: result.partNumber,
         size: BigInt(result.size),
@@ -629,8 +688,220 @@ export function createUploadService(deps: {
         checksum: result.checksum ?? null,
       });
       await uploads.touchMultipart(row.organizationId, row.id);
+      metrics.partUploaded({
+        organizationId: row.organizationId,
+        bucketId: row.bucketId,
+        partNumber: result.partNumber,
+        bytes: result.size,
+      });
 
-      return { partNumber: result.partNumber, etag: result.etag, size: result.size };
+      return {
+        partNumber: recorded.partNumber,
+        etag: recorded.etag,
+        size: Number(recorded.size),
+        ...(recorded.checksum ? { checksumSha256: recorded.checksum } : {}),
+      };
+    },
+
+    async createPartDestination(input) {
+      const row = await loadActiveMultipart(
+        uploads,
+        input.organizationId,
+        input.uploadId,
+        input.userId,
+        input.partNumber,
+        limits.multipartMaxParts,
+      );
+      const resolved = await storage.resolveBucket(row.organizationId, row.bucketId);
+      const remainingBytes = await assertRemainingPartBudget(
+        uploads,
+        row,
+        input.partNumber,
+        input.size,
+        limits,
+      );
+      await assertCapacity(resolved.provider, input.size ?? remainingBytes);
+
+      await uploads.setMultipartStatus(
+        row.organizationId,
+        row.id,
+        MultipartUploadStatus.UPLOADING,
+        null,
+      );
+
+      const location = storage.locationFor(resolved.bucket, row.stagingKey);
+      const expiresInSeconds = Math.min(limits.presignedUrlTtlSeconds, limits.uploadTtlSeconds);
+
+      if (resolved.provider.capabilities.directPartDestinations) {
+        if (input.size === undefined) {
+          throw validationError(
+            'size is required when uploading a part directly to this storage provider',
+          );
+        }
+
+        const presigned = await resolved.provider.createPresignedPartUrl({
+          ...location,
+          providerUploadId: row.providerUploadId,
+          partNumber: input.partNumber,
+          expiresInSeconds,
+          contentLength: input.size,
+          checksumSha256: input.checksumSha256,
+        });
+
+        await writeAuditLog(prisma, {
+          organizationId: row.organizationId,
+          userId: input.userId,
+          action: 'storage.multipart.part_destination',
+          resourceType: 'multipart_upload',
+          resourceId: row.id,
+          metadata: { partNumber: input.partNumber, transport: MULTIPART_TRANSFER_TRANSPORTS.DIRECT },
+          ipAddress: input.meta.ipAddress,
+          userAgent: input.meta.userAgent,
+        });
+
+        return {
+          transport: MULTIPART_TRANSFER_TRANSPORTS.DIRECT,
+          url: presigned.url,
+          method: 'PUT',
+          headers: presigned.headers ?? {},
+          expiresAt: presigned.expiresAt.toISOString(),
+          partNumber: input.partNumber,
+        };
+      }
+
+      const issued = tokens.issue(
+        {
+          purpose: 'multipart-part',
+          organizationId: row.organizationId,
+          subjectId: row.id,
+          partNumber: input.partNumber,
+        },
+        expiresInSeconds,
+      );
+
+      await writeAuditLog(prisma, {
+        organizationId: row.organizationId,
+        userId: input.userId,
+        action: 'storage.multipart.part_destination',
+        resourceType: 'multipart_upload',
+        resourceId: row.id,
+        metadata: { partNumber: input.partNumber, transport: MULTIPART_TRANSFER_TRANSPORTS.VAULTSTACK },
+        ipAddress: input.meta.ipAddress,
+        userAgent: input.meta.userAgent,
+      });
+
+      return {
+        transport: MULTIPART_TRANSFER_TRANSPORTS.VAULTSTACK,
+        url: `${input.baseUrl}/api/v1/storage/multipart-uploads/${row.id}/parts/${input.partNumber}/content?token=${issued.token}`,
+        method: 'PUT',
+        headers: {},
+        expiresAt: issued.expiresAt.toISOString(),
+        partNumber: input.partNumber,
+      };
+    },
+
+    async confirmPart(input) {
+      const row = await loadActiveMultipart(
+        uploads,
+        input.organizationId,
+        input.uploadId,
+        input.userId,
+        input.partNumber,
+        limits.multipartMaxParts,
+      );
+      const resolved = await storage.resolveBucket(row.organizationId, row.bucketId);
+      await assertRemainingPartBudget(uploads, row, input.partNumber, input.size, limits);
+
+      let etag = input.etag;
+      let size = input.size;
+      let checksum = input.checksumSha256 ?? null;
+
+      if (resolved.provider.capabilities.providerPartInspection) {
+        const inspected = await resolved.provider.inspectPart({
+          ...storage.locationFor(resolved.bucket, row.stagingKey),
+          providerUploadId: row.providerUploadId,
+          partNumber: input.partNumber,
+        });
+        if (!inspected) {
+          throw storageMultipartInvalidPart(`Part ${input.partNumber} was not found on the provider`);
+        }
+        if (normalizeEtag(inspected.etag) !== normalizeEtag(input.etag)) {
+          throw storageMultipartInvalidPart(`Part ${input.partNumber} etag does not match`);
+        }
+        if (inspected.size !== input.size) {
+          throw storageSizeMismatch();
+        }
+        if (
+          input.checksumSha256 &&
+          inspected.checksumSha256 &&
+          normalizeChecksum(inspected.checksumSha256) !== normalizeChecksum(input.checksumSha256)
+        ) {
+          throw storageChecksumMismatch();
+        }
+        etag = inspected.etag;
+        size = inspected.size;
+        checksum = inspected.checksumSha256
+          ? normalizeChecksum(inspected.checksumSha256)
+          : input.checksumSha256 ?? null;
+      }
+
+      const recorded = await uploads.upsertPart({
+        multipartUploadId: row.id,
+        partNumber: input.partNumber,
+        size: BigInt(size),
+        etag,
+        checksum,
+      });
+      await uploads.touchMultipart(row.organizationId, row.id);
+      metrics.partUploaded({
+        organizationId: row.organizationId,
+        bucketId: row.bucketId,
+        partNumber: input.partNumber,
+        bytes: size,
+      });
+
+      await writeAuditLog(prisma, {
+        organizationId: row.organizationId,
+        userId: input.userId,
+        action: 'storage.multipart.part_confirmed',
+        resourceType: 'multipart_upload',
+        resourceId: row.id,
+        metadata: { partNumber: input.partNumber, size },
+        ipAddress: input.meta.ipAddress,
+        userAgent: input.meta.userAgent,
+      });
+
+      return serializeMultipartPart(recorded);
+    },
+
+    async receivePart(input) {
+      const claims = tokens.verify(input.token, 'multipart-part');
+      if (claims.subjectId !== input.uploadId || claims.partNumber !== input.partNumber) {
+        throw storageAccessDenied('Storage token does not grant access to this part');
+      }
+
+      const row = await uploads.findMultipartById(claims.organizationId, input.uploadId);
+      if (!row) {
+        throw storageMultipartNotFound();
+      }
+
+      const part = await this.uploadPart({
+        organizationId: row.organizationId,
+        uploadId: row.id,
+        userId: row.userId ?? '',
+        partNumber: input.partNumber,
+        body: input.body,
+        signal: input.signal,
+      });
+
+      return {
+        partNumber: part.partNumber,
+        size: part.size,
+        etag: part.etag,
+        checksumSha256: part.checksumSha256 ?? null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
     },
 
     async completeMultipart(input) {
@@ -673,7 +944,8 @@ export function createUploadService(deps: {
 
       const storedByNumber = new Map(stored.map((part) => [part.partNumber, part]));
       for (const [index, part] of input.parts.entries()) {
-        if (index > 0 && part.partNumber <= input.parts[index - 1]!.partNumber) {
+        const previous = index > 0 ? input.parts[index - 1] : undefined;
+        if (previous && part.partNumber <= previous.partNumber) {
           throw storageMultipartInvalidPart(
             'Completion parts must be unique and ordered by part number',
           );
@@ -687,8 +959,7 @@ export function createUploadService(deps: {
         }
         if (
           part.checksumSha256 &&
-          (!match.checksum ||
-            match.checksum.toLowerCase() !== part.checksumSha256.toLowerCase())
+          match.checksum?.toLowerCase() !== part.checksumSha256.toLowerCase()
         ) {
           throw storageMultipartInvalidPart(
             `Part ${part.partNumber} checksum does not match`,
@@ -790,6 +1061,16 @@ export function createUploadService(deps: {
 
       await uploads.markMultipartCompleted(row.organizationId, row.id);
 
+      await reclaimSupersededVersions({
+        prisma,
+        provider: resolved.provider,
+        locationFor: (key) => storage.locationFor(resolved.bucket, key),
+        organizationId: row.organizationId,
+        objectId: saved.id,
+        versioning: resolved.bucket.versioning,
+        logger,
+      });
+
       metrics.multipartCompleted({
         organizationId: row.organizationId,
         bucketId: row.bucketId,
@@ -816,6 +1097,29 @@ export function createUploadService(deps: {
         throw storageMultipartNotFound();
       }
 
+      requireMultipartActor(row, input.userId);
+
+      if (row.status === MultipartUploadStatus.COMPLETED) {
+        throw storageUploadInvalidState('Completed multipart uploads cannot be aborted');
+      }
+
+      if (
+        row.status === MultipartUploadStatus.ABORTED ||
+        row.status === MultipartUploadStatus.EXPIRED
+      ) {
+        throw storageUploadInvalidState(`Multipart upload is ${row.status.toLowerCase()}`);
+      }
+
+      if (row.expiresAt.getTime() <= Date.now()) {
+        await uploads.setMultipartStatus(
+          row.organizationId,
+          row.id,
+          MultipartUploadStatus.EXPIRED,
+          'expired',
+        );
+        throw storageUploadExpired();
+      }
+
       const resolved = await storage.resolveBucket(row.organizationId, row.bucketId);
 
       await resolved.provider
@@ -825,7 +1129,12 @@ export function createUploadService(deps: {
         })
         .catch(() => undefined);
 
-      await uploads.setMultipartStatus(row.id, MultipartUploadStatus.ABORTED);
+      await uploads.setMultipartStatus(
+        row.organizationId,
+        row.id,
+        MultipartUploadStatus.ABORTED,
+        null,
+      );
 
       await writeAuditLog(prisma, {
         organizationId: row.organizationId,
@@ -851,9 +1160,42 @@ export function createUploadService(deps: {
       return row.id;
     },
 
+    async getMultipartSession(input) {
+      const row = await uploads.findMultipartWithParts(input.organizationId, input.uploadId);
+      if (!row) {
+        throw storageMultipartNotFound();
+      }
+      requireMultipartActor(row, input.userId);
+      return serializeMultipartSessionDetail(row);
+    },
+
+    async listMultipartParts(input) {
+      const row = await uploads.findMultipartById(input.organizationId, input.uploadId);
+      if (!row) {
+        throw storageMultipartNotFound();
+      }
+      requireMultipartActor(row, input.userId);
+      const parts = await uploads.listParts(row.organizationId, row.id);
+      return parts.map(serializeMultipartPart);
+    },
+
+    async listMultipartSessions(input) {
+      const page = await uploads.listMultipartSessions({
+        organizationId: input.organizationId,
+        userId: input.userId,
+        status: input.status,
+        limit: input.limit ?? 25,
+        cursor: input.cursor,
+      });
+
+      return {
+        sessions: page.sessions.map(serializeMultipartSession),
+        nextCursor: page.nextCursor,
+      };
+    },
+
     /**
      * Reclaims abandoned uploads so staged parts are not kept forever.
-     * Intended to be driven by a scheduled worker in a later phase.
      */
     async cleanupExpired() {
       const now = new Date();
@@ -861,6 +1203,7 @@ export function createUploadService(deps: {
       const stale = await uploads.findStaleMultipart(now);
 
       let cleaned = 0;
+      const seenProviders = new Set<string>();
       for (const row of stale) {
         try {
           const resolved = await storage.resolveBucket(row.organizationId, row.bucketId);
@@ -870,8 +1213,21 @@ export function createUploadService(deps: {
               providerUploadId: row.providerUploadId,
             })
             .catch(() => undefined);
-          await uploads.setMultipartStatus(row.id, MultipartUploadStatus.EXPIRED);
+          await uploads.setMultipartStatus(
+            row.organizationId,
+            row.id,
+            MultipartUploadStatus.EXPIRED,
+            'expired',
+          );
           cleaned += 1;
+
+          const providerKey = `${row.organizationId}:${row.bucketId}`;
+          if (!seenProviders.has(providerKey)) {
+            seenProviders.add(providerKey);
+            await resolved.provider
+              .cleanupOrphanStaging(new Date(now.getTime() - limits.uploadTtlSeconds * 1000))
+              .catch(() => undefined);
+          }
         } catch (error) {
           logger.warn(
             {
@@ -884,7 +1240,9 @@ export function createUploadService(deps: {
         }
       }
 
-      return { uploads: expiredUploads, multipart: cleaned };
+      const result = { uploads: expiredUploads, multipart: cleaned };
+      metrics.multipartCleanup(result);
+      return result;
     },
   };
 }
@@ -920,4 +1278,117 @@ function deriveVersionId(stagingKey: string): string {
     throw validationError('Upload staging key is malformed');
   }
   return versionId;
+}
+
+function requireMultipartActor(
+  row: { userId: string | null },
+  userId: string,
+): void {
+  if (row.userId && row.userId !== userId) {
+    throw storageAccessDenied('You are not the initiator of this multipart upload');
+  }
+}
+
+async function loadActiveMultipart(
+  uploads: UploadRepository,
+  organizationId: string,
+  uploadId: string,
+  userId: string,
+  partNumber: number,
+  maxParts: number,
+) {
+  if (partNumber < 1 || partNumber > maxParts) {
+    throw storageMultipartInvalidPart(`Part number must be between 1 and ${maxParts}`);
+  }
+
+  const row = await uploads.findMultipartById(organizationId, uploadId);
+  if (!row) {
+    throw storageMultipartNotFound();
+  }
+
+  requireMultipartActor(row, userId);
+
+  if (row.expiresAt.getTime() <= Date.now()) {
+    await uploads.setMultipartStatus(
+      row.organizationId,
+      row.id,
+      MultipartUploadStatus.EXPIRED,
+      'expired',
+    );
+    throw storageUploadExpired();
+  }
+
+  if (
+    row.status !== MultipartUploadStatus.INITIATED &&
+    row.status !== MultipartUploadStatus.UPLOADING
+  ) {
+    throw storageUploadInvalidState(`Multipart upload is ${row.status.toLowerCase()}`);
+  }
+
+  return row;
+}
+
+async function assertCapacity(
+  provider: { capabilities: { capacityChecks: boolean }; checkCapacity: (input: { requiredBytes: number }) => Promise<{ ok: boolean }> },
+  requiredBytes: number,
+): Promise<void> {
+  if (!provider.capabilities.capacityChecks || requiredBytes <= 0) {
+    return;
+  }
+
+  const check = await provider.checkCapacity({ requiredBytes });
+  if (!check.ok) {
+    throw storageProviderUnavailable('Storage volume does not have enough free space');
+  }
+}
+
+function remainingPartBudget(
+  row: { declaredSize: bigint | null },
+  storedParts: { partNumber: number; size: bigint }[],
+  incomingSize: number | undefined,
+  limits: { maxObjectSizeBytes: number; maxRequestSizeBytes: number },
+): number {
+  const otherPartBytes = storedParts.reduce((total, part) => total + Number(part.size), 0);
+  const declaredLimit =
+    row.declaredSize === null ? limits.maxObjectSizeBytes : Number(row.declaredSize);
+  return Math.min(
+    limits.maxRequestSizeBytes,
+    limits.maxObjectSizeBytes - otherPartBytes,
+    declaredLimit - otherPartBytes,
+    incomingSize ?? limits.maxRequestSizeBytes,
+  );
+}
+
+async function assertRemainingPartBudget(
+  uploads: UploadRepository,
+  row: { id: string; organizationId: string; declaredSize: bigint | null },
+  partNumber: number,
+  incomingSize: number | undefined,
+  limits: { maxObjectSizeBytes: number; maxRequestSizeBytes: number },
+): Promise<number> {
+  const storedParts = await uploads.listParts(row.organizationId, row.id);
+  const otherParts = storedParts.filter((part) => part.partNumber !== partNumber);
+  const remainingBytes = remainingPartBudget(row, otherParts, incomingSize, limits);
+  if (remainingBytes < 0 || (incomingSize !== undefined && incomingSize > remainingBytes)) {
+    throw storageObjectTooLarge(limits.maxObjectSizeBytes);
+  }
+  return remainingBytes;
+}
+
+function normalizeChecksum(value: string): string {
+  const trimmed = value.trim();
+  if (/^[a-fA-F0-9]{64}$/.test(trimmed)) {
+    return trimmed.toLowerCase();
+  }
+
+  try {
+    const asHex = Buffer.from(trimmed, 'base64').toString('hex');
+    if (/^[a-f0-9]{64}$/.test(asHex)) {
+      return asHex;
+    }
+  } catch {
+    // Fall through and compare the raw value.
+  }
+
+  return trimmed.toLowerCase();
 }

@@ -1,4 +1,9 @@
-import { objectIdParamsSchema, uploadContentQuerySchema, uploadIdParamsSchema } from '@vaultstack/validation';
+import {
+  multipartPartParamsSchema,
+  objectIdParamsSchema,
+  uploadContentQuerySchema,
+  uploadIdParamsSchema,
+} from '@vaultstack/validation';
 import { Router } from 'express';
 import type { AppContainer } from '../../container/app-container.js';
 import { validateParams, validateQuery } from '../../middleware/validate.js';
@@ -24,6 +29,13 @@ export function createStorageContentRouter(container: AppContainer): Router {
     validateParams(uploadIdParamsSchema),
     validateQuery(uploadContentQuerySchema),
     controller.uploadContent,
+  );
+
+  router.put(
+    '/multipart-uploads/:uploadId/parts/:partNumber/content',
+    validateParams(multipartPartParamsSchema),
+    validateQuery(uploadContentQuerySchema),
+    controller.uploadPartContent,
   );
 
   return router;

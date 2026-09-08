@@ -1,5 +1,6 @@
 import {
   ChecksumAlgorithm,
+  type ObjectVersion,
   type Prisma,
   type PrismaClient,
   type StorageObject,
@@ -57,6 +58,12 @@ export interface ObjectRepository {
   replace(id: string, input: UpsertObjectRecord): Promise<StorageObject>;
   delete(organizationId: string, id: string): Promise<void>;
   updateKey(organizationId: string, id: string, key: string): Promise<StorageObject>;
+  listVersions(organizationId: string, objectId: string): Promise<ObjectVersion[]>;
+  findVersion(
+    organizationId: string,
+    objectId: string,
+    versionId: string,
+  ): Promise<ObjectVersion | null>;
 }
 
 export function createObjectRepository(prisma: PrismaClient): ObjectRepository {
@@ -152,6 +159,19 @@ export function createObjectRepository(prisma: PrismaClient): ObjectRepository {
 
       return prisma.storageObject.findFirstOrThrow({ where: { id, organizationId } });
     },
+
+    async listVersions(organizationId, objectId) {
+      return prisma.objectVersion.findMany({
+        where: { organizationId, objectId },
+        orderBy: { createdAt: 'desc' },
+      });
+    },
+
+    async findVersion(organizationId, objectId, versionId) {
+      return prisma.objectVersion.findFirst({
+        where: { organizationId, objectId, versionId },
+      });
+    },
   };
 }
 
@@ -171,6 +191,7 @@ function buildListWhere(query: ListObjectsQuery): Prisma.StorageObjectWhereInput
   return {
     organizationId: query.organizationId,
     bucketId: query.bucketId,
+    isDeleted: false,
     ...(Object.keys(key).length > 0 ? { key } : {}),
   };
 }
