@@ -221,6 +221,30 @@ Storage error codes: `STORAGE_BUCKET_NOT_FOUND`, `STORAGE_BUCKET_NOT_EMPTY`,
 See [../storage/architecture.md](../storage/architecture.md) for the flows and
 security model.
 
+### CI/CD artifacts
+
+Metadata under `/api/v1/artifacts`. Organization context matches storage (cookie/header/API key). Bytes are stored as normal `StorageObject` rows in the org `vs-artifacts` bucket.
+
+- `GET/POST    /api/v1/artifacts/projects` — `artifact.read` / `artifact.upload`
+- `GET/PATCH/DELETE /api/v1/artifacts/projects/:projectId` — delete requires `artifact.delete`
+- `GET/POST    /api/v1/artifacts/projects/:projectId/builds`
+- `GET/PATCH/DELETE /api/v1/artifacts/projects/:projectId/builds/:buildId`
+- `GET/POST    /api/v1/artifacts/projects/:projectId/builds/:buildId/artifacts` — initiate upload
+- `GET        /api/v1/artifacts/projects/:projectId/artifacts`
+- `GET        /api/v1/artifacts/projects/:projectId/releases`
+- `GET/DELETE /api/v1/artifacts/:artifactId`
+- `GET        /api/v1/artifacts/:artifactId/versions`
+- `GET        /api/v1/artifacts/versions/:versionId`
+- `POST       /api/v1/artifacts/versions/:versionId/complete` — `artifact.upload`
+- `POST       /api/v1/artifacts/versions/:versionId/download-url` — `artifact.read`
+- `POST       /api/v1/artifacts/versions/:versionId/release` — `artifact.upload`
+- `DELETE     /api/v1/artifacts/versions/:versionId` — `artifact.delete`
+
+Artifact error codes: `ARTIFACT_PROJECT_NOT_FOUND`, `ARTIFACT_BUILD_NOT_FOUND`,
+`ARTIFACT_NOT_FOUND`, `ARTIFACT_VERSION_NOT_FOUND`, `ARTIFACT_RELEASE_CONFLICT`.
+
+See [../artifacts/README.md](../artifacts/README.md).
+
 ### S3-compatible gateway
 
 Mounted at `/api/v1/s3` when `S3_GATEWAY_ENABLED=true`. Phase 3 provides the

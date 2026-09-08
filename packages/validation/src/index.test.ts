@@ -4,9 +4,11 @@ import {
   completeMultipartBodySchema,
   confirmMultipartPartBodySchema,
   createLifecyclePolicyBodySchema,
+  createProjectBodySchema,
   createShareBodySchema,
   createStorageProviderBodySchema,
   healthResponseSchema,
+  initiateArtifactBodySchema,
   initiateMultipartBodySchema,
   listMultipartSessionsQuerySchema,
   multipartPartParamsSchema,
@@ -204,6 +206,30 @@ describe('@vaultstack/validation', () => {
         dialect: 'NOT_A_VENDOR',
         accessKeyId: 'minioadmin',
         secretAccessKey: 'minioadmin',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('validates CI artifact project and upload payloads', () => {
+    expect(
+      createProjectBodySchema.safeParse({
+        name: 'api',
+        slug: 'api-service',
+        retentionDays: 30,
+      }).success,
+    ).toBe(true);
+    expect(createProjectBodySchema.safeParse({ name: 'api', slug: 'API' }).success).toBe(false);
+    expect(
+      initiateArtifactBodySchema.safeParse({
+        name: 'app.tar.gz',
+        kind: 'BUNDLE',
+        size: 12,
+      }).success,
+    ).toBe(true);
+    expect(
+      initiateArtifactBodySchema.safeParse({
+        name: 'app.tar.gz',
+        kind: 'NOT_A_KIND',
       }).success,
     ).toBe(false);
   });

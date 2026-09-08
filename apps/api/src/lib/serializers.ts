@@ -6,6 +6,12 @@ export { serializePermission } from '../modules/permissions/mappers/permission.m
 export { serializeApiKey } from '../modules/auth/mappers/api-key.mapper.js';
 export { serializeAuditLog } from '../modules/audit/mappers/audit-log.mapper.js';
 export {
+  serializeArtifact,
+  serializeArtifactVersion,
+  serializeBuild,
+  serializeProject,
+} from '../modules/artifacts/mappers/artifact.mapper.js';
+export {
   serializeStorageProvider,
   serializeBucket,
   serializeStorageObject,

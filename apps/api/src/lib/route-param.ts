@@ -9,3 +9,9 @@ export function routeParam(req: Request, name: string): string {
   }
   return value;
 }
+
+export function optionalRouteParam(req: Request, name: string): string | undefined {
+  const raw = req.params[name];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return value ?? undefined;
+}

@@ -22,6 +22,8 @@ model User {
   sessions          Session[]
   teamMembers       TeamMember[]
   createdShareLinks ShareLink[]
+  createdProjects   Project[] @relation("ProjectCreatedBy")
+  createdBuilds     Build[]   @relation("BuildCreatedBy")
 }
 
 model Session {
@@ -66,6 +68,10 @@ model Organization {
   teamMembers      TeamMember[]
   serviceAccounts  ServiceAccount[]
   s3Credentials    S3AccessCredential[]
+  projects         Project[]
+  builds           Build[]
+  artifacts        Artifact[]
+  artifactVersions ArtifactVersion[]
 }
 
 model Team {
@@ -360,8 +366,9 @@ model StorageObject {
   organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   bucket          Bucket          @relation(fields: [bucketId], references: [id], onDelete: Cascade)
   storageProvider StorageProvider @relation(fields: [storageProviderId], references: [id], onDelete: Restrict)
-  versions        ObjectVersion[]
-  shareLinks      ShareLink[]
+  versions         ObjectVersion[]
+  shareLinks       ShareLink[]
+  artifactVersions ArtifactVersion[]
 
   @@unique([bucketId, key])
   @@index([organizationId])
@@ -621,4 +628,137 @@ model S3AccessCredential {
 
   @@index([organizationId])
   @@index([serviceAccountId])
+}
+
+// ---------------------------------------------------------------------------
+// CI/CD artifact control plane. Bytes still live in StorageProvider via
+// StorageObject; these rows are metadata only.
+// ---------------------------------------------------------------------------
+
+enum ArtifactKind {
+  GENERIC
+  PACKAGE
+  LOG
+  ARCHIVE
+  RELEASE
+  BUNDLE
+}
+
+enum BuildStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELED
+}
+
+enum ArtifactVersionStatus {
+  PENDING
+  AVAILABLE
+  FAILED
+}
+
+model Project {
+  id              String   @id @default(cuid())
+  organizationId  String
+  name            String
+  slug            String
+  description     String?
+  /// Non-release artifact versions older than this many days are eligible for
+  /// retention. Null means keep forever.
+  retentionDays   Int?
+  createdByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User?             @relation("ProjectCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  builds       Build[]
+  artifacts    Artifact[]
+  versions     ArtifactVersion[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+}
+
+model Build {
+  id              String      @id @default(cuid())
+  organizationId  String
+  projectId       String
+  number          Int
+  status          BuildStatus @default(QUEUED)
+  title           String?
+  gitRef          String?
+  commitSha       String?
+  createdByUserId String?
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy    User?             @relation("BuildCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  artifacts    Artifact[]
+  versions     ArtifactVersion[]
+
+  @@unique([projectId, number])
+  @@index([organizationId])
+  @@index([projectId])
+}
+
+model Artifact {
+  id             String       @id @default(cuid())
+  organizationId String
+  projectId      String
+  buildId        String
+  name           String
+  kind           ArtifactKind @default(GENERIC)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  build        Build             @relation(fields: [buildId], references: [id], onDelete: Cascade)
+  versions     ArtifactVersion[]
+
+  @@unique([buildId, name])
+  @@index([organizationId])
+  @@index([projectId])
+}
+
+model ArtifactVersion {
+  id              String                @id @default(cuid())
+  organizationId  String
+  projectId       String
+  buildId         String
+  artifactId      String
+  version         Int
+  versionLabel    String?
+  status          ArtifactVersionStatus @default(PENDING)
+  storageObjectId String?
+  storageUploadId String?
+  isCurrent       Boolean               @default(false)
+  isRelease       Boolean               @default(false)
+  releaseTag      String?
+  releasedAt      DateTime?
+  size            BigInt                @default(0)
+  contentType     String                @default("application/octet-stream")
+  checksum        String?
+  etag            String?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project       Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  build         Build          @relation(fields: [buildId], references: [id], onDelete: Cascade)
+  artifact      Artifact       @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  storageObject StorageObject? @relation(fields: [storageObjectId], references: [id], onDelete: Restrict)
+
+  @@unique([artifactId, version])
+  @@unique([projectId, releaseTag])
+  @@index([organizationId])
+  @@index([artifactId, isCurrent])
+  @@index([projectId, isRelease])
+  @@index([organizationId, createdAt])
 }

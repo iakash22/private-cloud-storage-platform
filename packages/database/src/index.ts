@@ -1,5 +1,8 @@
 export {
+  ArtifactKind,
+  ArtifactVersionStatus,
   BucketVersioningStatus,
+  BuildStatus,
   ChecksumAlgorithm,
   createPrismaClient,
   MultipartUploadStatus,
@@ -20,13 +23,17 @@ export { slugifyName, uniqueSlug } from './slug.js';
 
 export type {
   ApiKey,
+  Artifact,
+  ArtifactVersion,
   AuditLog,
   Bucket,
+  Build,
   MultipartPart,
   MultipartUpload,
   ObjectVersion,
   Organization,
   Permission,
+  Project,
   Role,
   S3AccessCredential,
   ServiceAccount,

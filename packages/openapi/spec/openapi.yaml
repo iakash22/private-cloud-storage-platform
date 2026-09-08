@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: VaultStack API
-  version: 0.8.0
+  version: 0.9.0
   description: |
     Self-hosted private cloud storage management platform.
 
@@ -50,6 +50,8 @@ tags:
     description: Secure object share links
   - name: S3 Gateway
     description: Inbound S3-compatible API (when enabled)
+  - name: Artifacts
+    description: CI/CD projects, builds, and artifact versions (bytes via StorageService)
 
 paths:
   /health:
@@ -1511,6 +1513,206 @@ paths:
         '200':
           description: Bytes received
 
+  /api/v1/artifacts/projects:
+    get:
+      tags: [Artifacts]
+      summary: List CI projects
+      operationId: listArtifactProjects
+      security: [{ sessionCookie: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '200':
+          description: Project list
+    post:
+      tags: [Artifacts]
+      summary: Create a CI project
+      operationId: createArtifactProject
+      security:
+        [{ sessionCookie: [], csrfHeader: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectBody'
+      responses:
+        '201':
+          description: Project created
+
+  /api/v1/artifacts/projects/{projectId}:
+    parameters:
+      - $ref: '#/components/parameters/projectId'
+    get:
+      tags: [Artifacts]
+      summary: Get a CI project
+      operationId: getArtifactProject
+      security: [{ sessionCookie: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '200':
+          description: Project
+        '404':
+          $ref: '#/components/responses/ForbiddenError'
+    patch:
+      tags: [Artifacts]
+      summary: Update a CI project
+      operationId: updateArtifactProject
+      security:
+        [{ sessionCookie: [], csrfHeader: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProjectBody'
+      responses:
+        '200':
+          description: Project updated
+    delete:
+      tags: [Artifacts]
+      summary: Delete a CI project and its artifact bytes
+      operationId: deleteArtifactProject
+      security:
+        [{ sessionCookie: [], csrfHeader: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '204':
+          description: Deleted
+
+  /api/v1/artifacts/projects/{projectId}/builds:
+    parameters:
+      - $ref: '#/components/parameters/projectId'
+    get:
+      tags: [Artifacts]
+      summary: List builds
+      operationId: listArtifactBuilds
+      security: [{ sessionCookie: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '200':
+          description: Build list
+    post:
+      tags: [Artifacts]
+      summary: Create a build
+      operationId: createArtifactBuild
+      security:
+        [{ sessionCookie: [], csrfHeader: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBuildBody'
+      responses:
+        '201':
+          description: Build created
+
+  /api/v1/artifacts/projects/{projectId}/builds/{buildId}/artifacts:
+    parameters:
+      - $ref: '#/components/parameters/projectId'
+      - $ref: '#/components/parameters/buildId'
+    get:
+      tags: [Artifacts]
+      summary: List artifacts for a build
+      operationId: listBuildArtifacts
+      security: [{ sessionCookie: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '200':
+          description: Artifact list
+    post:
+      tags: [Artifacts]
+      summary: Initiate an artifact upload (returns StorageService PUT URL)
+      operationId: initiateArtifactUpload
+      security:
+        [{ sessionCookie: [], csrfHeader: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InitiateArtifactBody'
+      responses:
+        '201':
+          description: Pending version and upload destination
+
+  /api/v1/artifacts/projects/{projectId}/releases:
+    parameters:
+      - $ref: '#/components/parameters/projectId'
+    get:
+      tags: [Artifacts]
+      summary: List released artifact versions
+      operationId: listArtifactReleases
+      security: [{ sessionCookie: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '200':
+          description: Release list
+
+  /api/v1/artifacts/versions/{versionId}/complete:
+    parameters:
+      - $ref: '#/components/parameters/artifactVersionId'
+    post:
+      tags: [Artifacts]
+      summary: Complete an artifact upload
+      operationId: completeArtifactUpload
+      security:
+        [{ sessionCookie: [], csrfHeader: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteArtifactVersionBody'
+      responses:
+        '201':
+          description: Version available
+
+  /api/v1/artifacts/versions/{versionId}/download-url:
+    parameters:
+      - $ref: '#/components/parameters/artifactVersionId'
+    post:
+      tags: [Artifacts]
+      summary: Mint a download URL for an available version
+      operationId: createArtifactDownloadUrl
+      security:
+        [{ sessionCookie: [], csrfHeader: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '200':
+          description: Presigned or VaultStack content URL
+
+  /api/v1/artifacts/versions/{versionId}/release:
+    parameters:
+      - $ref: '#/components/parameters/artifactVersionId'
+    post:
+      tags: [Artifacts]
+      summary: Mark a version as a project release
+      operationId: releaseArtifactVersion
+      security:
+        [{ sessionCookie: [], csrfHeader: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReleaseArtifactVersionBody'
+      responses:
+        '200':
+          description: Released
+        '409':
+          $ref: '#/components/responses/ConflictError'
+
+  /api/v1/artifacts/versions/{versionId}:
+    parameters:
+      - $ref: '#/components/parameters/artifactVersionId'
+    get:
+      tags: [Artifacts]
+      summary: Get an artifact version
+      operationId: getArtifactVersion
+      security: [{ sessionCookie: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '200':
+          description: Version
+    delete:
+      tags: [Artifacts]
+      summary: Delete a version and its storage object
+      operationId: deleteArtifactVersion
+      security:
+        [{ sessionCookie: [], csrfHeader: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '204':
+          description: Deleted
+
   /api/v1/s3/{proxy+}:
     parameters:
       - name: proxy
@@ -1638,6 +1840,24 @@ components:
       required: true
       schema:
         type: string
+    projectId:
+      name: projectId
+      in: path
+      required: true
+      schema:
+        type: string
+    buildId:
+      name: buildId
+      in: path
+      required: true
+      schema:
+        type: string
+    artifactVersionId:
+      name: versionId
+      in: path
+      required: true
+      schema:
+        type: string
 
   responses:
     ValidationError:
@@ -1693,6 +1913,12 @@ components:
                 - STORAGE_BUCKET_NOT_FOUND
                 - STORAGE_OBJECT_NOT_FOUND
                 - STORAGE_ACCESS_DENIED
+                - SHARE_ACCESS_DENIED
+                - ARTIFACT_PROJECT_NOT_FOUND
+                - ARTIFACT_BUILD_NOT_FOUND
+                - ARTIFACT_NOT_FOUND
+                - ARTIFACT_VERSION_NOT_FOUND
+                - ARTIFACT_RELEASE_CONFLICT
             message:
               type: string
         requestId:
@@ -2093,3 +2319,73 @@ components:
                 type: integer
               etag:
                 type: string
+
+    CreateProjectBody:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        retentionDays:
+          type: integer
+          nullable: true
+
+    UpdateProjectBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        retentionDays:
+          type: integer
+          nullable: true
+
+    CreateBuildBody:
+      type: object
+      properties:
+        title:
+          type: string
+        gitRef:
+          type: string
+        commitSha:
+          type: string
+        status:
+          type: string
+          enum: [QUEUED, RUNNING, SUCCEEDED, FAILED, CANCELED]
+
+    InitiateArtifactBody:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        kind:
+          type: string
+          enum: [GENERIC, PACKAGE, LOG, ARCHIVE, RELEASE, BUNDLE]
+        fileName:
+          type: string
+        contentType:
+          type: string
+        size:
+          type: integer
+        versionLabel:
+          type: string
+
+    CompleteArtifactVersionBody:
+      type: object
+      properties:
+        checksumSha256:
+          type: string
+          pattern: '^[a-fA-F0-9]{64}$'
+
+    ReleaseArtifactVersionBody:
+      type: object
+      properties:
+        releaseTag:
+          type: string

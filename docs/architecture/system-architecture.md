@@ -49,13 +49,14 @@ Business modules under `apps/api/src/modules/`:
 - `roles/`
 - `permissions/`
 - `audit/`
-- `storage/` — buckets, objects, uploads, multipart (Phase 3)
+- `storage/` — buckets, objects, uploads, multipart, external providers
+- `artifacts/` — CI/CD projects, builds, artifact versions (bytes via StorageService)
 
 See [database schema diagram](./database-schema.md) for the full ER model and [../api/README.md](../api/README.md) for REST endpoints.
 
 ### Workers
 
-`services/backup-worker` and `services/artifact-worker` remain BullMQ skeletons.
+`apps/api/src/workers/` runs multipart cleanup, storage lifecycle, and artifact retention. `services/backup-worker` and `services/artifact-worker` remain BullMQ skeletons; artifact retention is applied in the API worker so it can reuse StorageService.
 
 ### Shared packages
 
@@ -74,9 +75,9 @@ See [database schema diagram](./database-schema.md) for the full ER model and [.
 
 ## Data storage rules
 
-- **PostgreSQL** stores metadata only (users, organizations, roles, API keys, sessions, audit logs, storage metadata)
+- **PostgreSQL** stores metadata only (users, organizations, roles, API keys, sessions, audit logs, storage metadata, CI artifact metadata)
 - File binaries must **never** be stored in PostgreSQL
-- Object bytes live in a **StorageProvider** (local filesystem primary; S3-compatible optional)
+- Object bytes live in a **StorageProvider** (local filesystem primary; S3-compatible optional). CI artifacts reference `StorageObject` rows; they do not introduce a second storage engine.
 
 See [database-schema.md](./database-schema.md) for entity relationships.
 

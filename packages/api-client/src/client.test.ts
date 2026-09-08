@@ -38,9 +38,18 @@ describe('VaultStackApiClient storage + auth', () => {
       status: 200,
       json: () =>
         Promise.resolve({
-          user: { id: 'u1', email: 'a@b.com', name: 'A', disabled: false, createdAt: '', updatedAt: '' },
+          user: {
+            id: 'u1',
+            email: 'a@b.com',
+            name: 'A',
+            disabled: false,
+            createdAt: '',
+            updatedAt: '',
+          },
           organizations: [{ id: 'org-1', name: 'Org', slug: 'org', createdAt: '', updatedAt: '' }],
-          memberships: [{ organizationId: 'org-1', roles: ['SUPER_ADMIN'], permissions: ['storage.read'] }],
+          memberships: [
+            { organizationId: 'org-1', roles: ['SUPER_ADMIN'], permissions: ['storage.read'] },
+          ],
           csrfToken: 'csrf-token',
         }),
     });
@@ -131,5 +140,32 @@ describe('VaultStackApiClient storage + auth', () => {
       'http://localhost:3000/api/v1/storage/multipart-uploads',
       expect.objectContaining({ method: 'POST' }),
     );
+  });
+
+  it('lists CI artifact projects through the artifacts API', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ projects: [] }),
+    });
+
+    const client = new VaultStackApiClient({
+      baseUrl: 'http://localhost:3000',
+      fetchImpl,
+    });
+    client.setCsrfToken('csrf-token');
+    client.setOrganizationId('org-1');
+
+    await client.listProjects();
+
+    expect(fetchImpl).toHaveBeenCalledWith('http://localhost:3000/api/v1/artifacts/projects', {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        [ORGANIZATION_HEADER_NAME]: 'org-1',
+      },
+      body: undefined,
+      credentials: 'include',
+    });
   });
 });

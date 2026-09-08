@@ -29,11 +29,17 @@ erDiagram
     Organization ||--o{ StoragePolicy : "defines"
     Organization ||--o{ TeamMember : "scopes"
     Organization ||--o{ ShareLink : "issues"
+    Organization ||--o{ Project : "owns"
+    Organization ||--o{ Build : "owns"
+    Organization ||--o{ Artifact : "owns"
+    Organization ||--o{ ArtifactVersion : "owns"
 
     Team ||--o{ TeamMember : "has"
     Team ||--o{ ShareLink : "receives"
     User ||--o{ TeamMember : "joins"
     User ||--o{ ShareLink : "creates"
+    User ||--o{ Project : "creates"
+    User ||--o{ Build : "creates"
 
     Role ||--o{ RolePermission : "grants"
     Permission ||--o{ RolePermission : "referenced_by"
@@ -52,7 +58,15 @@ erDiagram
 
     StorageObject ||--o{ ObjectVersion : "versioned_as"
     StorageObject ||--o{ ShareLink : "shared_via"
+    StorageObject ||--o{ ArtifactVersion : "holds_bytes"
     StorageObject }o..o| ObjectVersion : "currentVersionId (logical)"
+
+    Project ||--o{ Build : "has"
+    Project ||--o{ Artifact : "has"
+    Project ||--o{ ArtifactVersion : "has"
+    Build ||--o{ Artifact : "produces"
+    Build ||--o{ ArtifactVersion : "produces"
+    Artifact ||--o{ ArtifactVersion : "versioned_as"
 
     MultipartUpload ||--o{ MultipartPart : "composed_of"
 
@@ -231,6 +245,43 @@ erDiagram
         datetime expiresAt
         datetime revokedAt
     }
+
+    Project {
+        string id PK
+        string organizationId FK
+        string name
+        string slug
+        int retentionDays
+    }
+
+    Build {
+        string id PK
+        string organizationId FK
+        string projectId FK
+        int number
+        enum status
+    }
+
+    Artifact {
+        string id PK
+        string organizationId FK
+        string projectId FK
+        string buildId FK
+        string name
+        enum kind
+    }
+
+    ArtifactVersion {
+        string id PK
+        string organizationId FK
+        string artifactId FK
+        int version
+        enum status
+        string storageObjectId FK
+        boolean isCurrent
+        boolean isRelease
+        string releaseTag
+    }
 ```
 
 ## Domain groups
@@ -245,6 +296,7 @@ erDiagram
 | Audit                 | `AuditLog`                                                                     | Append-only action log per organization                                                                                                                                                                                                                                      |
 | Storage control plane | `StorageProvider`, `Bucket`, `StoragePolicy`                                   | `config` holds non-secret dialect/endpoint/bucket settings. Provider secrets are AES-256-GCM (`secretCiphertext` + `secretNonce`) and never returned by APIs. ACCESS policies remain unused at request time; LIFECYCLE policies are evaluated by the worker against metadata |
 | Storage data plane    | `StorageObject`, `ObjectVersion`, `Upload`, `MultipartUpload`, `MultipartPart` | Metadata only; bytes in provider. Version ids are VaultStack-owned.                                                                                                                                                                                                          |
+| CI/CD artifacts       | `Project`, `Build`, `Artifact`, `ArtifactVersion`                              | Metadata only. `ArtifactVersion.storageObjectId` references `StorageObject` (`onDelete: Restrict`). Bytes are uploaded/downloaded/deleted through StorageService.                                                                                                            |
 
 ## Cascade behavior
 
@@ -253,6 +305,7 @@ erDiagram
 - Deleting a **StorageProvider** is restricted while buckets or objects reference it (`onDelete: Restrict`).
 - Deleting a **Team** cascades members and team-scoped share links.
 - Deleting a **StorageObject** cascades its share links.
+- Deleting an **ArtifactVersion** is blocked while it still references a `StorageObject` (`onDelete: Restrict`). Application code unlinks and deletes bytes via `ObjectService.remove` first.
 - **MultipartPart** rows cascade when their parent multipart upload is deleted.
 
 ## Keeping this diagram current

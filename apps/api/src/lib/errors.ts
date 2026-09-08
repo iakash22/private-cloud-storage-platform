@@ -178,3 +178,25 @@ export function shareDownloadLimitReached(): AppError {
 export function shareAccessDenied(message = 'You cannot access this share'): AppError {
   return new AppError(403, 'SHARE_ACCESS_DENIED', message);
 }
+
+export function artifactProjectNotFound(): AppError {
+  return new AppError(404, 'ARTIFACT_PROJECT_NOT_FOUND', 'Project not found');
+}
+
+export function artifactBuildNotFound(): AppError {
+  return new AppError(404, 'ARTIFACT_BUILD_NOT_FOUND', 'Build not found');
+}
+
+export function artifactNotFound(): AppError {
+  return new AppError(404, 'ARTIFACT_NOT_FOUND', 'Artifact not found');
+}
+
+export function artifactVersionNotFound(): AppError {
+  return new AppError(404, 'ARTIFACT_VERSION_NOT_FOUND', 'Artifact version not found');
+}
+
+export function artifactReleaseConflict(
+  message = 'A release with that tag already exists in this project',
+): AppError {
+  return new AppError(409, 'ARTIFACT_RELEASE_CONFLICT', message);
+}

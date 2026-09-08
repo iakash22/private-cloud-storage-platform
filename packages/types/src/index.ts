@@ -55,7 +55,12 @@ export type ApiErrorCode =
   | 'SHARE_PASSWORD_REQUIRED'
   | 'SHARE_PASSWORD_INVALID'
   | 'SHARE_DOWNLOAD_LIMIT_REACHED'
-  | 'SHARE_ACCESS_DENIED';
+  | 'SHARE_ACCESS_DENIED'
+  | 'ARTIFACT_PROJECT_NOT_FOUND'
+  | 'ARTIFACT_BUILD_NOT_FOUND'
+  | 'ARTIFACT_NOT_FOUND'
+  | 'ARTIFACT_VERSION_NOT_FOUND'
+  | 'ARTIFACT_RELEASE_CONFLICT';
 
 export interface ApiErrorResponse {
   error: {
@@ -140,6 +145,7 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<SystemRoleName, readonly Permission
     PERMISSIONS.STORAGE_SHARE,
     PERMISSIONS.ARTIFACT_READ,
     PERMISSIONS.ARTIFACT_UPLOAD,
+    PERMISSIONS.ARTIFACT_DELETE,
     PERMISSIONS.BACKUP_READ,
   ],
   VIEWER: READ_PERMISSIONS,
@@ -622,6 +628,84 @@ export interface PublicS3AccessCredential {
 
 export interface CreatedS3AccessCredential extends PublicS3AccessCredential {
   secretAccessKey: string;
+}
+
+export type ArtifactKindName = 'GENERIC' | 'PACKAGE' | 'LOG' | 'ARCHIVE' | 'RELEASE' | 'BUNDLE';
+
+export type BuildStatusName = 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELED';
+
+export type ArtifactVersionStatusName = 'PENDING' | 'AVAILABLE' | 'FAILED';
+
+export interface PublicProject {
+  id: string;
+  organizationId: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  retentionDays: number | null;
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PublicBuild {
+  id: string;
+  organizationId: string;
+  projectId: string;
+  number: number;
+  status: BuildStatusName;
+  title: string | null;
+  gitRef: string | null;
+  commitSha: string | null;
+  createdByUserId: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PublicArtifact {
+  id: string;
+  organizationId: string;
+  projectId: string;
+  buildId: string;
+  name: string;
+  kind: ArtifactKindName;
+  createdAt: string;
+  updatedAt: string;
+  currentVersion: PublicArtifactVersion | null;
+}
+
+export interface PublicArtifactVersion {
+  id: string;
+  organizationId: string;
+  projectId: string;
+  buildId: string;
+  artifactId: string;
+  version: number;
+  versionLabel: string | null;
+  status: ArtifactVersionStatusName;
+  storageObjectId: string | null;
+  isCurrent: boolean;
+  isRelease: boolean;
+  releaseTag: string | null;
+  releasedAt: string | null;
+  size: number;
+  contentType: string;
+  checksum: string | null;
+  etag: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InitiatedArtifactUpload {
+  artifact: PublicArtifact;
+  version: PublicArtifactVersion;
+  upload: PublicUpload;
+  uploadUrl: string;
+  method: 'PUT';
+  expiresAt: string;
+  headers?: Record<string, string>;
 }
 
 export type { ApiResult, HttpStatus, RequestCookies, RequestHeaders, RequestMeta } from './http.js';

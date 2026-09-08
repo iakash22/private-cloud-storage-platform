@@ -22,6 +22,13 @@ import {
   type PublicStoragePolicy,
   type PublicStorageProvider,
   type PublicStorageProviderHealth,
+  type PublicArtifact,
+  type PublicArtifactVersion,
+  type PublicBuild,
+  type PublicProject,
+  type InitiatedArtifactUpload,
+  type ArtifactKindName,
+  type BuildStatusName,
   type S3DialectName,
   type PublicTeam,
   type PublicTeamMember,
@@ -645,6 +652,163 @@ export class VaultStackApiClient {
 
   async abortMultipart(uploadId: string): Promise<void> {
     await this.request<undefined>('DELETE', `/api/v1/storage/multipart-uploads/${uploadId}`);
+  }
+
+  async listProjects(): Promise<PublicProject[]> {
+    const result = await this.request<{ projects: PublicProject[] }>(
+      'GET',
+      '/api/v1/artifacts/projects',
+    );
+    return result.projects;
+  }
+
+  async createProject(input: {
+    name: string;
+    slug?: string;
+    description?: string;
+    retentionDays?: number | null;
+  }): Promise<PublicProject> {
+    const result = await this.request<{ project: PublicProject }>(
+      'POST',
+      '/api/v1/artifacts/projects',
+      { body: input },
+    );
+    return result.project;
+  }
+
+  async getProject(projectId: string): Promise<PublicProject> {
+    const result = await this.request<{ project: PublicProject }>(
+      'GET',
+      `/api/v1/artifacts/projects/${projectId}`,
+    );
+    return result.project;
+  }
+
+  async updateProject(
+    projectId: string,
+    input: { name?: string; description?: string | null; retentionDays?: number | null },
+  ): Promise<PublicProject> {
+    const result = await this.request<{ project: PublicProject }>(
+      'PATCH',
+      `/api/v1/artifacts/projects/${projectId}`,
+      { body: input },
+    );
+    return result.project;
+  }
+
+  async deleteProject(projectId: string): Promise<void> {
+    await this.request<undefined>('DELETE', `/api/v1/artifacts/projects/${projectId}`);
+  }
+
+  async listBuilds(projectId: string): Promise<PublicBuild[]> {
+    const result = await this.request<{ builds: PublicBuild[] }>(
+      'GET',
+      `/api/v1/artifacts/projects/${projectId}/builds`,
+    );
+    return result.builds;
+  }
+
+  async createBuild(
+    projectId: string,
+    input: { title?: string; gitRef?: string; commitSha?: string; status?: BuildStatusName } = {},
+  ): Promise<PublicBuild> {
+    const result = await this.request<{ build: PublicBuild }>(
+      'POST',
+      `/api/v1/artifacts/projects/${projectId}/builds`,
+      { body: input },
+    );
+    return result.build;
+  }
+
+  async getBuild(projectId: string, buildId: string): Promise<PublicBuild> {
+    const result = await this.request<{ build: PublicBuild }>(
+      'GET',
+      `/api/v1/artifacts/projects/${projectId}/builds/${buildId}`,
+    );
+    return result.build;
+  }
+
+  async deleteBuild(projectId: string, buildId: string): Promise<void> {
+    await this.request<undefined>(
+      'DELETE',
+      `/api/v1/artifacts/projects/${projectId}/builds/${buildId}`,
+    );
+  }
+
+  async listBuildArtifacts(projectId: string, buildId: string): Promise<PublicArtifact[]> {
+    const result = await this.request<{ artifacts: PublicArtifact[] }>(
+      'GET',
+      `/api/v1/artifacts/projects/${projectId}/builds/${buildId}/artifacts`,
+    );
+    return result.artifacts;
+  }
+
+  async initiateArtifactUpload(
+    projectId: string,
+    buildId: string,
+    input: {
+      name: string;
+      kind?: ArtifactKindName;
+      fileName?: string;
+      contentType?: string;
+      size?: number;
+      versionLabel?: string;
+    },
+  ): Promise<InitiatedArtifactUpload> {
+    return this.request<InitiatedArtifactUpload>(
+      'POST',
+      `/api/v1/artifacts/projects/${projectId}/builds/${buildId}/artifacts`,
+      { body: input },
+    );
+  }
+
+  async completeArtifactUpload(
+    versionId: string,
+    input: { checksumSha256?: string } = {},
+  ): Promise<PublicArtifactVersion> {
+    const result = await this.request<{ version: PublicArtifactVersion }>(
+      'POST',
+      `/api/v1/artifacts/versions/${versionId}/complete`,
+      { body: input },
+    );
+    return result.version;
+  }
+
+  async createArtifactDownloadUrl(versionId: string): Promise<PublicPresignedUrl> {
+    const result = await this.request<{ download: PublicPresignedUrl }>(
+      'POST',
+      `/api/v1/artifacts/versions/${versionId}/download-url`,
+      { body: {} },
+    );
+    return result.download;
+  }
+
+  async releaseArtifactVersion(
+    versionId: string,
+    input: { releaseTag?: string } = {},
+  ): Promise<PublicArtifactVersion> {
+    const result = await this.request<{ version: PublicArtifactVersion }>(
+      'POST',
+      `/api/v1/artifacts/versions/${versionId}/release`,
+      { body: input },
+    );
+    return result.version;
+  }
+
+  async listReleases(projectId: string): Promise<PublicArtifactVersion[]> {
+    const result = await this.request<{ releases: PublicArtifactVersion[] }>(
+      'GET',
+      `/api/v1/artifacts/projects/${projectId}/releases`,
+    );
+    return result.releases;
+  }
+
+  async deleteArtifactVersion(versionId: string): Promise<void> {
+    await this.request<undefined>('DELETE', `/api/v1/artifacts/versions/${versionId}`);
+  }
+
+  async deleteArtifact(artifactId: string): Promise<void> {
+    await this.request<undefined>('DELETE', `/api/v1/artifacts/${artifactId}`);
   }
 
   uploadMultipartFile(

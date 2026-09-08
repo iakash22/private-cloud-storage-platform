@@ -5,6 +5,7 @@ import { RolesService } from '../modules/roles/services/roles.service.js';
 import { PermissionsService } from '../modules/permissions/services/permissions.service.js';
 import { ApiKeysService } from '../modules/auth/services/api-keys.service.js';
 import { AuditService } from '../modules/audit/services/audit.service.js';
+import { ArtifactsService } from '../modules/artifacts/services/artifacts.service.js';
 import { AuthService } from '../modules/auth/services/auth.service.js';
 import {
   AuthorizationService,
@@ -36,6 +37,7 @@ export interface AppServices {
   apiKeys: ApiKeysService;
   audit: AuditService;
   storage: StorageModule;
+  artifacts: ArtifactsService;
   s3Credentials: S3CredentialService;
 }
 
@@ -57,6 +59,7 @@ export class AppContainer {
   readonly apiKeys: ApiKeysService;
   readonly audit: AuditService;
   readonly storage: StorageModule;
+  readonly artifacts: ArtifactsService;
   readonly s3Credentials: S3CredentialService;
 
   constructor(
@@ -90,12 +93,17 @@ export class AppContainer {
       logger,
       authorization: this.authorization,
     });
+    this.artifacts = new ArtifactsService(prisma, this.storage);
     this.s3Credentials = createS3CredentialService(prisma, config.JWT_SECRET);
   }
 }
 
 /** @deprecated Use AppContainer directly. Kept for incremental migration. */
-export function createServices(prisma: PrismaClient, config: EnvConfig, logger: Logger): AppServices {
+export function createServices(
+  prisma: PrismaClient,
+  config: EnvConfig,
+  logger: Logger,
+): AppServices {
   const container = new AppContainer(prisma, config, logger);
   return {
     sessions: container.sessions,
@@ -109,6 +117,7 @@ export function createServices(prisma: PrismaClient, config: EnvConfig, logger: 
     apiKeys: container.apiKeys,
     audit: container.audit,
     storage: container.storage,
+    artifacts: container.artifacts,
     s3Credentials: container.s3Credentials,
   };
 }
