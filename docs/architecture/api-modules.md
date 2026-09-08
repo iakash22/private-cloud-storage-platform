@@ -68,6 +68,9 @@ packages/validation/src/
 ├── storage.schemas.ts
 ├── s3-credentials.schemas.ts
 ├── artifact.schemas.ts
+├── backup.schemas.ts
+├── infrastructure.schemas.ts
+├── s3-credentials.schemas.ts
 └── index.ts              # re-exports all
 ```
 
@@ -96,7 +99,9 @@ packages/validation/src/
 | permissions   | ✅     | ✅         | ✅              | ✅         |
 | storage       | ✅     | ✅         | partial classes | ✅         |
 | artifacts     | ✅     | ✅         | ✅              | ✅         |
-| s3-gateway    | ✅     | ✅         | —               | —          |
+| backups       | ✅     | ✅         | ✅              | ✅         |
+| infrastructure| ✅     | ✅         | ✅              | collectors |
+| s3-gateway    | ✅     | ✅         | ✅              | —          |
 
 Nested organization routes:
 

@@ -52,6 +52,7 @@ Business modules under `apps/api/src/modules/`:
 - `storage/` — buckets, objects, uploads, multipart, external providers
 - `artifacts/` — CI/CD projects, builds, artifact versions (bytes via StorageService)
 - `backups/` — backup jobs, schedules, snapshots, restore plans (bytes via StorageService)
+- `infrastructure/` — host, disk, Docker, and storage collectors (`infrastructure.read`; no command execution)
 
 See [database schema diagram](./database-schema.md) for the full ER model and [../api/README.md](../api/README.md) for REST endpoints.
 

@@ -1,4 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
+import { applyPlaywrightHostLibraries } from './tests/e2e/chromium-host-libs';
+
+applyPlaywrightHostLibraries();
 
 const dashboardPort = 5173;
 const apiPort = 3000;

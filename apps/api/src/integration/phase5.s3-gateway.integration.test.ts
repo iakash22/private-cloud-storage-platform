@@ -313,4 +313,76 @@ describe('Phase 5 S3 gateway authentication and access control', () => {
     expect(response.status).toBe(401);
     expect(errorBody(response).code).toBe('UNAUTHORIZED');
   });
+
+  it('rotates credentials, invalidates the old secret, and records usage', async () => {
+    const owner = await registerOwner('s3-rotate@example.com', 'Rotate Org');
+    const organizationId = responseBody<{ organization: { id: string } }>(owner).organization.id;
+    const original = await createCredential(owner, organizationId, {
+      serviceAccountName: 'rotate-me',
+      permissions: [PERMISSIONS.STORAGE_READ],
+    });
+    const originalClient = createS3Client(original);
+    await originalClient.send(new ListBucketsCommand({}));
+
+    const listed = await request(app)
+      .get(`/api/v1/organizations/${organizationId}/s3-credentials`)
+      .set(authHeaders(owner));
+    const originalId = responseBody<{
+      credentials: { id: string; requestCount: number }[];
+    }>(listed).credentials[0]?.id;
+    expect(originalId).toBeTruthy();
+    expect(responseBody<{ credentials: { requestCount: number }[] }>(listed).credentials[0]?.requestCount)
+      .toBeGreaterThanOrEqual(1);
+
+    const rotated = await request(app)
+      .post(`/api/v1/organizations/${organizationId}/s3-credentials/${originalId}/rotate`)
+      .set(authHeaders(owner));
+    expect(rotated.status).toBe(201);
+    const replacement = responseBody<{
+      credential: {
+        id: string;
+        accessKeyId: string;
+        secretAccessKey: string;
+        rotatedFromId: string | null;
+      };
+    }>(rotated).credential;
+    expect(replacement.rotatedFromId).toBe(originalId);
+    expect(replacement.secretAccessKey).toBeTruthy();
+
+    await expect(originalClient.send(new ListBucketsCommand({}))).rejects.toThrow();
+    const replacementClient = createS3Client(replacement);
+    await expect(replacementClient.send(new ListBucketsCommand({}))).resolves.toBeTruthy();
+
+    const accounts = await request(app)
+      .get(`/api/v1/organizations/${organizationId}/s3-credentials/service-accounts`)
+      .set(authHeaders(owner));
+    expect(accounts.status).toBe(200);
+    const serviceAccountId = responseBody<{ serviceAccounts: { id: string }[] }>(accounts)
+      .serviceAccounts[0]?.id;
+    expect(serviceAccountId).toBeTruthy();
+    const disabled = await request(app)
+      .patch(
+        `/api/v1/organizations/${organizationId}/s3-credentials/service-accounts/${serviceAccountId}`,
+      )
+      .set(authHeaders(owner))
+      .send({ disabled: true });
+    expect(disabled.status).toBe(200);
+    await expect(replacementClient.send(new ListBucketsCommand({}))).rejects.toThrow();
+
+    const enabled = await request(app)
+      .patch(
+        `/api/v1/organizations/${organizationId}/s3-credentials/service-accounts/${serviceAccountId}`,
+      )
+      .set(authHeaders(owner))
+      .send({ disabled: false });
+    expect(enabled.status).toBe(200);
+    await expect(replacementClient.send(new ListBucketsCommand({}))).resolves.toBeTruthy();
+
+    const expire = await request(app)
+      .patch(`/api/v1/organizations/${organizationId}/s3-credentials/${replacement.id}`)
+      .set(authHeaders(owner))
+      .send({ expiresAt: new Date(Date.now() - 60_000).toISOString() });
+    expect(expire.status).toBe(200);
+    await expect(replacementClient.send(new ListBucketsCommand({}))).rejects.toThrow();
+  });
 });

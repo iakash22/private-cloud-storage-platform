@@ -25,6 +25,7 @@ describe('@vaultstack/config', () => {
     expect(config.NODE_ENV).toBe('test');
     expect(config.JWT_SECRET).toHaveLength(36);
     expect(config.MINIO_ENDPOINT).toBeUndefined();
+    expect(config.DOCKER_SOCKET).toBe('/var/run/docker.sock');
   });
 
   it('throws on invalid environment variables', () => {

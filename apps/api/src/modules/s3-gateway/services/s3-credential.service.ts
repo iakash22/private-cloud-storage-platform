@@ -1,8 +1,13 @@
 import type { PrismaClient, S3AccessCredential, ServiceAccount } from '@vaultstack/database';
 import type {
   CreatedS3AccessCredential,
+  PublicServiceAccount,
   PublicS3AccessCredential,
 } from '@vaultstack/types';
+import type {
+  UpdateS3CredentialBody,
+  UpdateServiceAccountBody,
+} from '@vaultstack/validation';
 import { writeAuditLog } from '../../../lib/audit.js';
 import { conflict, notFound } from '../../../lib/errors.js';
 import {
@@ -34,6 +39,7 @@ function serializeCredential(record: CredentialRecord): PublicS3AccessCredential
     expiresAt: record.expiresAt?.toISOString() ?? null,
     revokedAt: record.revokedAt?.toISOString() ?? null,
     lastUsedAt: record.lastUsedAt?.toISOString() ?? null,
+    requestCount: record.requestCount,
     rotatedFromId: record.rotatedFromId,
     createdAt: record.createdAt.toISOString(),
   };
@@ -62,6 +68,56 @@ export class S3CredentialService {
     });
 
     return rows.map(serializeCredential);
+  }
+
+  async listServiceAccounts(organizationId: string): Promise<PublicServiceAccount[]> {
+    const rows = await this.prisma.serviceAccount.findMany({
+      where: { organizationId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map(serializeServiceAccount);
+  }
+
+  async updateServiceAccount(
+    organizationId: string,
+    serviceAccountId: string,
+    actorUserId: string,
+    input: UpdateServiceAccountBody,
+    meta: { ipAddress?: string | null; userAgent?: string | null },
+  ): Promise<PublicServiceAccount> {
+    const existing = await this.prisma.serviceAccount.findFirst({
+      where: { id: serviceAccountId, organizationId },
+    });
+    if (!existing) {
+      throw notFound('Service account not found');
+    }
+
+    const updated = await this.prisma.serviceAccount.update({
+      where: { id: serviceAccountId },
+      data: {
+        description: input.description,
+        disabledAt: input.disabled === undefined
+          ? undefined
+          : input.disabled
+            ? new Date()
+            : null,
+      },
+    });
+    await writeAuditLog(this.prisma, {
+      organizationId,
+      userId: actorUserId,
+      action: input.disabled === undefined
+        ? 'service_account.updated'
+        : input.disabled
+          ? 'service_account.disabled'
+          : 'service_account.enabled',
+      resourceType: 'service_account',
+      resourceId: serviceAccountId,
+      metadata: { description: input.description, disabled: input.disabled },
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+    return serializeServiceAccount(updated);
   }
 
   async create(
@@ -214,6 +270,53 @@ export class S3CredentialService {
     };
   }
 
+  async update(
+    organizationId: string,
+    credentialId: string,
+    actorUserId: string,
+    input: UpdateS3CredentialBody,
+    meta: { ipAddress?: string | null; userAgent?: string | null },
+  ): Promise<PublicS3AccessCredential> {
+    const existing = await this.prisma.s3AccessCredential.findFirst({
+      where: { id: credentialId, organizationId },
+      include: { serviceAccount: true },
+    });
+    if (!existing) {
+      throw notFound('S3 credential not found');
+    }
+
+    const updated = await this.prisma.s3AccessCredential.update({
+      where: { id: credentialId },
+      data: {
+        permissions: input.permissions,
+        allowedBucketNames: input.allowedBucketNames,
+        expiresAt: input.expiresAt === undefined
+          ? undefined
+          : input.expiresAt === null
+            ? null
+            : new Date(input.expiresAt),
+      },
+      include: { serviceAccount: true },
+    });
+
+    await writeAuditLog(this.prisma, {
+      organizationId,
+      userId: actorUserId,
+      action: 's3.credential.updated',
+      resourceType: 's3_access_credential',
+      resourceId: credentialId,
+      metadata: {
+        permissions: input.permissions,
+        allowedBucketNames: input.allowedBucketNames,
+        expiresAt: input.expiresAt,
+      },
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    return serializeCredential(updated);
+  }
+
   async resolveByAccessKeyId(accessKeyId: string): Promise<ResolvedS3Credential | null> {
     const row = await this.prisma.s3AccessCredential.findUnique({
       where: { accessKeyId },
@@ -231,7 +334,7 @@ export class S3CredentialService {
   async markUsed(credentialId: string): Promise<void> {
     await this.prisma.s3AccessCredential.update({
       where: { id: credentialId },
-      data: { lastUsedAt: new Date() },
+      data: { lastUsedAt: new Date(), requestCount: { increment: 1 } },
     });
   }
 
@@ -250,4 +353,24 @@ export class S3CredentialService {
 
 export function createS3CredentialService(prisma: PrismaClient, jwtSecret: string): S3CredentialService {
   return new S3CredentialService(prisma, jwtSecret);
+}
+
+function serializeServiceAccount(record: {
+  id: string;
+  organizationId: string;
+  name: string;
+  description: string | null;
+  disabledAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): PublicServiceAccount {
+  return {
+    id: record.id,
+    organizationId: record.organizationId,
+    name: record.name,
+    description: record.description,
+    disabled: record.disabledAt !== null,
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+  };
 }

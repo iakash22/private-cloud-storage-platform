@@ -9,6 +9,12 @@ import { BackupsJobsPage } from './pages/backups/backups-jobs-page.js';
 import { BackupsSchedulesPage } from './pages/backups/backups-schedules-page.js';
 import { BackupsSnapshotsPage } from './pages/backups/backups-snapshots-page.js';
 import { BackupsRestorePage } from './pages/backups/backups-restore-page.js';
+import { InfrastructureLayout } from './pages/infrastructure/infrastructure-layout.js';
+import { InfrastructureOverviewPage } from './pages/infrastructure/infrastructure-overview-page.js';
+import { InfrastructureServerPage } from './pages/infrastructure/infrastructure-server-page.js';
+import { InfrastructureDisksPage } from './pages/infrastructure/infrastructure-disks-page.js';
+import { InfrastructureStoragePage } from './pages/infrastructure/infrastructure-storage-page.js';
+import { InfrastructureDockerPage } from './pages/infrastructure/infrastructure-docker-page.js';
 import { BucketsPage } from './pages/storage/buckets-page.js';
 import { FilesPage } from './pages/storage/files-page.js';
 import { ProvidersPage } from './pages/storage/providers-page.js';
@@ -41,6 +47,13 @@ export function App() {
             <Route path="schedules" element={<BackupsSchedulesPage />} />
             <Route path="snapshots" element={<BackupsSnapshotsPage />} />
             <Route path="restore" element={<BackupsRestorePage />} />
+          </Route>
+          <Route path="/infrastructure" element={<InfrastructureLayout />}>
+            <Route index element={<InfrastructureOverviewPage />} />
+            <Route path="server" element={<InfrastructureServerPage />} />
+            <Route path="disks" element={<InfrastructureDisksPage />} />
+            <Route path="storage" element={<InfrastructureStoragePage />} />
+            <Route path="docker" element={<InfrastructureDockerPage />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/storage" replace />} />

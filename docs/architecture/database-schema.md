@@ -20,6 +20,8 @@ erDiagram
     Organization ||--o{ UserRole : "scopes"
     Organization ||--o{ ApiKey : "owns"
     Organization ||--o{ AuditLog : "records"
+    Organization ||--o{ ServiceAccount : "owns"
+    Organization ||--o{ S3AccessCredential : "owns"
     Organization ||--o{ StorageProvider : "configures"
     Organization ||--o{ Bucket : "owns"
     Organization ||--o{ StorageObject : "owns"
@@ -45,6 +47,8 @@ erDiagram
     User ||--o{ ShareLink : "creates"
     User ||--o{ Project : "creates"
     User ||--o{ Build : "creates"
+
+    ServiceAccount ||--o{ S3AccessCredential : "uses"
 
     Role ||--o{ RolePermission : "grants"
     Permission ||--o{ RolePermission : "referenced_by"
@@ -149,6 +153,29 @@ erDiagram
         string userId FK
         string keyHash UK
         string prefix
+    }
+
+    ServiceAccount {
+        string id PK
+        string organizationId FK
+        string name
+        string description
+        datetime disabledAt
+    }
+
+    S3AccessCredential {
+        string id PK
+        string organizationId FK
+        string serviceAccountId FK
+        string accessKeyId UK
+        string secretCiphertext
+        string secretNonce
+        string[] permissions
+        string[] allowedBucketNames
+        datetime expiresAt
+        datetime revokedAt
+        datetime lastUsedAt
+        int requestCount
     }
 
     AuditLog {
@@ -355,6 +382,7 @@ erDiagram
 | Sharing               | `ShareLink`                                                                         | Public identifier is a hashed high-entropy token, never the sequential id. Password hashes, expiry, download limits, and revocation are enforced at read time.                                                                                                               |
 | RBAC                  | `Role`, `Permission`, `RolePermission`, `UserRole`                                  | Permissions seeded from `@vaultstack/types`                                                                                                                                                                                                                                  |
 | Automation            | `ApiKey`                                                                            | Hashed keys; prefix shown to users                                                                                                                                                                                                                                           |
+| Service accounts      | `ServiceAccount`, `S3AccessCredential`                                             | Organization-scoped S3 identities. Secrets are encrypted at rest and plaintext is returned only once; credentials carry permissions, bucket restrictions, expiry, revocation, and bounded usage metadata. |
 | Audit                 | `AuditLog`                                                                          | Append-only action log per organization                                                                                                                                                                                                                                      |
 | Storage control plane | `StorageProvider`, `Bucket`, `StoragePolicy`                                        | `config` holds non-secret dialect/endpoint/bucket settings. Provider secrets are AES-256-GCM (`secretCiphertext` + `secretNonce`) and never returned by APIs. ACCESS policies remain unused at request time; LIFECYCLE policies are evaluated by the worker against metadata |
 | Storage data plane    | `StorageObject`, `ObjectVersion`, `Upload`, `MultipartUpload`, `MultipartPart`      | Metadata only; bytes in provider. Version ids are VaultStack-owned.                                                                                                                                                                                                          |

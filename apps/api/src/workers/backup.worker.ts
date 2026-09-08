@@ -1,4 +1,10 @@
-import { Queue, Worker, type ConnectionOptions, type Job } from 'bullmq';
+import {
+  Queue,
+  Worker,
+  type ConnectionOptions,
+  type Job,
+  type QueueInstance,
+} from '../lib/bullmq.js';
 import type { Logger } from '@vaultstack/logger';
 import type {
   BackupsService,
@@ -13,11 +19,11 @@ export const BACKUP_SCHEDULE_JOB = 'backup.schedules';
 export const BACKUP_RETENTION_INTERVAL_MS = 60 * 60 * 1000;
 export const BACKUP_SCHEDULE_INTERVAL_MS = 60_000;
 
-export function createBackupQueue(connection: ConnectionOptions): Queue {
+export function createBackupQueue(connection: ConnectionOptions): QueueInstance {
   return new Queue(BACKUP_QUEUE_NAME, { connection });
 }
 
-export async function scheduleBackupMaintenance(queue: Queue): Promise<void> {
+export async function scheduleBackupMaintenance(queue: QueueInstance): Promise<void> {
   await queue.add(
     BACKUP_RETENTION_JOB,
     {},
@@ -39,7 +45,7 @@ export async function scheduleBackupMaintenance(queue: Queue): Promise<void> {
 }
 
 export async function enqueueBackupPayload(
-  queue: Queue,
+  queue: QueueInstance,
   payload: BackupQueuePayload,
 ): Promise<void> {
   await queue.add(payload.kind === 'run' ? BACKUP_RUN_JOB : BACKUP_RESTORE_JOB, payload, {
@@ -55,7 +61,7 @@ export function createBackupWorker(deps: {
   backups: BackupsService;
   logger: Logger;
   concurrency?: number;
-}): Worker {
+}) {
   const { connection, backups, logger, concurrency = 1 } = deps;
 
   return new Worker(

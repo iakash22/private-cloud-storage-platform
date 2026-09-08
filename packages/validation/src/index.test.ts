@@ -11,6 +11,9 @@ import {
   createShareBodySchema,
   createStorageProviderBodySchema,
   healthResponseSchema,
+  createS3CredentialBodySchema,
+  updateS3CredentialBodySchema,
+  infrastructureCollectorStatusSchema,
   initiateArtifactBodySchema,
   initiateMultipartBodySchema,
   listMultipartSessionsQuerySchema,
@@ -253,5 +256,34 @@ describe('@vaultstack/validation', () => {
       }).success,
     ).toBe(true);
     expect(createBackupRestoreBodySchema.safeParse({ snapshotId: 'snap-1' }).success).toBe(true);
+  });
+
+  it('validates service-account permissions and lifecycle updates', () => {
+    expect(
+      createS3CredentialBodySchema.safeParse({
+        serviceAccountName: 'ci-service',
+        permissions: ['storage.read', 'artifact.read', 'backup.read'],
+        allowedBucketNames: ['artifacts'],
+      }).success,
+    ).toBe(true);
+    expect(
+      createS3CredentialBodySchema.safeParse({
+        serviceAccountName: 'ci-service',
+        permissions: ['users.manage'],
+      }).success,
+    ).toBe(false);
+    expect(
+      updateS3CredentialBodySchema.safeParse({
+        permissions: ['storage.read'],
+        expiresAt: null,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('accepts infrastructure collector statuses', () => {
+    expect(infrastructureCollectorStatusSchema.safeParse('ok').success).toBe(true);
+    expect(infrastructureCollectorStatusSchema.safeParse('degraded').success).toBe(true);
+    expect(infrastructureCollectorStatusSchema.safeParse('unavailable').success).toBe(true);
+    expect(infrastructureCollectorStatusSchema.safeParse('running').success).toBe(false);
   });
 });

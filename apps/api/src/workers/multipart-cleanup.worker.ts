@@ -1,4 +1,4 @@
-import { Queue, Worker, type ConnectionOptions } from 'bullmq';
+import { Queue, Worker, type ConnectionOptions, type QueueInstance } from '../lib/bullmq.js';
 import type { Logger } from '@vaultstack/logger';
 import type { UploadService } from '../modules/storage/services/upload.service.js';
 
@@ -15,11 +15,11 @@ export async function runMultipartCleanup(uploads: UploadService): Promise<Multi
   return uploads.cleanupExpired();
 }
 
-export function createMultipartCleanupQueue(connection: ConnectionOptions): Queue {
+export function createMultipartCleanupQueue(connection: ConnectionOptions): QueueInstance {
   return new Queue(MULTIPART_CLEANUP_QUEUE, { connection });
 }
 
-export async function scheduleMultipartCleanup(queue: Queue): Promise<void> {
+export async function scheduleMultipartCleanup(queue: QueueInstance): Promise<void> {
   await queue.add(
     MULTIPART_CLEANUP_JOB,
     {},
@@ -35,7 +35,7 @@ export function createMultipartCleanupWorker(deps: {
   connection: ConnectionOptions;
   uploads: UploadService;
   logger: Logger;
-}): Worker {
+}) {
   const { connection, uploads, logger } = deps;
 
   return new Worker(

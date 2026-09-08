@@ -70,18 +70,23 @@ export function BackupsRestorePage() {
             Elevated restore planning. Live database restore is deferred to disaster recovery.
           </p>
         </div>
-        {canRestoreBackups(permissions) ? (
-          <Button
-            type="button"
-            onClick={() => {
-              setOpen(true);
-            }}
-          >
-            Start restore
+        <div className="flex gap-2">
+          <Button type="button" variant="outline" onClick={() => void refresh()}>
+            Refresh
           </Button>
-        ) : (
-          <p className="text-sm text-slate-500">backup.restore permission is required.</p>
-        )}
+          {canRestoreBackups(permissions) ? (
+            <Button
+              type="button"
+              onClick={() => {
+                setOpen(true);
+              }}
+            >
+              Start restore
+            </Button>
+          ) : (
+            <p className="text-sm text-slate-500">backup.restore permission is required.</p>
+          )}
+        </div>
       </div>
       {error ? <EmptyState title="Unable to load restore jobs" description={error} /> : null}
 

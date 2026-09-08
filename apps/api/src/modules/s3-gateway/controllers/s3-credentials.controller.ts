@@ -1,6 +1,10 @@
 import type { Request, Response } from 'express';
 import { PERMISSIONS } from '@vaultstack/types';
-import { createS3CredentialBodySchema } from '@vaultstack/validation';
+import {
+  createS3CredentialBodySchema,
+  updateServiceAccountBodySchema,
+  updateS3CredentialBodySchema,
+} from '@vaultstack/validation';
 import { requestMeta } from '../../../lib/audit.js';
 import { asyncHandler, type AsyncRouteHandler } from '../../../lib/async-handler.js';
 import { routeParam } from '../../../lib/route-param.js';
@@ -8,6 +12,25 @@ import { readBody } from '../../../middleware/validate.js';
 import { OrganizationScopedController } from '../../../http/organization-scoped.controller.js';
 
 export class S3CredentialsController extends OrganizationScopedController {
+  listServiceAccounts: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const serviceAccounts = await this.container.s3Credentials.listServiceAccounts(
+      routeParam(req, 'organizationId'),
+    );
+    this.ok(res, { serviceAccounts });
+  });
+
+  updateServiceAccount: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const auth = this.requireAuth(req);
+    const serviceAccount = await this.container.s3Credentials.updateServiceAccount(
+      routeParam(req, 'organizationId'),
+      routeParam(req, 'serviceAccountId'),
+      auth.user.id,
+      readBody(req, updateServiceAccountBodySchema),
+      requestMeta(req),
+    );
+    this.ok(res, { serviceAccount });
+  });
+
   list: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const credentials = await this.container.s3Credentials.list(routeParam(req, 'organizationId'));
     this.ok(res, { credentials });
@@ -44,6 +67,18 @@ export class S3CredentialsController extends OrganizationScopedController {
       requestMeta(req),
     );
     this.created(res, { credential });
+  });
+
+  update: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const auth = this.requireAuth(req);
+    const credential = await this.container.s3Credentials.update(
+      routeParam(req, 'organizationId'),
+      routeParam(req, 'credentialId'),
+      auth.user.id,
+      readBody(req, updateS3CredentialBodySchema),
+      requestMeta(req),
+    );
+    this.ok(res, { credential });
   });
 
   static readonly managePermission = PERMISSIONS.USERS_MANAGE;

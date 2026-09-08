@@ -2,13 +2,22 @@ import { execSync } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { applyPlaywrightHostLibraries } from './chromium-host-libs.js';
 
 /**
- * Playwright only boots the API and dashboard. Postgres and Redis must already
- * be healthy: auth rate limiting and session-adjacent API traffic go through
- * Redis, and register writes to Postgres.
+ * Playwright only boots the API and dashboard. Workspace packages export `dist/`,
+ * so they must be built first. Postgres and Redis must already be healthy: auth
+ * rate limiting and session-adjacent API traffic go through Redis, and register
+ * writes to Postgres.
  */
 export default function globalSetup(): void {
+  applyPlaywrightHostLibraries();
+  execSync(
+    'pnpm exec turbo run build --filter=@vaultstack/api^... --filter=@vaultstack/dashboard^...',
+    {
+      stdio: 'inherit',
+    },
+  );
   execSync('pnpm docker:up', { stdio: 'inherit' });
   execSync('pnpm db:migrate', { stdio: 'inherit' });
   execSync('pnpm db:seed', { stdio: 'inherit' });

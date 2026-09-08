@@ -46,16 +46,20 @@ Credentials are managed through the REST API (UI arrives in a later phase):
 |--------|------|---------|
 | `POST` | `/api/v1/organizations/:organizationId/s3-credentials` | Create credential (one-time secret display) |
 | `GET` | `/api/v1/organizations/:organizationId/s3-credentials` | List metadata (never includes secrets) |
+| `GET` | `/api/v1/organizations/:organizationId/s3-credentials/service-accounts` | List service accounts |
+| `PATCH` | `/api/v1/organizations/:organizationId/s3-credentials/service-accounts/:serviceAccountId` | Enable, disable, or describe a service account |
 | `POST` | `/api/v1/organizations/:organizationId/s3-credentials/:credentialId/revoke` | Revoke |
 | `POST` | `/api/v1/organizations/:organizationId/s3-credentials/:credentialId/rotate` | Rotate (revoke old, issue new linked credential) |
+| `PATCH` | `/api/v1/organizations/:organizationId/s3-credentials/:credentialId` | Update permissions, bucket restrictions, or expiry |
 
 Secrets are encrypted at rest with AES-256-GCM using a key derived from `JWT_SECRET`. Plaintext secrets are never logged and are only returned in the create/rotate response.
 
 Credential fields:
 
-- `permissions`: subset of `storage.read`, `storage.upload`, `storage.delete`
+- `permissions`: least-privilege subset of `storage.read`, `storage.upload`, `storage.delete`, `storage.share`, `artifact.read`, `artifact.upload`, `artifact.delete`, `backup.read`, `backup.create`, `backup.restore`, `backup.delete`
 - `allowedBucketNames`: empty means all buckets in the organization
-- `expiresAt`: optional expiration timestamp
+- `expiresAt`: optional expiration timestamp; setting a past timestamp expires the credential immediately
+- `requestCount` / `lastUsedAt`: bounded usage metadata updated after successful SigV4 authentication
 
 ## Supported operations
 
@@ -83,8 +87,10 @@ Physical filesystem paths and provider credentials are never exposed in S3 respo
 1. **Separate auth boundary** — S3 SigV4 credentials are independent from browser sessions and REST API keys (which are hashed and cannot sign SigV4 requests).
 2. **Organization isolation** — Every lookup includes `organizationId` from the authenticated credential.
 3. **Least privilege** — Credentials carry explicit permission lists and optional bucket allow lists.
-4. **Auditability** — Credential create/revoke/rotate and storage mutations attribute actions to the service account principal.
-5. **Fail closed** — Unconfigured gateway auth rejects all traffic; invalid signatures never reach storage services.
+4. **Organization restriction** — Credentials can only access buckets in their owning organization; bucket allow lists further narrow access.
+5. **Rate limiting** — S3 traffic is limited globally and by client IP/access-key identity.
+6. **Auditability** — Credential create/update/revoke/rotate and storage mutations attribute actions to the service account principal.
+7. **Fail closed** — Unconfigured gateway auth rejects all traffic; invalid signatures never reach storage services.
 
 ## Client example (AWS SDK v3)
 

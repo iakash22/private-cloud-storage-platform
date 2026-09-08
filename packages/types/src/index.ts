@@ -629,6 +629,7 @@ export interface PublicS3AccessCredential {
   expiresAt: string | null;
   revokedAt: string | null;
   lastUsedAt: string | null;
+  requestCount: number;
   rotatedFromId: string | null;
   createdAt: string;
 }
@@ -824,6 +825,112 @@ export interface PublicBackupVerification {
   snapshot: PublicBackupSnapshot;
   passed: boolean;
   error: string | null;
+}
+
+export type InfrastructureCollectorStatus = 'ok' | 'degraded' | 'unavailable';
+
+export interface PublicServerMetrics {
+  collectedAt: string;
+  hostname: string;
+  platform: string;
+  uptimeSeconds: number;
+  cpu: {
+    cores: number;
+    model: string;
+    load1: number;
+    load5: number;
+    load15: number;
+  };
+  memory: {
+    totalBytes: number;
+    freeBytes: number;
+    usedBytes: number;
+    usedPercent: number;
+  };
+  network: {
+    interfaces: {
+      name: string;
+      addresses: string[];
+      rxBytes: number | null;
+      txBytes: number | null;
+    }[];
+  };
+}
+
+export interface PublicDiskVolume {
+  path: string;
+  kind: 'storage_root' | 'filesystem';
+  status: InfrastructureCollectorStatus;
+  totalBytes: number | null;
+  usedBytes: number | null;
+  freeBytes: number | null;
+  usedPercent: number | null;
+  error: string | null;
+}
+
+export interface PublicDiskMetrics {
+  collectedAt: string;
+  volumes: PublicDiskVolume[];
+}
+
+export interface PublicStorageBucketUsage {
+  bucketId: string;
+  name: string;
+  objectCount: number;
+  bytes: number;
+}
+
+export interface PublicStorageProviderMonitor {
+  id: string;
+  name: string;
+  type: string;
+  status: string;
+  healthy: boolean;
+  message: string;
+}
+
+export interface PublicStorageMonitorMetrics {
+  collectedAt: string;
+  bucketCount: number;
+  objectCount: number;
+  totalBytes: number;
+  uploadsLast24h: number;
+  processUploads: number;
+  processBytesUploaded: number;
+  buckets: PublicStorageBucketUsage[];
+  providers: PublicStorageProviderMonitor[];
+  storageRoot: PublicDiskVolume;
+}
+
+export interface PublicDockerContainer {
+  id: string;
+  name: string;
+  image: string;
+  state: string;
+  status: string;
+}
+
+export interface PublicDockerMetrics {
+  collectedAt: string;
+  available: boolean;
+  message: string;
+  serverVersion: string | null;
+  containers: number | null;
+  containersRunning: number | null;
+  images: number | null;
+  items: PublicDockerContainer[];
+}
+
+export interface PublicInfrastructureSummary {
+  collectedAt: string;
+  server: {
+    status: InfrastructureCollectorStatus;
+    cpuCores: number;
+    memoryUsedPercent: number;
+  };
+  disks: { status: InfrastructureCollectorStatus; volumeCount: number };
+  storage: { objectCount: number; totalBytes: number; unhealthyProviders: number };
+  docker: { available: boolean; containersRunning: number | null };
 }
 
 export interface InitiatedArtifactUpload {

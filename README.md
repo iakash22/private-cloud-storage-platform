@@ -34,7 +34,7 @@ infrastructure/
   postgres/           PostgreSQL notes
   redis/              Redis notes
   minio/              MinIO notes
-  monitoring/         Monitoring placeholder
+  monitoring/         Host, disk, Docker, and storage collectors
 
 docs/                 Architecture and development docs
 scripts/              Helper scripts

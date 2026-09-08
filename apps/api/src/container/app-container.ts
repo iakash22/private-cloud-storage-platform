@@ -7,6 +7,7 @@ import { ApiKeysService } from '../modules/auth/services/api-keys.service.js';
 import { AuditService } from '../modules/audit/services/audit.service.js';
 import { ArtifactsService } from '../modules/artifacts/services/artifacts.service.js';
 import { BackupsService } from '../modules/backups/services/backups.service.js';
+import { InfrastructureService } from '../modules/infrastructure/services/infrastructure.service.js';
 import { AuthService } from '../modules/auth/services/auth.service.js';
 import {
   AuthorizationService,
@@ -23,8 +24,8 @@ import {
 import type { EnvConfig } from '@vaultstack/config';
 import type { PrismaClient } from '@vaultstack/database';
 import type { Logger } from '@vaultstack/logger';
-import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
+import { Queue } from '../lib/bullmq.js';
 import { bindCookieManager } from '../lib/cookies.js';
 import { CookieManager } from '../lib/cookie.manager.js';
 import { BACKUP_QUEUE_NAME, enqueueBackupPayload } from '../workers/backup.worker.js';
@@ -43,6 +44,7 @@ export interface AppServices {
   storage: StorageModule;
   artifacts: ArtifactsService;
   backups: BackupsService;
+  infrastructure: InfrastructureService;
   s3Credentials: S3CredentialService;
 }
 
@@ -66,6 +68,7 @@ export class AppContainer {
   readonly storage: StorageModule;
   readonly artifacts: ArtifactsService;
   readonly backups: BackupsService;
+  readonly infrastructure: InfrastructureService;
   readonly s3Credentials: S3CredentialService;
 
   constructor(
@@ -101,6 +104,7 @@ export class AppContainer {
     });
     this.artifacts = new ArtifactsService(prisma, this.storage);
     this.backups = this.createBackupsService(prisma, config, logger);
+    this.infrastructure = InfrastructureService.create(prisma, this.storage, config, logger);
     this.s3Credentials = createS3CredentialService(prisma, config.JWT_SECRET);
   }
 
@@ -142,6 +146,7 @@ export function createServices(
     storage: container.storage,
     artifacts: container.artifacts,
     backups: container.backups,
+    infrastructure: container.infrastructure,
     s3Credentials: container.s3Credentials,
   };
 }

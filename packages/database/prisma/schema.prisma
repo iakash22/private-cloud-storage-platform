@@ -629,6 +629,7 @@ model S3AccessCredential {
   expiresAt          DateTime?
   revokedAt          DateTime?
   lastUsedAt         DateTime?
+  requestCount       Int       @default(0)
   rotatedFromId      String?
   createdAt          DateTime  @default(now())
 

@@ -1,4 +1,4 @@
-import { Queue, Worker, type ConnectionOptions } from 'bullmq';
+import { Queue, Worker, type ConnectionOptions, type QueueInstance } from '../lib/bullmq.js';
 import type { Logger } from '@vaultstack/logger';
 import type { ArtifactsService } from '../modules/artifacts/services/artifacts.service.js';
 
@@ -6,11 +6,11 @@ export const ARTIFACT_RETENTION_QUEUE = 'artifact-retention';
 export const ARTIFACT_RETENTION_JOB = 'apply-artifact-retention';
 export const ARTIFACT_RETENTION_INTERVAL_MS = 60_000;
 
-export function createArtifactRetentionQueue(connection: ConnectionOptions): Queue {
+export function createArtifactRetentionQueue(connection: ConnectionOptions): QueueInstance {
   return new Queue(ARTIFACT_RETENTION_QUEUE, { connection });
 }
 
-export async function scheduleArtifactRetention(queue: Queue): Promise<void> {
+export async function scheduleArtifactRetention(queue: QueueInstance): Promise<void> {
   await queue.add(
     ARTIFACT_RETENTION_JOB,
     {},
@@ -32,7 +32,7 @@ export function createArtifactRetentionWorker(deps: {
   connection: ConnectionOptions;
   artifacts: ArtifactsService;
   logger: Logger;
-}): Worker {
+}) {
   const { connection, artifacts, logger } = deps;
 
   return new Worker(

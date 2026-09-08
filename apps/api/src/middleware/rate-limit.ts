@@ -81,3 +81,23 @@ export function createSharePasswordRateLimitMiddleware(limiter: RateLimiter, con
     }
   };
 }
+
+export function createS3RateLimitMiddleware(limiter: RateLimiter, config: EnvConfig) {
+  return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const authorization = req.header('authorization') ?? 'anonymous';
+      const accessKey = /Credential=([^/]+)/.exec(authorization)?.[1] ?? 'anonymous';
+      const result = await limiter.consume(
+        `s3:${clientIp(req)}:${hashToken(accessKey).slice(0, 16)}`,
+        config.API_RATE_LIMIT_MAX,
+        config.API_RATE_LIMIT_WINDOW_SECONDS,
+      );
+      if (!result.allowed) {
+        throw rateLimited(result.retryAfterSeconds);
+      }
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+}

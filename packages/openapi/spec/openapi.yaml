@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: VaultStack API
-  version: 0.11.0
+  version: 0.13.0
   description: |
     Self-hosted private cloud storage management platform.
 
@@ -54,6 +54,8 @@ tags:
     description: CI/CD projects, builds, and artifact versions (bytes via StorageService)
   - name: Backups
     description: Backup jobs, schedules, snapshots, and restore plans (bytes via StorageService)
+  - name: Infrastructure
+    description: Host, disk, Docker, and storage collectors. No command-execution endpoints.
 
 paths:
   /health:
@@ -540,6 +542,127 @@ paths:
       responses:
         '204':
           description: API key revoked
+
+  /api/v1/organizations/{organizationId}/s3-credentials:
+    parameters:
+      - $ref: '#/components/parameters/organizationId'
+    get:
+      tags: [API Keys]
+      summary: List service-account S3 credentials
+      operationId: listS3Credentials
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Credential metadata and bounded usage counters; secrets are never returned
+    post:
+      tags: [API Keys]
+      summary: Create service-account S3 credential
+      operationId: createS3Credential
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateS3CredentialBody'
+      responses:
+        '201':
+          description: Credential created; secretAccessKey is returned once
+
+  /api/v1/organizations/{organizationId}/s3-credentials/service-accounts:
+    parameters:
+      - $ref: '#/components/parameters/organizationId'
+    get:
+      tags: [API Keys]
+      summary: List service accounts
+      operationId: listServiceAccounts
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Service-account metadata
+
+  /api/v1/organizations/{organizationId}/s3-credentials/service-accounts/{serviceAccountId}:
+    parameters:
+      - $ref: '#/components/parameters/organizationId'
+      - $ref: '#/components/parameters/serviceAccountId'
+    patch:
+      tags: [API Keys]
+      summary: Enable, disable, or describe a service account
+      operationId: updateServiceAccount
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateServiceAccountBody'
+      responses:
+        '200':
+          description: Updated service-account metadata
+
+  /api/v1/organizations/{organizationId}/s3-credentials/{credentialId}:
+    parameters:
+      - $ref: '#/components/parameters/organizationId'
+      - $ref: '#/components/parameters/credentialId'
+    patch:
+      tags: [API Keys]
+      summary: Update credential permissions, bucket scope, or expiry
+      operationId: updateS3Credential
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateS3CredentialBody'
+      responses:
+        '200':
+          description: Updated credential metadata; secrets are never returned
+
+  /api/v1/organizations/{organizationId}/s3-credentials/{credentialId}/revoke:
+    parameters:
+      - $ref: '#/components/parameters/organizationId'
+      - $ref: '#/components/parameters/credentialId'
+    post:
+      tags: [API Keys]
+      summary: Revoke service-account credential
+      operationId: revokeS3Credential
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Revoked credential metadata
+
+  /api/v1/organizations/{organizationId}/s3-credentials/{credentialId}/rotate:
+    parameters:
+      - $ref: '#/components/parameters/organizationId'
+      - $ref: '#/components/parameters/credentialId'
+    post:
+      tags: [API Keys]
+      summary: Rotate service-account credential
+      operationId: rotateS3Credential
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      responses:
+        '201':
+          description: New credential created; new secretAccessKey is returned once
 
   /api/v1/organizations/{organizationId}/audit-logs:
     parameters:
@@ -2000,6 +2123,66 @@ paths:
         '501':
           description: Not implemented in current phase
 
+  /api/v1/infrastructure/summary:
+    get:
+      tags: [Infrastructure]
+      summary: Infrastructure dashboard summary
+      operationId: getInfrastructureSummary
+      security: [{ sessionCookie: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '200':
+          description: Collector summary
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+  /api/v1/infrastructure/server:
+    get:
+      tags: [Infrastructure]
+      summary: Host CPU, memory, load, and network
+      operationId: getInfrastructureServer
+      security: [{ sessionCookie: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '200':
+          description: Server metrics
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+  /api/v1/infrastructure/disks:
+    get:
+      tags: [Infrastructure]
+      summary: Physical disk and storage-root usage
+      operationId: getInfrastructureDisks
+      security: [{ sessionCookie: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '200':
+          description: Disk volumes
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+  /api/v1/infrastructure/storage:
+    get:
+      tags: [Infrastructure]
+      summary: Bucket usage, object counts, upload activity, provider health
+      operationId: getInfrastructureStorage
+      security: [{ sessionCookie: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '200':
+          description: Storage monitor metrics
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+  /api/v1/infrastructure/docker:
+    get:
+      tags: [Infrastructure]
+      summary: Docker Engine status via the configured socket
+      operationId: getInfrastructureDocker
+      security: [{ sessionCookie: [], organizationHeader: [] }, { bearerApiKey: [] }]
+      responses:
+        '200':
+          description: Docker metrics or unavailable
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
 components:
   securitySchemes:
     sessionCookie:
@@ -2050,6 +2233,18 @@ components:
         type: string
     apiKeyId:
       name: apiKeyId
+      in: path
+      required: true
+      schema:
+        type: string
+    credentialId:
+      name: credentialId
+      in: path
+      required: true
+      schema:
+        type: string
+    serviceAccountId:
+      name: serviceAccountId
       in: path
       required: true
       schema:
@@ -2392,6 +2587,72 @@ components:
         expiresAt:
           type: string
           format: date-time
+
+    CreateS3CredentialBody:
+      type: object
+      required: [serviceAccountName, permissions]
+      properties:
+        serviceAccountName:
+          type: string
+          minLength: 2
+          maxLength: 64
+        description:
+          type: string
+          maxLength: 256
+        permissions:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ServiceAccountPermission'
+        allowedBucketNames:
+          type: array
+          items:
+            type: string
+        expiresAt:
+          type: string
+          format: date-time
+
+    UpdateS3CredentialBody:
+      type: object
+      properties:
+        permissions:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ServiceAccountPermission'
+        allowedBucketNames:
+          type: array
+          items:
+            type: string
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    UpdateServiceAccountBody:
+      type: object
+      properties:
+        description:
+          type: string
+          maxLength: 256
+          nullable: true
+        disabled:
+          type: boolean
+
+    ServiceAccountPermission:
+      type: string
+      enum:
+        - storage.read
+        - storage.upload
+        - storage.delete
+        - storage.share
+        - artifact.read
+        - artifact.upload
+        - artifact.delete
+        - backup.read
+        - backup.create
+        - backup.restore
+        - backup.delete
 
     CreateBucketBody:
       type: object

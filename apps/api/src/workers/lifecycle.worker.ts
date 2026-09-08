@@ -1,4 +1,4 @@
-import { Queue, Worker, type ConnectionOptions } from 'bullmq';
+import { Queue, Worker, type ConnectionOptions, type QueueInstance } from '../lib/bullmq.js';
 import type { Logger } from '@vaultstack/logger';
 import type { PolicyService } from '../modules/storage/services/policy.service.js';
 
@@ -6,11 +6,11 @@ export const LIFECYCLE_QUEUE = 'storage-lifecycle';
 export const LIFECYCLE_JOB = 'apply-lifecycle-policies';
 export const LIFECYCLE_INTERVAL_MS = 60_000;
 
-export function createLifecycleQueue(connection: ConnectionOptions): Queue {
+export function createLifecycleQueue(connection: ConnectionOptions): QueueInstance {
   return new Queue(LIFECYCLE_QUEUE, { connection });
 }
 
-export async function scheduleLifecycle(queue: Queue): Promise<void> {
+export async function scheduleLifecycle(queue: QueueInstance): Promise<void> {
   await queue.add(
     LIFECYCLE_JOB,
     {},
@@ -26,7 +26,7 @@ export function createLifecycleWorker(deps: {
   connection: ConnectionOptions;
   policies: PolicyService;
   logger: Logger;
-}): Worker {
+}) {
   const { connection, policies, logger } = deps;
 
   return new Worker(

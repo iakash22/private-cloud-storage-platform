@@ -91,6 +91,12 @@ Programmatic clients may still use `Authorization: Bearer <api-key>`.
 - `GET /api/v1/organizations/:organizationId/api-keys` — `users.manage`
 - `POST /api/v1/organizations/:organizationId/api-keys` — `users.manage`
 - `DELETE /api/v1/organizations/:organizationId/api-keys/:apiKeyId` — `users.manage`
+- `GET/POST /api/v1/organizations/:organizationId/s3-credentials` — list/create S3 service-account credentials; create returns the secret once
+- `PATCH /api/v1/organizations/:organizationId/s3-credentials/:credentialId` — permissions, bucket restrictions, expiry
+- `POST /api/v1/organizations/:organizationId/s3-credentials/:credentialId/revoke` — revoke
+- `POST /api/v1/organizations/:organizationId/s3-credentials/:credentialId/rotate` — revoke old credential and return a new secret once
+- `GET /api/v1/organizations/:organizationId/s3-credentials/service-accounts` — list service accounts
+- `PATCH /api/v1/organizations/:organizationId/s3-credentials/service-accounts/:serviceAccountId` — enable, disable, or describe a service account
 - `GET /api/v1/organizations/:organizationId/audit-logs` — `audit.read`
 
 ### Storage (Phase 3)
@@ -269,6 +275,20 @@ Backup error codes: `BACKUP_JOB_NOT_FOUND`, `BACKUP_SNAPSHOT_NOT_FOUND`,
 `BACKUP_TARGET_FORBIDDEN`, `BACKUP_VERIFICATION_FAILED`.
 
 See [../backups/README.md](../backups/README.md).
+
+### Infrastructure monitoring
+
+Live collector snapshots under `/api/v1/infrastructure`. Host metrics are process-wide; storage metrics are organization-scoped. There is **no** `/api/exec`, `/api/shell`, or other command-execution surface.
+
+- `GET /api/v1/infrastructure/summary` — `infrastructure.read`
+- `GET /api/v1/infrastructure/server` — CPU, RAM, load, network
+- `GET /api/v1/infrastructure/disks` — physical disk and storage-root usage (`fs.statfs`)
+- `GET /api/v1/infrastructure/storage` — bucket/object usage, upload activity, provider health, storage-root free space
+- `GET /api/v1/infrastructure/docker` — Docker Engine over `DOCKER_SOCKET` (`/info`, `/containers/json` only)
+
+A missing disk path, unhealthy provider, or unreachable Docker socket is returned in the payload (`degraded` / `unavailable`). The HTTP status remains `200`.
+
+See [../../infrastructure/monitoring/README.md](../../infrastructure/monitoring/README.md).
 
 ### S3-compatible gateway
 

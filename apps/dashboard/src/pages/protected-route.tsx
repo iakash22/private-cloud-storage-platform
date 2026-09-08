@@ -2,6 +2,7 @@ import { Navigate, Outlet } from 'react-router-dom';
 import { Skeleton } from '@vaultstack/ui';
 import { useAuth } from '../context/auth-context.js';
 import { canReadBackups } from '../lib/backup-permissions.js';
+import { canReadInfrastructure } from '../lib/infrastructure-permissions.js';
 import { canReadStorage } from '../lib/storage-preferences.js';
 
 export function ProtectedRoute() {
@@ -19,11 +20,15 @@ export function ProtectedRoute() {
     return <Navigate to="/login" replace />;
   }
 
-  if (!canReadStorage(permissions) && !canReadBackups(permissions)) {
+  if (
+    !canReadStorage(permissions) &&
+    !canReadBackups(permissions) &&
+    !canReadInfrastructure(permissions)
+  ) {
     return (
       <main className="mx-auto flex min-h-screen max-w-3xl items-center px-6 py-12">
         <p className="text-sm text-slate-600">
-          Your account does not have storage.read or backup.read permission.
+          Your account does not have storage.read, backup.read, or infrastructure.read permission.
         </p>
       </main>
     );

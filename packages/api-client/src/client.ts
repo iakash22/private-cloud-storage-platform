@@ -36,6 +36,13 @@ import {
   type PublicBackupSnapshot,
   type PublicBackupSummary,
   type PublicBackupVerification,
+  type PublicDiskMetrics,
+  type PublicDockerMetrics,
+  type PublicInfrastructureSummary,
+  type PublicServerMetrics,
+  type PublicStorageMonitorMetrics,
+  type CreatedS3AccessCredential,
+  type PublicS3AccessCredential,
   type BackupTargetName,
   type S3DialectName,
   type PublicTeam,
@@ -817,6 +824,110 @@ export class VaultStackApiClient {
 
   async deleteArtifact(artifactId: string): Promise<void> {
     await this.request<undefined>('DELETE', `/api/v1/artifacts/${artifactId}`);
+  }
+
+  async getInfrastructureSummary(): Promise<PublicInfrastructureSummary> {
+    const result = await this.request<{ summary: PublicInfrastructureSummary }>(
+      'GET',
+      '/api/v1/infrastructure/summary',
+    );
+    return result.summary;
+  }
+
+  async listS3Credentials(organizationId: string): Promise<PublicS3AccessCredential[]> {
+    const result = await this.request<{ credentials: PublicS3AccessCredential[] }>(
+      'GET',
+      `/api/v1/organizations/${organizationId}/s3-credentials`,
+    );
+    return result.credentials;
+  }
+
+  async createS3Credential(
+    organizationId: string,
+    input: {
+      serviceAccountName: string;
+      description?: string;
+      permissions: string[];
+      allowedBucketNames?: string[];
+      expiresAt?: string;
+    },
+  ): Promise<CreatedS3AccessCredential> {
+    const result = await this.request<{ credential: CreatedS3AccessCredential }>(
+      'POST',
+      `/api/v1/organizations/${organizationId}/s3-credentials`,
+      { body: input },
+    );
+    return result.credential;
+  }
+
+  async updateS3Credential(
+    organizationId: string,
+    credentialId: string,
+    input: {
+      permissions?: string[];
+      allowedBucketNames?: string[];
+      expiresAt?: string | null;
+    },
+  ): Promise<PublicS3AccessCredential> {
+    const result = await this.request<{ credential: PublicS3AccessCredential }>(
+      'PATCH',
+      `/api/v1/organizations/${organizationId}/s3-credentials/${credentialId}`,
+      { body: input },
+    );
+    return result.credential;
+  }
+
+  async revokeS3Credential(organizationId: string, credentialId: string): Promise<PublicS3AccessCredential> {
+    const result = await this.request<{ credential: PublicS3AccessCredential }>(
+      'POST',
+      `/api/v1/organizations/${organizationId}/s3-credentials/${credentialId}/revoke`,
+      { body: {} },
+    );
+    return result.credential;
+  }
+
+  async rotateS3Credential(
+    organizationId: string,
+    credentialId: string,
+  ): Promise<CreatedS3AccessCredential> {
+    const result = await this.request<{ credential: CreatedS3AccessCredential }>(
+      'POST',
+      `/api/v1/organizations/${organizationId}/s3-credentials/${credentialId}/rotate`,
+      { body: {} },
+    );
+    return result.credential;
+  }
+
+  async getInfrastructureServer(): Promise<PublicServerMetrics> {
+    const result = await this.request<{ server: PublicServerMetrics }>(
+      'GET',
+      '/api/v1/infrastructure/server',
+    );
+    return result.server;
+  }
+
+  async getInfrastructureDisks(): Promise<PublicDiskMetrics> {
+    const result = await this.request<{ disks: PublicDiskMetrics }>(
+      'GET',
+      '/api/v1/infrastructure/disks',
+    );
+    return result.disks;
+  }
+
+  async getInfrastructureStorage(): Promise<PublicStorageMonitorMetrics> {
+    const result = await this.request<{ storage: PublicStorageMonitorMetrics }>(
+      'GET',
+      '/api/v1/infrastructure/storage',
+    );
+    return result.storage;
+  }
+
+  async getInfrastructureDocker(): Promise<PublicDockerMetrics> {
+    const result = await this.request<{ docker: PublicDockerMetrics }>(
+      'GET',
+      '/api/v1/infrastructure/docker',
+    );
+    return result.docker;
   }
 
   async getBackupSummary(): Promise<PublicBackupSummary> {

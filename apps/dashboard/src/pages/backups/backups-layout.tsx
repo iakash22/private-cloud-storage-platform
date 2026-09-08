@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { Button, cn } from '@vaultstack/ui';
 import { useAuth } from '../../context/auth-context.js';
+import { canReadInfrastructure } from '../../lib/infrastructure-permissions.js';
 import { canReadStorage } from '../../lib/storage-preferences.js';
 
 const navItems: { to: string; label: string; end?: boolean }[] = [
@@ -33,6 +34,16 @@ export function BackupsLayout() {
                 onClick={() => void navigate('/storage')}
               >
                 Storage
+              </Button>
+            ) : null}
+            {canReadInfrastructure(permissions) ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void navigate('/infrastructure')}
+              >
+                Infrastructure
               </Button>
             ) : null}
             {organizations.length > 1 ? (

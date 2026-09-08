@@ -190,4 +190,25 @@ describe('VaultStackApiClient storage + auth', () => {
       expect.objectContaining({ method: 'POST' }),
     );
   });
+
+  it('loads infrastructure summary through the monitoring API', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ summary: { docker: { available: false } } }),
+    });
+
+    const client = new VaultStackApiClient({
+      baseUrl: 'http://localhost:3000',
+      fetchImpl,
+    });
+    client.setOrganizationId('org-1');
+
+    await client.getInfrastructureSummary();
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://localhost:3000/api/v1/infrastructure/summary',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
 });

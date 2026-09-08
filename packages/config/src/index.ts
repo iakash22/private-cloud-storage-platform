@@ -86,6 +86,12 @@ const envSchema = z.object({
   // Used by Playwright and local smoke tests so a separate worker is optional.
   BACKUP_PROCESS_INLINE: booleanFromString.default('false'),
 
+  // Docker Engine socket used by the infrastructure collector (HTTP over the
+  // socket — never a shell). Missing or unreadable sockets surface as unavailable.
+  DOCKER_SOCKET: z.string().min(1).default('/var/run/docker.sock'),
+  // Extra filesystem paths to include in disk monitoring, comma-separated.
+  INFRASTRUCTURE_DISK_PATHS: z.string().min(1).optional(),
+
   // Comma-separated browser origins allowed to call the API with cookies.
   // Unset: localhost dashboard origins in development/test, none in production.
   CORS_ORIGINS: z.string().optional(),
