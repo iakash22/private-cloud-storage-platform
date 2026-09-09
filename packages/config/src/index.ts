@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { config as loadDotenv } from 'dotenv';
 import { z } from 'zod';
@@ -85,6 +85,8 @@ const envSchema = z.object({
   // When true, the API process runs backup jobs in-process after enqueueing.
   // Used by Playwright and local smoke tests so a separate worker is optional.
   BACKUP_PROCESS_INLINE: booleanFromString.default('false'),
+  // Production Compose uses one API image with role-specific worker commands.
+  WORKER_ROLE: z.enum(['all', 'backup', 'artifact']).default('all'),
 
   // Docker Engine socket used by the infrastructure collector (HTTP over the
   // socket — never a shell). Missing or unreadable sockets surface as unavailable.
@@ -98,6 +100,27 @@ const envSchema = z.object({
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;
+
+const SECRET_FILE_ENV_NAMES = ['DATABASE_URL', 'JWT_SECRET'] as const;
+
+function loadSecretFileValues(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const result = { ...environment };
+
+  for (const name of SECRET_FILE_ENV_NAMES) {
+    const filePath = environment[`${name}_FILE`];
+    if (!filePath) {
+      continue;
+    }
+
+    try {
+      result[name] = readFileSync(filePath, 'utf8').trim();
+    } catch (error: unknown) {
+      throw new Error(`Unable to read ${name}_FILE`, { cause: error });
+    }
+  }
+
+  return result;
+}
 
 function findEnvFile(startDir: string = process.cwd()): string {
   let current = startDir;
@@ -128,7 +151,7 @@ export function loadEnv(options: { path?: string; startDir?: string } = {}): Env
   const envPath = options.path ?? findEnvFile(options.startDir ?? process.cwd());
   loadDotenv({ path: envPath });
 
-  const result = envSchema.safeParse(process.env);
+  const result = envSchema.safeParse(loadSecretFileValues(process.env));
 
   if (!result.success) {
     const formatted = result.error.flatten().fieldErrors;

@@ -1,0 +1,346 @@
+services:
+  caddy:
+    image: caddy:2.9-alpine
+    restart: unless-stopped
+    environment:
+      DASHBOARD_DOMAIN: ${DASHBOARD_DOMAIN:?Set DASHBOARD_DOMAIN}
+      API_DOMAIN: ${API_DOMAIN:?Set API_DOMAIN}
+      S3_DOMAIN: ${S3_DOMAIN:?Set S3_DOMAIN}
+    depends_on:
+      dashboard:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+      s3-gateway:
+        condition: service_healthy
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - public
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q --spider http://127.0.0.1/healthz || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 128M
+
+  dashboard:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: dashboard
+      args:
+        VITE_API_URL: ${VITE_API_URL:?Set VITE_API_URL}
+    restart: unless-stopped
+    expose:
+      - '8080'
+    networks:
+      - public
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q --spider http://127.0.0.1:8080/healthz || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 128M
+
+  migrate:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: api-runtime
+    command:
+      - sh
+      - -c
+      - 'export DATABASE_URL="$$(cat /run/secrets/database_url)" && exec prisma migrate deploy --schema=/app/prisma/schema.prisma'
+    restart: 'no'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL_FILE: /run/secrets/database_url
+    secrets:
+      - database_url
+    networks:
+      - private
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+  api:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: api-runtime
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    expose:
+      - '3000'
+    environment:
+      NODE_ENV: production
+      API_HOST: 0.0.0.0
+      API_PORT: 3000
+      DATABASE_URL_FILE: /run/secrets/database_url
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      REDIS_URL: redis://redis:6379
+      STORAGE_DRIVER: local
+      STORAGE_LOCAL_ROOT: /data
+      CORS_ORIGINS: ${CORS_ORIGINS:?Set CORS_ORIGINS to the dashboard origin}
+      S3_GATEWAY_ENABLED: ${S3_GATEWAY_ENABLED:-true}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    secrets:
+      - database_url
+      - jwt_secret
+    volumes:
+      - vaultstack_data:/data
+    networks:
+      - public
+      - private
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'node -e "fetch(\"http://127.0.0.1:3000/ready\").then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"',
+        ]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: '2.00'
+          memory: 1G
+
+  # The S3 gateway has its own public-facing proxy boundary. The API remains
+  # the signer and authorization boundary; this service never stores secrets.
+  s3-gateway:
+    image: nginxinc/nginx-unprivileged:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    expose:
+      - '8080'
+    volumes:
+      - ./s3-gateway.nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - public
+      - private
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q --spider http://127.0.0.1:8080/healthz || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 128M
+
+  backup-worker:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: api-runtime
+    command: ['node', 'dist/workers/index.js']
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      WORKER_ROLE: backup
+      DATABASE_URL_FILE: /run/secrets/database_url
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      REDIS_URL: redis://redis:6379
+      STORAGE_DRIVER: local
+      STORAGE_LOCAL_ROOT: /data
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    secrets:
+      - database_url
+      - jwt_secret
+    volumes:
+      - vaultstack_data:/data
+    networks:
+      - private
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ['CMD-SHELL', 'kill -0 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 512M
+
+  artifact-worker:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: api-runtime
+    command: ['node', 'dist/workers/index.js']
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      WORKER_ROLE: artifact
+      DATABASE_URL_FILE: /run/secrets/database_url
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      REDIS_URL: redis://redis:6379
+      STORAGE_DRIVER: local
+      STORAGE_LOCAL_ROOT: /data
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    secrets:
+      - database_url
+      - jwt_secret
+    volumes:
+      - vaultstack_data:/data
+    networks:
+      - private
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ['CMD-SHELL', 'kill -0 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 512M
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vaultstack}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_DB: ${POSTGRES_DB:-vaultstack}
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - private
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: '2.00'
+          memory: 1G
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes', '--save', '60', '1']
+    volumes:
+      - redis_data:/data
+    networks:
+      - private
+    read_only: true
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 512M
+
+volumes:
+  # Bind this named volume to /srv/vaultstack/data by default. Object data
+  # therefore survives image/container recreation and is not in a writable layer.
+  vaultstack_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${VAULTSTACK_DATA_ROOT:-/srv/vaultstack/data}
+  postgres_data:
+  redis_data:
+  caddy_data:
+  caddy_config:
+
+secrets:
+  database_url:
+    file: ${VAULTSTACK_DATABASE_URL_FILE:-./secrets/database_url}
+  jwt_secret:
+    file: ${VAULTSTACK_JWT_SECRET_FILE:-./secrets/jwt_secret}
+  postgres_password:
+    file: ${VAULTSTACK_POSTGRES_PASSWORD_FILE:-./secrets/postgres_password}
+
+networks:
+  public:
+  private:
+    internal: true

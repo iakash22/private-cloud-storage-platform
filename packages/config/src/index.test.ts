@@ -36,6 +36,35 @@ describe('@vaultstack/config', () => {
     expect(() => loadEnv({ path: '.env.missing' })).toThrow(/Invalid environment configuration/);
   });
 
+  it('loads production secrets from *_FILE variables', () => {
+    const root = mkdtempSync(join(tmpdir(), 'vaultstack-config-secrets-'));
+    const databaseUrlFile = join(root, 'database_url');
+    const jwtSecretFile = join(root, 'jwt_secret');
+    writeFileSync(
+      databaseUrlFile,
+      'postgresql://secret-user:secret-password@postgres:5432/vaultstack\n',
+      'utf8',
+    );
+    writeFileSync(jwtSecretFile, 'production-jwt-secret-value-that-is-long-enough\n', 'utf8');
+
+    process.env = {
+      ...process.env,
+      NODE_ENV: 'production',
+      DATABASE_URL_FILE: databaseUrlFile,
+      JWT_SECRET_FILE: jwtSecretFile,
+      REDIS_URL: 'redis://redis:6379',
+    };
+    delete process.env.DATABASE_URL;
+    delete process.env.JWT_SECRET;
+
+    const config = loadEnv({ path: '.env.missing' });
+
+    expect(config.DATABASE_URL).toBe(
+      'postgresql://secret-user:secret-password@postgres:5432/vaultstack',
+    );
+    expect(config.JWT_SECRET).toBe('production-jwt-secret-value-that-is-long-enough');
+  });
+
   it('loadEnvFile walks up to a monorepo root .env', () => {
     const root = mkdtempSync(join(tmpdir(), 'vaultstack-config-env-'));
     const nested = join(root, 'apps', 'api');

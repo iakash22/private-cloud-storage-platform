@@ -32,6 +32,7 @@ export function createTestConfig(overrides: Partial<EnvConfig> = {}): EnvConfig 
     S3_GATEWAY_REGION: 'vaultstack',
     BACKUP_MAX_CONCURRENT_JOBS: 1,
     BACKUP_PROCESS_INLINE: false,
+    WORKER_ROLE: 'all',
     DOCKER_SOCKET: '/var/run/docker.sock',
     ...overrides,
   };

@@ -68,6 +68,9 @@ importers:
       '@aws-sdk/s3-request-presigner':
         specifier: ^3.716.0
         version: 3.1127.0
+      '@prisma/client':
+        specifier: ^6.1.0
+        version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
       '@vaultstack/auth':
         specifier: workspace:*
         version: link:../../packages/auth
@@ -101,6 +104,9 @@ importers:
       ioredis:
         specifier: ^5.4.2
         version: 5.11.1
+      prisma:
+        specifier: ^6.1.0
+        version: 6.19.3(typescript@5.9.3)
       swagger-ui-express:
         specifier: ^5.0.1
         version: 5.0.1(express@4.22.2)

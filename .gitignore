@@ -37,6 +37,8 @@ Thumbs.db
 
 # Docker volumes (local data)
 infrastructure/docker/data/
+infrastructure/docker/secrets/*
+!infrastructure/docker/secrets/README.md
 
 # Local object storage root (STORAGE_LOCAL_ROOT default). Object data must
 # never be committed.

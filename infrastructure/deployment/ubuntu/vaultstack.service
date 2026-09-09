@@ -1,0 +1,18 @@
+[Unit]
+Description=VaultStack production Compose stack
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/srv/vaultstack/compose
+ExecStart=/usr/bin/docker compose --env-file /srv/vaultstack/config/compose.env -f /srv/vaultstack/compose/docker-compose.yml up --remove-orphans
+ExecStop=/usr/bin/docker compose --env-file /srv/vaultstack/config/compose.env -f /srv/vaultstack/compose/docker-compose.yml down
+Restart=always
+RestartSec=10
+TimeoutStartSec=0
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target

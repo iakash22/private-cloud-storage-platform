@@ -1,0 +1,16 @@
+**/node_modules
+**/dist
+**/.vite
+**/coverage
+.git
+.github
+.cursor
+.env
+.env.*
+!.env.example
+.vaultstack
+playwright-report
+test-results
+Dockerfile*
+!.dockerignore
+infrastructure/docker/secrets
