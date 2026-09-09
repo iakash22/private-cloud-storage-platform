@@ -50,6 +50,17 @@ const SELF_HOSTED_POLICY: EndpointSafetyPolicy = {
 export const PUBLIC_S3_ENDPOINT_POLICY = PUBLIC_HTTPS_POLICY;
 export const SELF_HOSTED_S3_ENDPOINT_POLICY = SELF_HOSTED_POLICY;
 
+export function restrictPrivateEndpointPolicy(
+  policy: EndpointSafetyPolicy,
+): EndpointSafetyPolicy {
+  return {
+    ...policy,
+    allowLoopback: false,
+    allowPrivateNetworks: false,
+    allowLinkLocal: false,
+  };
+}
+
 export async function defaultAddressLookup(hostname: string): Promise<ResolvedAddress[]> {
   const records = await dnsLookup(hostname, { all: true, verbatim: true });
   return records.map((record) => ({

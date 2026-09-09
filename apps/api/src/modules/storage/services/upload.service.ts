@@ -387,6 +387,7 @@ export function createUploadService(deps: {
       if (!row) {
         throw storageUploadNotFound();
       }
+      requireUploadActor(row, input.userId);
 
       if (row.status === UploadStatus.COMPLETED) {
         throw storageUploadInvalidState('Upload is already completed');
@@ -437,12 +438,14 @@ export function createUploadService(deps: {
         // checksum there is nothing to compare against, and completing anyway
         // would report an integrity guarantee that was never checked.
         if (!row.checksum) {
+          metrics.integrityFailure();
           await uploads.setStatus(row.id, UploadStatus.FAILED, 'checksum_unverifiable');
           await resolved.provider.deleteObject(location).catch(() => undefined);
           throw storageChecksumUnverifiable();
         }
 
         if (row.checksum.toLowerCase() !== input.checksumSha256.toLowerCase()) {
+          metrics.integrityFailure();
           await uploads.setStatus(row.id, UploadStatus.FAILED, 'checksum_mismatch');
           await resolved.provider.deleteObject(location).catch(() => undefined);
           throw storageChecksumMismatch();
@@ -513,6 +516,7 @@ export function createUploadService(deps: {
       if (!row) {
         throw storageUploadNotFound();
       }
+      requireUploadActor(row, input.userId);
 
       if (row.status === UploadStatus.COMPLETED) {
         throw storageUploadInvalidState('Completed uploads cannot be aborted');
@@ -541,10 +545,7 @@ export function createUploadService(deps: {
 
     async initiateMultipart(input) {
       const key = assertValidObjectKey(input.key, limits.maxKeyLength);
-      if (
-        input.declaredSize !== undefined &&
-        input.declaredSize > limits.maxObjectSizeBytes
-      ) {
+      if (input.declaredSize !== undefined && input.declaredSize > limits.maxObjectSizeBytes) {
         throw storageObjectTooLarge(limits.maxObjectSizeBytes);
       }
       const resolved = await storage.resolveBucket(input.organizationId, input.bucketId);
@@ -571,8 +572,7 @@ export function createUploadService(deps: {
         userId: input.userId,
         key,
         contentType: input.contentType ?? null,
-        declaredSize:
-          input.declaredSize === undefined ? null : BigInt(input.declaredSize),
+        declaredSize: input.declaredSize === undefined ? null : BigInt(input.declaredSize),
         providerUploadId: initiated.providerUploadId,
         stagingKey,
         expiresAt: new Date(Date.now() + limits.uploadTtlSeconds * 1000),
@@ -754,7 +754,10 @@ export function createUploadService(deps: {
           action: 'storage.multipart.part_destination',
           resourceType: 'multipart_upload',
           resourceId: row.id,
-          metadata: { partNumber: input.partNumber, transport: MULTIPART_TRANSFER_TRANSPORTS.DIRECT },
+          metadata: {
+            partNumber: input.partNumber,
+            transport: MULTIPART_TRANSFER_TRANSPORTS.DIRECT,
+          },
           ipAddress: input.meta.ipAddress,
           userAgent: input.meta.userAgent,
         });
@@ -785,7 +788,10 @@ export function createUploadService(deps: {
         action: 'storage.multipart.part_destination',
         resourceType: 'multipart_upload',
         resourceId: row.id,
-        metadata: { partNumber: input.partNumber, transport: MULTIPART_TRANSFER_TRANSPORTS.VAULTSTACK },
+        metadata: {
+          partNumber: input.partNumber,
+          transport: MULTIPART_TRANSFER_TRANSPORTS.VAULTSTACK,
+        },
         ipAddress: input.meta.ipAddress,
         userAgent: input.meta.userAgent,
       });
@@ -823,7 +829,9 @@ export function createUploadService(deps: {
           partNumber: input.partNumber,
         });
         if (!inspected) {
-          throw storageMultipartInvalidPart(`Part ${input.partNumber} was not found on the provider`);
+          throw storageMultipartInvalidPart(
+            `Part ${input.partNumber} was not found on the provider`,
+          );
         }
         if (normalizeEtag(inspected.etag) !== normalizeEtag(input.etag)) {
           throw storageMultipartInvalidPart(`Part ${input.partNumber} etag does not match`);
@@ -842,7 +850,7 @@ export function createUploadService(deps: {
         size = inspected.size;
         checksum = inspected.checksumSha256
           ? normalizeChecksum(inspected.checksumSha256)
-          : input.checksumSha256 ?? null;
+          : (input.checksumSha256 ?? null);
       }
 
       const recorded = await uploads.upsertPart({
@@ -961,9 +969,7 @@ export function createUploadService(deps: {
           part.checksumSha256 &&
           match.checksum?.toLowerCase() !== part.checksumSha256.toLowerCase()
         ) {
-          throw storageMultipartInvalidPart(
-            `Part ${part.partNumber} checksum does not match`,
-          );
+          throw storageMultipartInvalidPart(`Part ${part.partNumber} checksum does not match`);
         }
       }
 
@@ -1280,12 +1286,15 @@ function deriveVersionId(stagingKey: string): string {
   return versionId;
 }
 
-function requireMultipartActor(
-  row: { userId: string | null },
-  userId: string,
-): void {
+function requireMultipartActor(row: { userId: string | null }, userId: string): void {
   if (row.userId && row.userId !== userId) {
     throw storageAccessDenied('You are not the initiator of this multipart upload');
+  }
+}
+
+function requireUploadActor(row: { userId: string | null }, userId: string): void {
+  if (row.userId && row.userId !== userId) {
+    throw storageAccessDenied('You are not the initiator of this upload');
   }
 }
 
@@ -1329,7 +1338,10 @@ async function loadActiveMultipart(
 }
 
 async function assertCapacity(
-  provider: { capabilities: { capacityChecks: boolean }; checkCapacity: (input: { requiredBytes: number }) => Promise<{ ok: boolean }> },
+  provider: {
+    capabilities: { capacityChecks: boolean };
+    checkCapacity: (input: { requiredBytes: number }) => Promise<{ ok: boolean }>;
+  },
   requiredBytes: number,
 ): Promise<void> {
   if (!provider.capabilities.capacityChecks || requiredBytes <= 0) {

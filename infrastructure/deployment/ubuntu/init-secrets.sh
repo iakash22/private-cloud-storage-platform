@@ -23,12 +23,21 @@ fi
 
 postgres_password="$(openssl rand -hex 24)"
 jwt_secret="$(openssl rand -hex 32)"
+metrics_token="$(openssl rand -hex 32)"
+grafana_admin_password="$(openssl rand -hex 24)"
 
 umask 077
 printf '%s\n' "${postgres_password}" > "${secret_dir}/postgres_password"
 printf '%s\n' "${jwt_secret}" > "${secret_dir}/jwt_secret"
+printf '%s\n' "${metrics_token}" > "${secret_dir}/metrics_token"
+printf '%s\n' "${grafana_admin_password}" > "${secret_dir}/grafana_admin_password"
 printf 'postgresql://vaultstack:%s@postgres:5432/vaultstack\n' "${postgres_password}" \
   > "${secret_dir}/database_url"
 
-chmod 0600 "${secret_dir}/database_url" "${secret_dir}/jwt_secret" "${secret_dir}/postgres_password"
+chmod 0600 \
+  "${secret_dir}/database_url" \
+  "${secret_dir}/jwt_secret" \
+  "${secret_dir}/postgres_password" \
+  "${secret_dir}/metrics_token" \
+  "${secret_dir}/grafana_admin_password"
 echo "Generated VaultStack Docker secrets in ${secret_dir}."

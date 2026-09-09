@@ -33,6 +33,17 @@ export function parseSigV4Authorization(header: string | undefined): ParsedSigV4
   if (!credential || !signedHeaders || !signature) {
     throw unauthorized('Malformed S3 authorization header');
   }
+  if (
+    signedHeaders.some((name) => name !== name.toLowerCase() || !/^[a-z0-9-]+$/.test(name)) ||
+    !signedHeaders.includes('host') ||
+    new Set(signedHeaders).size !== signedHeaders.length ||
+    signedHeaders.some((name, index) => {
+      const previous = signedHeaders[index - 1];
+      return previous !== undefined && previous > name;
+    })
+  ) {
+    throw unauthorized('Malformed S3 signed headers');
+  }
 
   const [accessKeyId, dateStamp, region, service] = credential.split('/');
   if (!accessKeyId || !dateStamp || !region || !service) {
@@ -48,13 +59,16 @@ export function verifySigV4Request(
   expectedRegion: string,
 ): void {
   const authorization = parseSigV4Authorization(req.header('authorization'));
+  if (authorization.service !== 's3') {
+    throw unauthorized('Signature service mismatch');
+  }
   if (authorization.region !== expectedRegion) {
     throw unauthorized('Signature region mismatch');
   }
 
-  const amzDate = req.header('x-amz-date') ?? req.header('date');
-  if (!amzDate) {
-    throw unauthorized('Missing request date header');
+  const amzDate = req.header('x-amz-date');
+  if (!amzDate || !isFreshSigV4Timestamp(amzDate, authorization.dateStamp)) {
+    throw unauthorized('S3 request date is missing, malformed, or stale');
   }
 
   const payloadHash =
@@ -77,11 +91,43 @@ export function verifySigV4Request(
   );
   const expectedSignature = createHmac('sha256', signingKey).update(stringToSign).digest('hex');
 
+  if (!/^[a-f0-9]{64}$/i.test(authorization.signature)) {
+    throw unauthorized('Malformed S3 signature');
+  }
+
   const provided = Buffer.from(authorization.signature, 'hex');
   const expected = Buffer.from(expectedSignature, 'hex');
   if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
     throw unauthorized('Signature mismatch');
   }
+}
+
+const SIGV4_MAX_CLOCK_SKEW_MS = 15 * 60 * 1000;
+
+function isFreshSigV4Timestamp(value: string, dateStamp: string): boolean {
+  const match =
+    /^(?<year>\d{4})(?<month>\d{2})(?<day>\d{2})T(?<hour>\d{2})(?<minute>\d{2})(?<second>\d{2})Z$/.exec(
+      value,
+    );
+  if (!match?.groups || value.slice(0, 8) !== dateStamp) {
+    return false;
+  }
+
+  const year = Number(match.groups.year);
+  const month = Number(match.groups.month);
+  const day = Number(match.groups.day);
+  const hour = Number(match.groups.hour);
+  const minute = Number(match.groups.minute);
+  const second = Number(match.groups.second);
+  const timestamp = Date.UTC(year, month - 1, day, hour, minute, second);
+  if (
+    !Number.isFinite(timestamp) ||
+    new Date(timestamp).toISOString().replace(/\.\d{3}Z$/, 'Z') !== value
+  ) {
+    return false;
+  }
+
+  return Math.abs(Date.now() - timestamp) <= SIGV4_MAX_CLOCK_SKEW_MS;
 }
 
 function buildCanonicalRequest(

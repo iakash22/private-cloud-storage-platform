@@ -7,6 +7,14 @@ import { createErrorHandler, createNotFoundHandler } from './middleware/error-ha
 import { createRequestLogger } from './middleware/request-logger.js';
 import { requestIdMiddleware } from './middleware/request-id.js';
 import { createRedisClient, type DependencyClients } from './lib/dependencies.js';
+import type { AppContainer } from './container/app-container.js';
+import {
+  createHttpMetricsMiddleware,
+  createMetricsHandler,
+  createMetricsRegistry,
+  type MetricsRegistry,
+} from './observability/metrics.js';
+import type { StorageMetrics } from './modules/storage/services/storage.metrics.js';
 import {
   createMemoryRateLimiter,
   createRedisRateLimiter,
@@ -22,11 +30,15 @@ export interface CreateAppOptions {
   prisma: PrismaClient;
   clients?: DependencyClients;
   rateLimiter?: RateLimiter;
+  metrics?: MetricsRegistry;
+  storageMetrics?: StorageMetrics;
+  container?: AppContainer;
 }
 
 export function createApp(options: CreateAppOptions): Express {
   const app = express();
   const redis = options.clients?.redis ?? createRedisClient(options.config);
+  const metrics = options.metrics ?? createMetricsRegistry();
   const clients: DependencyClients = {
     redis,
     prisma: options.prisma,
@@ -41,6 +53,7 @@ export function createApp(options: CreateAppOptions): Express {
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
   app.use(requestIdMiddleware);
+  app.use(createHttpMetricsMiddleware(metrics));
   app.use(createCorsMiddleware(options.config));
 
   // Object bytes must reach the storage provider as a stream. The JSON parser
@@ -68,10 +81,29 @@ export function createApp(options: CreateAppOptions): Express {
   app.get('/ready', readyHandler);
   app.get('/api/v1/health', healthHandler);
   app.get('/api/v1/ready', readyHandler);
+  if (options.metrics && options.storageMetrics) {
+    app.get(
+      '/metrics',
+      createMetricsHandler({
+        registry: metrics,
+        config: options.config,
+        prisma: options.prisma,
+        redis,
+        storageMetrics: options.storageMetrics,
+      }),
+    );
+  } else {
+    app.get('/metrics', (_req, res) => {
+      res.status(404).end();
+    });
+  }
 
   app.use('/api', createOpenApiRouter());
 
-  app.use('/api/v1', createV1Router(options.prisma, options.config, rateLimiter, options.logger));
+  app.use(
+    '/api/v1',
+    createV1Router(options.prisma, options.config, rateLimiter, options.logger, options.container),
+  );
 
   app.use(createNotFoundHandler());
   app.use(createErrorHandler(options.logger));

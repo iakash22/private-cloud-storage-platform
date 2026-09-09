@@ -3,6 +3,7 @@ import type { PrismaClient } from '@vaultstack/database';
 import type { Logger } from '@vaultstack/logger';
 import type { Request } from 'express';
 import type { AuthorizationService } from '../auth/services/authorization.service.js';
+import type { MetricsRecorder } from '../../observability/metrics.js';
 import { createProviderRegistry } from './providers/provider-registry.js';
 import { createBucketRepository } from './repositories/bucket.repository.js';
 import { createObjectRepository } from './repositories/object.repository.js';
@@ -30,6 +31,7 @@ export interface StorageModuleDeps {
   config: EnvConfig;
   logger: Logger;
   authorization: AuthorizationService;
+  metrics?: MetricsRecorder;
 }
 
 /** Composition root for the storage module. */
@@ -57,7 +59,7 @@ export class StorageModule {
 
     this.storage = createStorageService({ config, registry, buckets, providers });
     this.tokens = createStorageTokenService(config.JWT_SECRET);
-    this.metrics = createStorageMetrics(logger);
+    this.metrics = createStorageMetrics(logger, deps.metrics);
 
     this.objects = createObjectService({
       prisma,

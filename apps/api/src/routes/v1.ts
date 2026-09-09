@@ -23,15 +23,17 @@ import { createArtifactsRouter } from '../modules/artifacts/artifacts.router.js'
 import { createBackupsRouter } from '../modules/backups/backups.router.js';
 import { createInfrastructureRouter } from '../modules/infrastructure/infrastructure.router.js';
 import type { RateLimiter } from '../lib/rate-limit.js';
+import type { AppContainer } from '../container/app-container.js';
 
 export function createV1Router(
   prisma: PrismaClient,
   config: EnvConfig,
   limiter: RateLimiter,
   logger: Logger,
+  existingContainer?: AppContainer,
 ): Router {
   const router = Router();
-  const container = createAppContainer(prisma, config, logger);
+  const container = existingContainer ?? createAppContainer(prisma, config, logger);
   const authenticate = createAuthenticateMiddleware(container.authentication);
   const optionalAuthenticate = createOptionalAuthenticateMiddleware(container.authentication);
   const loginRateLimit = createLoginRateLimitMiddleware(limiter, config);

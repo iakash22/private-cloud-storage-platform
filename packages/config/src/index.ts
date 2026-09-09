@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 const optionalMinio = z.string().min(1).optional();
 const optionalS3 = z.string().min(1).optional();
+const optionalSecret = z.string().min(1).optional();
 
 const booleanFromString = z.enum(['true', 'false']).transform((value) => value === 'true');
 
@@ -68,6 +69,10 @@ const envSchema = z.object({
   S3_ACCESS_KEY: optionalS3,
   S3_SECRET_KEY: optionalS3,
   S3_FORCE_PATH_STYLE: booleanFromString.default('true'),
+  // Private/loopback S3 endpoints are disabled by default because provider
+  // configuration is an SSRF boundary. Enable only for a trusted,
+  // intentionally self-hosted endpoint.
+  S3_ALLOW_PRIVATE_ENDPOINTS: booleanFromString.default('false'),
 
   // Enables the S3-compatible gateway. Disabled by default because gateway
   // credential signing lands in a later phase.
@@ -97,11 +102,14 @@ const envSchema = z.object({
   // Comma-separated browser origins allowed to call the API with cookies.
   // Unset: localhost dashboard origins in development/test, none in production.
   CORS_ORIGINS: z.string().optional(),
+  // Prometheus authenticates to this endpoint with a bearer token. If unset,
+  // the endpoint is unavailable rather than publicly readable.
+  METRICS_TOKEN: optionalSecret,
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;
 
-const SECRET_FILE_ENV_NAMES = ['DATABASE_URL', 'JWT_SECRET'] as const;
+const SECRET_FILE_ENV_NAMES = ['DATABASE_URL', 'JWT_SECRET', 'METRICS_TOKEN'] as const;
 
 function loadSecretFileValues(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const result = { ...environment };

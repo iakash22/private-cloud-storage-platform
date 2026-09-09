@@ -29,6 +29,7 @@ import { Queue } from '../lib/bullmq.js';
 import { bindCookieManager } from '../lib/cookies.js';
 import { CookieManager } from '../lib/cookie.manager.js';
 import { BACKUP_QUEUE_NAME, enqueueBackupPayload } from '../workers/backup.worker.js';
+import type { MetricsRecorder } from '../observability/metrics.js';
 
 export interface AppServices {
   sessions: SessionManager;
@@ -75,6 +76,7 @@ export class AppContainer {
     private readonly prisma: PrismaClient,
     config: EnvConfig,
     private readonly logger: Logger,
+    metrics?: MetricsRecorder,
   ) {
     this.config = config;
     this.cookies = new CookieManager(config);
@@ -101,6 +103,7 @@ export class AppContainer {
       config,
       logger,
       authorization: this.authorization,
+      metrics,
     });
     this.artifacts = new ArtifactsService(prisma, this.storage);
     this.backups = this.createBackupsService(prisma, config, logger);
@@ -155,6 +158,7 @@ export function createAppContainer(
   prisma: PrismaClient,
   config: EnvConfig,
   logger: Logger,
+  metrics?: MetricsRecorder,
 ): AppContainer {
-  return new AppContainer(prisma, config, logger);
+  return new AppContainer(prisma, config, logger, metrics);
 }

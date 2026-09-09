@@ -4,6 +4,7 @@ import {
   PUBLIC_S3_ENDPOINT_POLICY,
   SELF_HOSTED_S3_ENDPOINT_POLICY,
   assertSafeS3Endpoint,
+  restrictPrivateEndpointPolicy,
   type AddressLookup,
 } from './endpoint-safety.js';
 
@@ -80,6 +81,16 @@ describe('assertSafeS3Endpoint', () => {
   it('still rejects link-local metadata for self-hosted dialects', async () => {
     await expect(
       assertSafeS3Endpoint('http://169.254.169.254', SELF_HOSTED_S3_ENDPOINT_POLICY, lookupOf({})),
+    ).rejects.toBeInstanceOf(AppError);
+  });
+
+  it('can restrict self-hosted policies when private endpoints are not explicitly enabled', async () => {
+    await expect(
+      assertSafeS3Endpoint(
+        'http://127.0.0.1:9000',
+        restrictPrivateEndpointPolicy(SELF_HOSTED_S3_ENDPOINT_POLICY),
+        lookupOf({}),
+      ),
     ).rejects.toBeInstanceOf(AppError);
   });
 });

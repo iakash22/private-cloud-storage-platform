@@ -45,11 +45,30 @@ export function createPostgresTarget(): BackupTargetAdapter {
       const dest = componentPath(ctx.workDir, 'postgres.dump');
       await mkdir(dirname(dest), { recursive: true });
       try {
+        const databaseUrl = new URL(ctx.config.DATABASE_URL);
+        const databaseName = databaseUrl.pathname.replace(/^\//, '');
+        const environment = { ...process.env };
+        delete environment.DATABASE_URL;
+        delete environment.DATABASE_URL_FILE;
         await runToFile(
           'pg_dump',
-          ['--no-owner', '--format=custom', `--dbname=${ctx.config.DATABASE_URL}`],
+          ['--no-owner', '--format=custom'],
           dest,
-          process.env,
+          {
+            ...environment,
+            PGHOST: databaseUrl.hostname,
+            ...(databaseUrl.port ? { PGPORT: databaseUrl.port } : {}),
+            ...(databaseUrl.username
+              ? { PGUSER: decodeURIComponent(databaseUrl.username) }
+              : {}),
+            ...(databaseUrl.password
+              ? { PGPASSWORD: decodeURIComponent(databaseUrl.password) }
+              : {}),
+            ...(databaseName ? { PGDATABASE: decodeURIComponent(databaseName) } : {}),
+            ...(databaseUrl.searchParams.get('sslmode')
+              ? { PGSSLMODE: databaseUrl.searchParams.get('sslmode') ?? undefined }
+              : {}),
+          },
         );
         return {
           target: 'POSTGRESQL',

@@ -1,4 +1,5 @@
 import type { Logger } from '@vaultstack/logger';
+import type { MetricsRecorder } from '../../../observability/metrics.js';
 
 /**
  * Observability hooks for storage operations.
@@ -46,10 +47,11 @@ export interface StorageMetrics {
   }): void;
   multipartCleanup(input: { uploads: number; multipart: number }): void;
   providerError(input: { providerType: string; operation: string }): void;
+  integrityFailure(): void;
   snapshot(): StorageMetricsSnapshot;
 }
 
-export function createStorageMetrics(logger: Logger): StorageMetrics {
+export function createStorageMetrics(logger: Logger, recorder?: MetricsRecorder): StorageMetrics {
   const counters: StorageMetricsSnapshot = {
     uploads: 0,
     downloads: 0,
@@ -66,12 +68,16 @@ export function createStorageMetrics(logger: Logger): StorageMetrics {
   return {
     uploadStarted() {
       counters.activeUploads += 1;
+      recorder?.set('vaultstack_storage_active_uploads', counters.activeUploads);
     },
 
     uploadCompleted(input) {
       counters.activeUploads = Math.max(0, counters.activeUploads - 1);
       counters.uploads += 1;
       counters.bytesUploaded += input.bytes;
+      recorder?.increment('vaultstack_storage_uploads_total');
+      recorder?.increment('vaultstack_storage_bytes_uploaded_total', {}, input.bytes);
+      recorder?.set('vaultstack_storage_active_uploads', counters.activeUploads);
 
       logger.info(
         {
@@ -88,6 +94,8 @@ export function createStorageMetrics(logger: Logger): StorageMetrics {
     uploadFailed(input) {
       counters.activeUploads = Math.max(0, counters.activeUploads - 1);
       counters.failedUploads += 1;
+      recorder?.increment('vaultstack_storage_failed_uploads_total');
+      recorder?.set('vaultstack_storage_active_uploads', counters.activeUploads);
 
       logger.warn(
         {
@@ -103,6 +111,8 @@ export function createStorageMetrics(logger: Logger): StorageMetrics {
     downloadCompleted(input) {
       counters.downloads += 1;
       counters.bytesDownloaded += input.bytes;
+      recorder?.increment('vaultstack_storage_downloads_total');
+      recorder?.increment('vaultstack_storage_bytes_downloaded_total', {}, input.bytes);
 
       logger.info(
         {
@@ -118,6 +128,7 @@ export function createStorageMetrics(logger: Logger): StorageMetrics {
 
     multipartCompleted(input) {
       counters.multipartUploads += 1;
+      recorder?.increment('vaultstack_storage_multipart_uploads_total');
 
       logger.info(
         {
@@ -133,6 +144,8 @@ export function createStorageMetrics(logger: Logger): StorageMetrics {
     partUploaded(input) {
       counters.multipartParts += 1;
       counters.bytesUploaded += input.bytes;
+      recorder?.increment('vaultstack_storage_multipart_parts_total');
+      recorder?.increment('vaultstack_storage_bytes_uploaded_total', {}, input.bytes);
 
       logger.info(
         {
@@ -148,6 +161,7 @@ export function createStorageMetrics(logger: Logger): StorageMetrics {
 
     multipartCleanup(input) {
       counters.multipartCleanups += 1;
+      recorder?.increment('vaultstack_storage_multipart_cleanups_total');
 
       logger.info(
         {
@@ -161,6 +175,7 @@ export function createStorageMetrics(logger: Logger): StorageMetrics {
 
     providerError(input) {
       counters.providerErrors += 1;
+      recorder?.increment('vaultstack_storage_provider_errors_total');
 
       logger.error(
         {
@@ -170,6 +185,10 @@ export function createStorageMetrics(logger: Logger): StorageMetrics {
         },
         'Storage provider error',
       );
+    },
+
+    integrityFailure() {
+      recorder?.increment('vaultstack_storage_corruption_indicators_total');
     },
 
     snapshot() {

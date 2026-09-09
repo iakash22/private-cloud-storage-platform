@@ -114,20 +114,24 @@ services:
       API_PORT: 3000
       DATABASE_URL_FILE: /run/secrets/database_url
       JWT_SECRET_FILE: /run/secrets/jwt_secret
+      METRICS_TOKEN_FILE: /run/secrets/metrics_token
       REDIS_URL: redis://redis:6379
       STORAGE_DRIVER: local
       STORAGE_LOCAL_ROOT: /data
+      S3_ALLOW_PRIVATE_ENDPOINTS: ${S3_ALLOW_PRIVATE_ENDPOINTS:-false}
       CORS_ORIGINS: ${CORS_ORIGINS:?Set CORS_ORIGINS to the dashboard origin}
       S3_GATEWAY_ENABLED: ${S3_GATEWAY_ENABLED:-true}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     secrets:
       - database_url
       - jwt_secret
+      - metrics_token
     volumes:
       - vaultstack_data:/data
     networks:
       - public
       - private
+      - monitoring
     read_only: true
     tmpfs:
       - /tmp
@@ -204,6 +208,7 @@ services:
       REDIS_URL: redis://redis:6379
       STORAGE_DRIVER: local
       STORAGE_LOCAL_ROOT: /data
+      S3_ALLOW_PRIVATE_ENDPOINTS: ${S3_ALLOW_PRIVATE_ENDPOINTS:-false}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     secrets:
       - database_url
@@ -250,6 +255,7 @@ services:
       REDIS_URL: redis://redis:6379
       STORAGE_DRIVER: local
       STORAGE_LOCAL_ROOT: /data
+      S3_ALLOW_PRIVATE_ENDPOINTS: ${S3_ALLOW_PRIVATE_ENDPOINTS:-false}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     secrets:
       - database_url
@@ -318,6 +324,217 @@ services:
           cpus: '1.00'
           memory: 512M
 
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+      node-exporter:
+        condition: service_started
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+    volumes:
+      - ${VAULTSTACK_MONITORING_CONFIG_DIR:-../monitoring}/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ${VAULTSTACK_MONITORING_CONFIG_DIR:-../monitoring}/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    secrets:
+      - metrics_token
+    networks:
+      - private
+      - monitoring
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q --spider http://127.0.0.1:9090/-/ready || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 1G
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    restart: unless-stopped
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
+      GF_AUTH_ANONYMOUS_ENABLED: 'false'
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+    ports:
+      - '127.0.0.1:3001:3000'
+    volumes:
+      - ${VAULTSTACK_MONITORING_CONFIG_DIR:-../monitoring}/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ${VAULTSTACK_MONITORING_CONFIG_DIR:-../monitoring}/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    secrets:
+      - grafana_admin_password
+    networks:
+      - monitoring
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q --spider http://127.0.0.1:3000/api/health || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 512M
+
+  loki:
+    image: grafana/loki:3.3.2
+    restart: unless-stopped
+    command: ['-config.file=/etc/loki/config.yml']
+    volumes:
+      - ${VAULTSTACK_MONITORING_CONFIG_DIR:-../monitoring}/loki/loki-config.yml:/etc/loki/config.yml:ro
+      - loki_data:/loki
+    networks:
+      - monitoring
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q --spider http://127.0.0.1:3100/ready || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 1G
+
+  promtail:
+    image: grafana/promtail:3.3.2
+    restart: unless-stopped
+    command: ['-config.file=/etc/promtail/config.yml']
+    depends_on:
+      loki:
+        condition: service_healthy
+    volumes:
+      - ${VAULTSTACK_MONITORING_CONFIG_DIR:-../monitoring}/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    networks:
+      - monitoring
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q --spider http://127.0.0.1:9080/ready || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    restart: unless-stopped
+    command:
+      - --path.rootfs=/host
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host:ro,rslave
+    networks:
+      - monitoring
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q --spider http://127.0.0.1:9100/metrics || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - sh
+      - -c
+      - 'export DATA_SOURCE_NAME="$$(cat /run/secrets/database_url)" && exec /bin/postgres_exporter'
+    secrets:
+      - database_url
+    networks:
+      - private
+      - monitoring
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q --spider http://127.0.0.1:9187/metrics || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.66.0
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: ['--redis.addr=redis://redis:6379']
+    networks:
+      - private
+      - monitoring
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -q --spider http://127.0.0.1:9121/metrics || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+
 volumes:
   # Bind this named volume to /srv/vaultstack/data by default. Object data
   # therefore survives image/container recreation and is not in a writable layer.
@@ -331,6 +548,9 @@ volumes:
   redis_data:
   caddy_data:
   caddy_config:
+  prometheus_data:
+  grafana_data:
+  loki_data:
 
 secrets:
   database_url:
@@ -339,8 +559,14 @@ secrets:
     file: ${VAULTSTACK_JWT_SECRET_FILE:-./secrets/jwt_secret}
   postgres_password:
     file: ${VAULTSTACK_POSTGRES_PASSWORD_FILE:-./secrets/postgres_password}
+  metrics_token:
+    file: ${VAULTSTACK_METRICS_TOKEN_FILE:-./secrets/metrics_token}
+  grafana_admin_password:
+    file: ${VAULTSTACK_GRAFANA_ADMIN_PASSWORD_FILE:-./secrets/grafana_admin_password}
 
 networks:
   public:
   private:
+    internal: true
+  monitoring:
     internal: true

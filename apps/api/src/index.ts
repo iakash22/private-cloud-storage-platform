@@ -3,6 +3,8 @@ import { createPrismaClient } from '@vaultstack/database';
 import { createLogger } from '@vaultstack/logger';
 import { printStartupBanner } from '@vaultstack/startup';
 import { createApp } from './app.js';
+import { createMetricsRegistry } from './observability/metrics.js';
+import { createAppContainer } from './container/app-container.js';
 import {
   checkPostgres,
   checkRedis,
@@ -14,11 +16,16 @@ const config = loadEnv();
 const logger = createLogger({ name: 'api', level: config.LOG_LEVEL });
 const prisma = createPrismaClient(config.DATABASE_URL);
 const redis = createRedisClient(config);
+const metrics = createMetricsRegistry();
+const container = createAppContainer(prisma, config, logger, metrics);
 const app = createApp({
   config,
   logger,
   prisma,
   clients: { redis, prisma },
+  metrics,
+  storageMetrics: container.storage.metrics,
+  container,
 });
 
 const server = app.listen(config.API_PORT, config.API_HOST, () => {

@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type {
   BackupTargetAdapter,
   BackupTargetContext,
@@ -25,26 +26,38 @@ export function createMongoTarget(): BackupTargetAdapter {
 
       const dest = componentPath(ctx.workDir, 'mongodb');
       await mkdir(dest, { recursive: true });
-
-      await new Promise<void>((resolve, reject) => {
-        const child = spawn('mongodump', ['--uri', mongoUri, '--out', dest], {
-          stdio: ['ignore', 'pipe', 'pipe'],
-        });
-        let stderr = '';
-        child.stderr.on('data', (chunk: Buffer) => {
-          stderr += chunk.toString('utf8');
-        });
-        child.on('error', reject);
-        child.on('close', (code) => {
-          if (code === 0) {
-            resolve();
-            return;
-          }
-          reject(new Error(`mongodump exited ${code}: ${stderr.trim() || 'no stderr'}`));
-        });
+      const configPath = join(ctx.workDir, '.mongodump.yaml');
+      await writeFile(configPath, `uri: ${JSON.stringify(mongoUri)}\n`, {
+        encoding: 'utf8',
+        mode: 0o600,
       });
 
-      return { target: 'MONGODB', status: 'collected', relativeFiles: ['components/mongodb'] };
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const environment = { ...process.env };
+          delete environment.MONGODB_URI;
+          delete environment.MONGODB_URI_FILE;
+          const child = spawn('mongodump', ['--config', configPath, '--out', dest], {
+            env: environment,
+            stdio: ['ignore', 'pipe', 'pipe'],
+          });
+          let stderr = '';
+          child.stderr.on('data', (chunk: Buffer) => {
+            stderr += chunk.toString('utf8');
+          });
+          child.on('error', reject);
+          child.on('close', (code) => {
+            if (code === 0) {
+              resolve();
+              return;
+            }
+            reject(new Error(`mongodump exited ${code}: ${stderr.trim() || 'no stderr'}`));
+          });
+        });
+        return { target: 'MONGODB', status: 'collected', relativeFiles: ['components/mongodb'] };
+      } finally {
+        await rm(configPath, { force: true });
+      }
     },
   };
 }

@@ -11,6 +11,7 @@ root_dir="${VAULTSTACK_ROOT:-/srv/vaultstack}"
 compose_dir="${root_dir}/compose"
 config_dir="${root_dir}/config"
 secret_dir="${config_dir}/secrets"
+monitoring_dir="${root_dir}/monitoring"
 
 if [[ ! -f "${source_dir}/infrastructure/docker/docker-compose.prod.yml" ]]; then
   echo "Source directory does not contain the VaultStack production Compose file: ${source_dir}" >&2
@@ -27,7 +28,7 @@ fi
 systemctl enable --now docker
 docker compose version >/dev/null
 
-install -d -m 0755 "${compose_dir}" "${config_dir}" "${secret_dir}" "${root_dir}/logs"
+install -d -m 0755 "${compose_dir}" "${config_dir}" "${secret_dir}" "${monitoring_dir}" "${root_dir}/logs"
 install -d -o 1000 -g 1000 -m 0750 "${root_dir}/data"
 install -d -m 0700 "${root_dir}/backups"
 
@@ -46,6 +47,8 @@ install -m 0644 \
 install -m 0644 \
   "${source_dir}/infrastructure/docker/s3-gateway.nginx.conf" \
   "${compose_dir}/s3-gateway.nginx.conf"
+rsync -a --delete \
+  "${source_dir}/infrastructure/monitoring/" "${monitoring_dir}/"
 install -m 0644 \
   "${source_dir}/infrastructure/deployment/ubuntu/compose.env.example" \
   "${config_dir}/compose.env.example"
@@ -64,6 +67,12 @@ if [[ ! -f "${secret_dir}/jwt_secret" ]]; then
 fi
 if [[ ! -f "${secret_dir}/postgres_password" ]]; then
   install -m 0600 /dev/null "${secret_dir}/postgres_password"
+fi
+if [[ ! -f "${secret_dir}/metrics_token" ]]; then
+  install -m 0600 /dev/null "${secret_dir}/metrics_token"
+fi
+if [[ ! -f "${secret_dir}/grafana_admin_password" ]]; then
+  install -m 0600 /dev/null "${secret_dir}/grafana_admin_password"
 fi
 
 install -m 0644 \

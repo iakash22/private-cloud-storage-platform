@@ -1,0 +1,84 @@
+groups:
+  - name: vaultstack-availability
+    rules:
+      - alert: VaultStackApiUnhealthy
+        expr: up{job="vaultstack-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: VaultStack API metrics endpoint is unavailable
+
+      - alert: VaultStackDatabaseUnavailable
+        expr: vaultstack_database_up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: VaultStack cannot reach PostgreSQL
+
+      - alert: VaultStackRedisUnavailable
+        expr: vaultstack_redis_up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: VaultStack cannot reach Redis
+
+  - name: vaultstack-performance
+    rules:
+      - alert: VaultStackDiskAlmostFull
+        expr: vaultstack_storage_disk_usage_ratio > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: VaultStack storage filesystem is more than 85% full
+
+      - alert: VaultStackHighErrorRate
+        expr: |
+          sum(rate(vaultstack_http_errors_total[5m]))
+            / clamp_min(sum(rate(vaultstack_http_requests_total[5m])), 1) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: VaultStack HTTP error rate is above 5%
+
+      - alert: VaultStackHighLatency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(vaultstack_http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: VaultStack API p95 latency is above one second
+
+  - name: vaultstack-storage
+    rules:
+      - alert: VaultStackProviderUnavailable
+        expr: increase(vaultstack_storage_provider_errors_total[10m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: A VaultStack storage provider is returning errors
+
+      - alert: VaultStackBackupFailure
+        expr: vaultstack_backup_jobs{status="FAILED"} > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: VaultStack has failed backup jobs
+
+      - alert: VaultStackStorageIntegrityIndicator
+        expr: increase(vaultstack_storage_corruption_indicators_total[15m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: VaultStack reported a storage integrity indicator

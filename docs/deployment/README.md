@@ -112,6 +112,9 @@ sudoedit /srv/vaultstack/config/compose.env
 Set `DASHBOARD_DOMAIN`, `API_DOMAIN`, `S3_DOMAIN`, `VITE_API_URL`, and
 `CORS_ORIGINS` to the deployment's DNS names. The example values are
 `vault.example.com`, `api.vault.example.com`, and `s3.example.com`.
+Keep `S3_ALLOW_PRIVATE_ENDPOINTS=false` unless a trusted operator intentionally
+needs a self-hosted S3 endpoint on a private network; enabling it expands the
+API's SSRF boundary.
 
 Create DNS A/AAAA records for all three names before starting Caddy. The
 installer creates `/srv/vaultstack/data` owned by UID/GID `1000`, which is the
@@ -199,3 +202,53 @@ the gateway. Configure S3 clients with the endpoint
 `https://s3.example.com/api/v1/s3` (using the configured `S3_DOMAIN`) and
 perform an authenticated upload/download checksum test as part of the release
 checklist.
+
+## Monitoring and observability
+
+The production Compose file also starts Prometheus, Grafana, Loki, Promtail,
+node-exporter, and PostgreSQL/Redis exporters on an internal monitoring
+network. Grafana is bound only to `127.0.0.1:3001`; Prometheus and Loki have
+no host ports. Access Grafana through a Tailscale SSH tunnel:
+
+```bash
+ssh -L 3001:127.0.0.1:3001 admin@vaultstack-host
+```
+
+Open `http://127.0.0.1:3001` and use the generated
+`grafana_admin_password` secret. The provisioned VaultStack dashboard covers
+API/S3 traffic, latency, errors, throughput, storage capacity, object/upload
+counts, worker queues, PostgreSQL, Redis, and container logs.
+
+The API `/metrics` endpoint requires the `metrics_token` secret and is only
+scraped on the private Docker network. It is not a public unauthenticated
+endpoint. Logger redaction remains enabled for passwords, tokens,
+credentials, URLs, request bodies, and file contents.
+
+Generate validation traffic and inspect the metrics directly:
+
+```bash
+curl -fsS https://vault.example.com/
+curl -fsS https://api.vault.example.com/api/v1/ready
+docker compose --env-file /srv/vaultstack/config/compose.env \
+  -f /srv/vaultstack/compose/docker-compose.yml exec prometheus \
+  sh -c 'wget -qO- --header="Authorization: Bearer $(cat /run/secrets/metrics_token)" \
+  http://api:3000/metrics'
+```
+
+Perform authenticated dashboard and S3 uploads/downloads as well; verify
+`vaultstack_s3_requests_total`, request latency, byte counters, and queue
+gauges increase. Check the Grafana dashboard and Loki logs afterward.
+
+Validate alert rules before a release:
+
+```bash
+promtool test rules infrastructure/monitoring/prometheus/rules/vaultstack-alerts.test.yml
+docker compose --env-file /srv/vaultstack/config/compose.env \
+  -f /srv/vaultstack/compose/docker-compose.yml exec prometheus \
+  promtool check rules /etc/prometheus/rules/vaultstack-alerts.yml
+```
+
+The alert set covers API, PostgreSQL, Redis, disk capacity, provider errors,
+backup failures, high error rate, high latency, and storage integrity
+indicators. Use a controlled staging fault or maintenance window to verify
+end-to-end alert firing; do not fill production storage to test disk alerts.

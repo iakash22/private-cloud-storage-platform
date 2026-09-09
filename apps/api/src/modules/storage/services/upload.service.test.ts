@@ -131,9 +131,7 @@ function harness(
         headers: { 'content-length': '10' },
       }),
     ),
-    inspectPart: vi.fn(() =>
-      Promise.resolve({ partNumber: 1, size: 10, etag: 'etag-1' }),
-    ),
+    inspectPart: vi.fn(() => Promise.resolve({ partNumber: 1, size: 10, etag: 'etag-1' })),
     listProviderParts: vi.fn(() => Promise.resolve([])),
     checkCapacity: vi.fn(() => Promise.resolve({ ok: true })),
     cleanupOrphanStaging: vi.fn(() => Promise.resolve(0)),
@@ -144,6 +142,7 @@ function harness(
     id: 'upload-1',
     organizationId: ORG,
     bucketId: BUCKET,
+    userId: 'user-1',
     key: 'docs/report.pdf',
     status: UploadStatus.UPLOADING,
     contentType: null,
@@ -201,7 +200,9 @@ function harness(
       }),
     ),
     listParts: vi.fn(() => Promise.resolve(parts)),
-    listMultipartSessions: vi.fn(() => Promise.resolve({ sessions: [multipartRow], nextCursor: null })),
+    listMultipartSessions: vi.fn(() =>
+      Promise.resolve({ sessions: [multipartRow], nextCursor: null }),
+    ),
     deleteMultipart: vi.fn(() => Promise.resolve(undefined)),
     findStaleMultipart: vi.fn(() => Promise.resolve([])),
   };
@@ -290,6 +291,7 @@ function harness(
       multipartCompleted: vi.fn(),
       partUploaded: vi.fn(),
       multipartCleanup: vi.fn(),
+      integrityFailure: vi.fn(),
     } as never,
     logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() } as never,
   });
@@ -429,6 +431,22 @@ describe('upload service size enforcement', () => {
   });
 
   describe('completion', () => {
+    it('does not let another principal complete the upload', async () => {
+      const { service, provider } = harness();
+
+      const code = await codeOf(() =>
+        service.complete({
+          organizationId: ORG,
+          uploadId: 'upload-1',
+          userId: 'user-2',
+          meta: META,
+        }),
+      );
+
+      expect(code).toBe('STORAGE_ACCESS_DENIED');
+      expect(provider.headObject).not.toHaveBeenCalled();
+    });
+
     it('rejects bytes that landed oversized without streaming through the API', async () => {
       const { service, provider } = harness({ headSize: MAX_OBJECT_SIZE + 1 });
 

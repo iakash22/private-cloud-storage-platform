@@ -1,0 +1,38 @@
+rule_files:
+  - vaultstack-alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: vaultstack_storage_disk_usage_ratio
+        values: '0.90 0.90 0.90 0.90 0.90 0.90 0.90 0.90 0.90 0.90 0.90 0.90'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: VaultStackDiskAlmostFull
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+
+  - interval: 1m
+    input_series:
+      - series: up{job="vaultstack-api"}
+        values: '0 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: VaultStackApiUnhealthy
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+
+  - interval: 1m
+    input_series:
+      - series: vaultstack_backup_jobs{status="FAILED"}
+        values: '1 1 1 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: VaultStackBackupFailure
+        exp_alerts:
+          - exp_labels:
+              severity: critical

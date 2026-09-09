@@ -20,7 +20,10 @@ import {
 } from '../domain/provider-config.js';
 import { serializeStorageProvider } from '../mappers/storage.mapper.js';
 import { getS3Dialect, resolveDialectEndpoint } from '../providers/s3-compatible/dialects.js';
-import { assertSafeS3Endpoint } from '../providers/s3-compatible/endpoint-safety.js';
+import {
+  assertSafeS3Endpoint,
+  restrictPrivateEndpointPolicy,
+} from '../providers/s3-compatible/endpoint-safety.js';
 import {
   deriveStorageProviderEncryptionKey,
   encryptProviderSecret,
@@ -88,6 +91,7 @@ export function createProviderConfigService(deps: {
         forcePathStyle: input.forcePathStyle,
         tls: input.tls,
         accountId: input.accountId,
+        allowPrivateEndpoints: config.S3_ALLOW_PRIVATE_ENDPOINTS,
       });
 
       const encrypted = encryptProviderSecret(input.secretAccessKey, encryptionKey);
@@ -156,6 +160,7 @@ export function createProviderConfigService(deps: {
               forcePathStyle: mergeNullable(input.forcePathStyle, current.forcePathStyle),
               tls: mergeNullable(input.tls, current.tls),
               accountId: mergeNullable(input.accountId, current.accountId),
+              allowPrivateEndpoints: config.S3_ALLOW_PRIVATE_ENDPOINTS,
             })
           : current;
 
@@ -264,6 +269,7 @@ async function validateAndResolveSettings(input: {
   forcePathStyle?: boolean | null;
   tls?: boolean | null;
   accountId?: string | null;
+  allowPrivateEndpoints: boolean;
 }): Promise<StorageProviderSettings> {
   if (!input.dialect) {
     throw validationError('S3 dialect is required');
@@ -279,7 +285,12 @@ async function validateAndResolveSettings(input: {
   });
 
   if (endpoint) {
-    await assertSafeS3Endpoint(endpoint, dialect.endpointPolicy);
+    await assertSafeS3Endpoint(
+      endpoint,
+      input.allowPrivateEndpoints
+        ? dialect.endpointPolicy
+        : restrictPrivateEndpointPolicy(dialect.endpointPolicy),
+    );
     const parsed = new URL(endpoint);
     if (tls && parsed.protocol !== 'https:') {
       throw validationError('Storage endpoint must use HTTPS');

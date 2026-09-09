@@ -40,18 +40,21 @@ describe('@vaultstack/config', () => {
     const root = mkdtempSync(join(tmpdir(), 'vaultstack-config-secrets-'));
     const databaseUrlFile = join(root, 'database_url');
     const jwtSecretFile = join(root, 'jwt_secret');
+    const metricsTokenFile = join(root, 'metrics_token');
     writeFileSync(
       databaseUrlFile,
       'postgresql://secret-user:secret-password@postgres:5432/vaultstack\n',
       'utf8',
     );
     writeFileSync(jwtSecretFile, 'production-jwt-secret-value-that-is-long-enough\n', 'utf8');
+    writeFileSync(metricsTokenFile, 'prometheus-metrics-token\n', 'utf8');
 
     process.env = {
       ...process.env,
       NODE_ENV: 'production',
       DATABASE_URL_FILE: databaseUrlFile,
       JWT_SECRET_FILE: jwtSecretFile,
+      METRICS_TOKEN_FILE: metricsTokenFile,
       REDIS_URL: 'redis://redis:6379',
     };
     delete process.env.DATABASE_URL;
@@ -63,6 +66,7 @@ describe('@vaultstack/config', () => {
       'postgresql://secret-user:secret-password@postgres:5432/vaultstack',
     );
     expect(config.JWT_SECRET).toBe('production-jwt-secret-value-that-is-long-enough');
+    expect(config.METRICS_TOKEN).toBe('prometheus-metrics-token');
   });
 
   it('loadEnvFile walks up to a monorepo root .env', () => {

@@ -1,0 +1,102 @@
+{
+  "annotations": { "list": [] },
+  "editable": false,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "title": "API request rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "sum(rate(vaultstack_http_requests_total[5m]))", "refId": "A" }
+      ]
+    },
+    {
+      "title": "HTTP error rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(vaultstack_http_errors_total[5m])) / clamp_min(sum(rate(vaultstack_http_requests_total[5m])), 1)",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] }
+    },
+    {
+      "title": "API p95 latency",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(vaultstack_http_request_duration_seconds_bucket[5m])) by (le))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    },
+    {
+      "title": "Storage capacity",
+      "type": "gauge",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "vaultstack_storage_disk_usage_ratio", "refId": "A" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "max": 1 }, "overrides": [] }
+    },
+    {
+      "title": "Storage throughput",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        { "expr": "rate(vaultstack_storage_bytes_uploaded_total[5m])", "legendFormat": "uploaded", "refId": "A" },
+        { "expr": "rate(vaultstack_storage_bytes_downloaded_total[5m])", "legendFormat": "downloaded", "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] }
+    },
+    {
+      "title": "Objects, uploads, and jobs",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        { "expr": "vaultstack_objects_total", "legendFormat": "objects", "refId": "A" },
+        { "expr": "vaultstack_active_uploads", "legendFormat": "active uploads", "refId": "B" },
+        { "expr": "vaultstack_multipart_jobs", "legendFormat": "multipart jobs", "refId": "C" }
+      ]
+    },
+    {
+      "title": "Dependencies",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 24 },
+      "targets": [
+        { "expr": "vaultstack_database_up", "legendFormat": "PostgreSQL", "refId": "A" },
+        { "expr": "vaultstack_redis_up", "legendFormat": "Redis", "refId": "B" }
+      ]
+    },
+    {
+      "title": "Worker queue depth",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 24 },
+      "targets": [
+        { "expr": "sum(vaultstack_worker_queue_jobs) by (queue, state)", "refId": "A" }
+      ]
+    },
+    {
+      "title": "Recent logs",
+      "type": "logs",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 30 },
+      "targets": [
+        { "expr": "{job=\"docker\"}", "refId": "A", "datasource": { "type": "loki", "uid": "loki" } }
+      ]
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["vaultstack", "production"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "title": "VaultStack Overview",
+  "uid": "vaultstack-overview",
+  "version": 1
+}
