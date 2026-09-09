@@ -18,6 +18,7 @@ import {
   initiateMultipartBodySchema,
   listMultipartSessionsQuerySchema,
   multipartPartParamsSchema,
+  parseForm,
   multipartPartQuerySchema,
   readinessResponseSchema,
   registerBodySchema,
@@ -77,13 +78,38 @@ describe('@vaultstack/validation', () => {
     expect(lettersOnly.success).toBe(false);
   });
 
-  it('validates API error envelope with requestId', () => {
+  it('maps zod issues onto field error keys', () => {
+    const parsed = parseForm(registerBodySchema, {
+      email: 'not-an-email',
+      password: 'short',
+      name: '',
+      organizationName: 'Acme',
+    });
+    expect(parsed.ok).toBe(false);
+    if (!parsed.ok) {
+      expect(parsed.fields.email).toBeDefined();
+      expect(parsed.fields.password).toBeDefined();
+      expect(parsed.fields.name).toBeDefined();
+    }
+  });
+
+  it('validates API error envelope with requestId and optional field errors', () => {
     const result = apiErrorResponseSchema.safeParse({
       error: { code: 'FORBIDDEN', message: 'denied' },
       requestId: 'req-1',
     });
 
     expect(result.success).toBe(true);
+
+    const withFields = apiErrorResponseSchema.safeParse({
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'email: Invalid email',
+        fields: { email: 'Invalid email' },
+      },
+      requestId: 'req-2',
+    });
+    expect(withFields.success).toBe(true);
   });
 
   it('requires a nonnegative declared size for multipart initiation', () => {

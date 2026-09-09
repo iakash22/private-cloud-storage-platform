@@ -42,11 +42,15 @@ export function createV1Router(
   router.use(createApiRateLimitMiddleware(limiter, config));
 
   router.use('/auth', (req, res, next) => {
-    if (req.path === '/login' && req.method === 'POST') {
+    const isPublicAuthPost =
+      req.method === 'POST' &&
+      (req.path === '/login' || req.path === '/login/totp' || req.path === '/register');
+
+    if (isPublicAuthPost && (req.path === '/login' || req.path === '/login/totp')) {
       void loginRateLimit(req, res, next);
       return;
     }
-    if (req.path === '/register' || req.path === '/login') {
+    if (req.path === '/register' || req.path === '/login' || req.path === '/login/totp') {
       next();
       return;
     }

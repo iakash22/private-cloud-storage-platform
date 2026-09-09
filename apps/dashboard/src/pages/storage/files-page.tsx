@@ -3,10 +3,17 @@ import { useSearchParams } from 'react-router-dom';
 import {
   BucketSelector,
   Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
   DeleteConfirmation,
   Dialog,
   DialogActions,
+  FieldError,
   FileExplorer,
+  formatBytes,
+  formatDate,
   Input,
   Label,
   ObjectDetails,
@@ -17,11 +24,13 @@ import {
   type SortField,
   type ViewMode,
 } from '@vaultstack/ui';
-import type { PublicTeam } from '@vaultstack/types';
+import type { PublicObjectVersion, PublicTeam } from '@vaultstack/types';
+import { createShareBodySchema, parseForm } from '@vaultstack/validation';
 import { useAuth } from '../../context/auth-context.js';
 import { useObjectList, useSelectedObject, useBuckets } from '../../hooks/use-storage.js';
 import { useUploadQueue } from '../../hooks/use-upload-queue.js';
 import { apiClient } from '../../lib/api.js';
+import { useFormSubmit } from '../../lib/form-errors.js';
 import {
   addTrashItem,
   buildObjectKey,
@@ -38,6 +47,7 @@ import {
 
 export function FilesPage() {
   const { permissions, activeOrganizationId } = useAuth();
+  const { fieldErrors, validate, catchError, clearFieldErrors } = useFormSubmit();
   const [searchParams, setSearchParams] = useSearchParams();
   const { buckets, loading: bucketsLoading } = useBuckets();
   const [bucketId, setBucketId] = useState<string | undefined>(
@@ -59,15 +69,13 @@ export function FilesPage() {
   const [moveKey, setMoveKey] = useState('');
   const [shareOpen, setShareOpen] = useState(false);
   const [shareSubmitting, setShareSubmitting] = useState(false);
-  const [shareError, setShareError] = useState<string | null>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [teams, setTeams] = useState<PublicTeam[]>([]);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [versions, setVersions] = useState<PublicObjectVersion[]>([]);
 
   const { page, loading, error, refresh, loadMore } = useObjectList(bucketId, prefix);
-  const { object } = useSelectedObject(
-    selectedEntry?.kind === 'file' ? selectedEntry.id : undefined,
-  );
+  const selectedObjectId = selectedEntry?.kind === 'file' ? selectedEntry.id : undefined;
+  const { object } = useSelectedObject(selectedObjectId);
   const { uploads, enqueueFiles, cancelUpload, retryUpload, pauseUpload, resumeUpload } =
     useUploadQueue({
       onComplete: () => {
@@ -79,6 +87,32 @@ export function FilesPage() {
     () => buckets.find((bucket) => bucket.id === bucketId),
     [buckets, bucketId],
   );
+
+  useEffect(() => {
+    if (!selectedObjectId || selectedBucket?.versioning === 'UNVERSIONED') {
+      setVersions([]);
+      return;
+    }
+
+    let cancelled = false;
+    void apiClient
+      .listObjectVersions(selectedObjectId)
+      .then((versionPage) => {
+        if (!cancelled) {
+          setVersions(versionPage.versions ?? []);
+        }
+      })
+      .catch((caught: unknown) => {
+        if (!cancelled) {
+          setVersions([]);
+          catchError(caught);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [catchError, selectedObjectId, selectedBucket?.versioning]);
 
   useEffect(() => {
     if (!bucketId && buckets[0]?.id) {
@@ -120,12 +154,40 @@ export function FilesPage() {
     }
   };
 
-  const handleDownload = async (entry: ExplorerEntry) => {
+  const handleDownload = async (entry: ExplorerEntry, versionId?: string) => {
     try {
-      const download = await apiClient.createDownloadUrl(entry.id);
+      const download = await apiClient.createDownloadUrl(entry.id, { versionId });
       window.open(download.url, '_blank', 'noopener,noreferrer');
     } catch (caught) {
-      setActionError(caught instanceof Error ? caught.message : 'Download failed');
+      catchError(caught);
+    }
+  };
+
+  const handleRestoreVersion = async (versionId: string) => {
+    if (!selectedObjectId) {
+      return;
+    }
+    try {
+      await apiClient.restoreObjectVersion(selectedObjectId, versionId);
+      const versionPage = await apiClient.listObjectVersions(selectedObjectId);
+      setVersions(versionPage.versions);
+      await refresh();
+    } catch (caught) {
+      catchError(caught);
+    }
+  };
+
+  const handleDeleteVersion = async (versionId: string) => {
+    if (!selectedObjectId) {
+      return;
+    }
+    try {
+      await apiClient.deleteObjectVersion(selectedObjectId, versionId);
+      const versionPage = await apiClient.listObjectVersions(selectedObjectId);
+      setVersions(versionPage.versions);
+      await refresh();
+    } catch (caught) {
+      catchError(caught);
     }
   };
 
@@ -147,7 +209,7 @@ export function FilesPage() {
       setSelectedEntry(undefined);
       await refresh();
     } catch (caught) {
-      setActionError(caught instanceof Error ? caught.message : 'Delete failed');
+      catchError(caught);
     }
   };
 
@@ -166,7 +228,7 @@ export function FilesPage() {
       setRenameValue('');
       await refresh();
     } catch (caught) {
-      setActionError(caught instanceof Error ? caught.message : 'Rename failed');
+      catchError(caught);
     }
   };
 
@@ -184,7 +246,7 @@ export function FilesPage() {
       setMoveKey('');
       await refresh();
     } catch (caught) {
-      setActionError(caught instanceof Error ? caught.message : 'Move failed');
+      catchError(caught);
     }
   };
 
@@ -200,7 +262,7 @@ export function FilesPage() {
       });
       await refresh();
     } catch (caught) {
-      setActionError(caught instanceof Error ? caught.message : 'Copy failed');
+      catchError(caught);
     }
   };
 
@@ -222,8 +284,6 @@ export function FilesPage() {
           />
         </div>
       </div>
-
-      {actionError ? <p className="text-sm text-red-600">{actionError}</p> : null}
 
       <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
         <div className="space-y-4">
@@ -343,7 +403,7 @@ export function FilesPage() {
                   type="button"
                   variant="outline"
                   onClick={() => {
-                    setShareError(null);
+                    clearFieldErrors();
                     setShareUrl(null);
                     setShareOpen(true);
                     if (activeOrganizationId) {
@@ -360,6 +420,65 @@ export function FilesPage() {
                 </Button>
               ) : null}
             </div>
+          ) : null}
+          {selectedEntry?.kind === 'file' && selectedBucket?.versioning !== 'UNVERSIONED' ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Versions</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {versions.length === 0 ? (
+                  <p className="text-sm text-slate-500">No versions recorded for this object.</p>
+                ) : (
+                  versions.map((version) => (
+                    <div
+                      key={version.versionId}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm"
+                    >
+                      <div>
+                        <p className="font-medium text-slate-900">
+                          {version.isDeleteMarker ? 'Delete marker' : formatBytes(version.size)}
+                          {version.isCurrent ? ' · current' : ''}
+                        </p>
+                        <p className="text-xs text-slate-500">{formatDate(version.createdAt)}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {!version.isDeleteMarker && selectedEntry ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void handleDownload(selectedEntry, version.versionId)}
+                          >
+                            Download
+                          </Button>
+                        ) : null}
+                        {canUploadStorage(permissions) && !version.isDeleteMarker && !version.isCurrent ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void handleRestoreVersion(version.versionId)}
+                          >
+                            Restore
+                          </Button>
+                        ) : null}
+                        {canDeleteStorage(permissions) && !version.isCurrent ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void handleDeleteVersion(version.versionId)}
+                          >
+                            Delete
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
           ) : null}
         </div>
       </div>
@@ -401,10 +520,12 @@ export function FilesPage() {
           <Input
             id="rename-value"
             value={renameValue}
+            aria-invalid={Boolean(fieldErrors.destinationKey)}
             onChange={(event) => {
               setRenameValue(event.target.value);
             }}
           />
+          <FieldError message={fieldErrors.destinationKey} />
         </div>
       </Dialog>
 
@@ -430,15 +551,18 @@ export function FilesPage() {
       >
         <div className="space-y-3">
           <BucketSelector buckets={buckets} value={moveBucketId} onChange={setMoveBucketId} />
+          <FieldError message={fieldErrors.destinationBucketId} />
           <div className="space-y-2">
             <Label htmlFor="move-key">Destination key</Label>
             <Input
               id="move-key"
               value={moveKey}
+              aria-invalid={Boolean(fieldErrors.destinationKey)}
               onChange={(event) => {
                 setMoveKey(event.target.value);
               }}
             />
+            <FieldError message={fieldErrors.destinationKey} />
           </div>
         </div>
       </Dialog>
@@ -448,28 +572,31 @@ export function FilesPage() {
         objectName={selectedEntry?.name}
         teams={teams}
         submitting={shareSubmitting}
-        error={shareError}
+        fieldErrors={fieldErrors}
         createdUrl={shareUrl}
         onOpenChange={(open) => {
           setShareOpen(open);
           if (!open) {
             setShareUrl(null);
-            setShareError(null);
+            clearFieldErrors();
           }
         }}
         onCreate={(input: ShareDialogCreateInput) => {
           if (!selectedEntry) {
             return;
           }
+          const body = validate(parseForm(createShareBodySchema, input));
+          if (!body) {
+            return;
+          }
           setShareSubmitting(true);
-          setShareError(null);
           void apiClient
-            .createShare(selectedEntry.id, input)
+            .createShare(selectedEntry.id, body)
             .then((share) => {
-              setShareUrl(`${window.location.origin}/s/${share.token}`);
+              setShareUrl(`${window.location.origin}/s/${share?.token ?? ''}`);
             })
             .catch((caught: unknown) => {
-              setShareError(caught instanceof Error ? caught.message : 'Unable to create share');
+              catchError(caught);
             })
             .finally(() => {
               setShareSubmitting(false);

@@ -11,39 +11,51 @@ import {
   Dialog,
   DialogActions,
   EmptyState,
+  FieldError,
   Input,
   Label,
 } from '@vaultstack/ui';
+import { createBucketBodySchema, parseForm } from '@vaultstack/validation';
 import { useAuth } from '../../context/auth-context.js';
 import { useBuckets, useStorageProviders } from '../../hooks/use-storage.js';
 import { apiClient } from '../../lib/api.js';
 import { canDeleteStorage, canUploadStorage } from '../../lib/storage-preferences.js';
+import { useFormSubmit } from '../../lib/form-errors.js';
 
 export function BucketsPage() {
   const { permissions } = useAuth();
   const { buckets, loading, error, refresh } = useBuckets();
   const { providers } = useStorageProviders();
+  const { fieldErrors, validate, catchError } = useFormSubmit();
   const [createOpen, setCreateOpen] = useState(false);
   const [bucketName, setBucketName] = useState('');
   const [storageProviderId, setStorageProviderId] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<string | undefined>();
   const [selectedBucketId, setSelectedBucketId] = useState<string | undefined>();
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [enableVersioning, setEnableVersioning] = useState(false);
 
   const selectedBucket = buckets.find((bucket) => bucket.id === selectedBucketId) ?? buckets[0];
 
   const handleCreate = async () => {
-    try {
-      await apiClient.createBucket({
-        name: bucketName.trim(),
+    const body = validate(
+      parseForm(createBucketBodySchema, {
+        name: bucketName,
         storageProviderId: storageProviderId || undefined,
-      });
+        versioning: enableVersioning ? 'ENABLED' : undefined,
+      }),
+    );
+    if (!body) {
+      return;
+    }
+    try {
+      await apiClient.createBucket(body);
       setCreateOpen(false);
       setBucketName('');
       setStorageProviderId('');
+      setEnableVersioning(false);
       await refresh();
     } catch (caught) {
-      setActionError(caught instanceof Error ? caught.message : 'Unable to create bucket');
+      catchError(caught);
     }
   };
 
@@ -57,7 +69,19 @@ export function BucketsPage() {
       setDeleteTarget(undefined);
       await refresh();
     } catch (caught) {
-      setActionError(caught instanceof Error ? caught.message : 'Unable to delete bucket');
+      catchError(caught);
+    }
+  };
+
+  const handleVersioning = async (versioning: 'ENABLED' | 'SUSPENDED') => {
+    if (!selectedBucket) {
+      return;
+    }
+    try {
+      await apiClient.setBucketVersioning(selectedBucket.id, versioning);
+      await refresh();
+    } catch (caught) {
+      catchError(caught);
     }
   };
 
@@ -80,7 +104,6 @@ export function BucketsPage() {
         ) : null}
       </div>
 
-      {actionError ? <p className="text-sm text-red-600">{actionError}</p> : null}
       {error ? <EmptyState title="Unable to load buckets" description={error} /> : null}
 
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
@@ -123,7 +146,26 @@ export function BucketsPage() {
           </CardContent>
         </Card>
 
-        <BucketDetails bucket={selectedBucket} />
+        <div className="space-y-4">
+          <BucketDetails bucket={selectedBucket} />
+          {selectedBucket && canUploadStorage(permissions) ? (
+            <div className="flex flex-wrap gap-2">
+              {selectedBucket.versioning !== 'ENABLED' ? (
+                <Button type="button" variant="outline" onClick={() => void handleVersioning('ENABLED')}>
+                  Enable versioning
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleVersioning('SUSPENDED')}
+                >
+                  Suspend versioning
+                </Button>
+              )}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <Dialog
@@ -135,7 +177,7 @@ export function BucketsPage() {
           <DialogActions
             cancelLabel="Cancel"
             confirmLabel="Create"
-            confirmDisabled={!bucketName.trim()}
+            confirmDisabled={false}
             onCancel={() => {
               setCreateOpen(false);
             }}
@@ -148,10 +190,12 @@ export function BucketsPage() {
           <Input
             id="bucket-name"
             value={bucketName}
+            aria-invalid={Boolean(fieldErrors.name)}
             onChange={(event) => {
               setBucketName(event.target.value);
             }}
           />
+          <FieldError message={fieldErrors.name} />
         </div>
         {providers.length > 1 ? (
           <div className="space-y-2">
@@ -174,8 +218,17 @@ export function BucketsPage() {
                   </option>
                 ))}
             </select>
+            <FieldError message={fieldErrors.storageProviderId} />
           </div>
         ) : null}
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={enableVersioning}
+            onChange={(event) => setEnableVersioning(event.target.checked)}
+          />
+          Enable versioning
+        </label>
       </Dialog>
 
       <DeleteConfirmation

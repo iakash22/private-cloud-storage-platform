@@ -90,15 +90,22 @@ export function sanitizeAuditMetadata(
   }
 
   const sanitized = sanitizeJsonValue(value, '');
+  if (sanitized === null || sanitized === undefined) {
+    return undefined;
+  }
+
   return sanitized;
 }
 
-function sanitizeJsonValue(
-  value: Prisma.InputJsonValue,
-  key: string,
-): Prisma.InputJsonValue | undefined {
+type JsonInput = Prisma.InputJsonValue | null;
+
+function sanitizeJsonValue(value: JsonInput, key: string): JsonInput | undefined {
   if (key && SENSITIVE_METADATA_KEY.test(key)) {
     return undefined;
+  }
+
+  if (value === null) {
+    return null;
   }
 
   if (typeof value === 'string') {
@@ -109,17 +116,17 @@ function sanitizeJsonValue(
   }
 
   if (Array.isArray(value)) {
-    const items = value as Prisma.InputJsonValue[];
+    const items = value as JsonInput[];
     return items
       .map((item) => sanitizeJsonValue(item, key))
-      .filter((item): item is Prisma.InputJsonValue => item !== undefined);
+      .filter((item): item is JsonInput => item !== undefined);
   }
 
   if (typeof value === 'object') {
     const object = value as Prisma.JsonObject;
-    const output: Record<string, Prisma.InputJsonValue> = {};
+    const output: Record<string, JsonInput> = {};
     for (const [childKey, childValue] of Object.entries(object)) {
-      const sanitized = sanitizeJsonValue(childValue as Prisma.InputJsonValue, childKey);
+      const sanitized = sanitizeJsonValue(childValue ?? null, childKey);
       if (sanitized !== undefined) {
         output[childKey] = sanitized;
       }

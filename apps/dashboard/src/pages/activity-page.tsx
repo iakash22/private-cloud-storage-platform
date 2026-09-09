@@ -5,8 +5,9 @@ import { useAuth } from '../context/auth-context.js';
 import { apiClient } from '../lib/api.js';
 
 const ACTIONS = [
-  'auth.login',
-  'auth.logout',
+  'auth.2fa.setup',
+  'auth.2fa.enable',
+  'auth.2fa.disable',
   'storage.bucket.created',
   'storage.bucket.deleted',
   'storage.object.uploaded',

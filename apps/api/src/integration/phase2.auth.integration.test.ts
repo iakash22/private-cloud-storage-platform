@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
+import { TotpService } from '@vaultstack/auth';
 import { PERMISSIONS, SYSTEM_ROLES } from '@vaultstack/types';
 import { startTestDatabase, type TestDatabase } from '@vaultstack/testing';
 import { createApp } from '../app.js';
@@ -320,5 +321,61 @@ describe('Phase 2 authentication and RBAC', () => {
     expect(blocked.status).toBe(429);
     expect(errorBody(blocked).code).toBe('RATE_LIMITED');
     expect(blocked.headers['retry-after']).toBeDefined();
+  });
+
+  it('challenges login when TOTP is enabled and completes the session after a valid code', async () => {
+    const totp = new TotpService();
+    const registered = await request(app).post('/api/v1/auth/register').send({
+      email: 'totp-owner@example.com',
+      password: 'password123',
+      name: 'Totp Owner',
+      organizationName: 'Totp Org',
+    });
+    expect(registered.status).toBe(201);
+    const headers = authHeaders(registered);
+
+    const setup = await request(app).post('/api/v1/auth/2fa/setup').set(headers);
+    expect(setup.status).toBe(200);
+    const secret = responseBody<{ secret: string }>(setup).secret;
+    expect(secret.length).toBeGreaterThan(10);
+
+    const enabled = await request(app)
+      .post('/api/v1/auth/2fa/enable')
+      .set(headers)
+      .send({ code: totp.generate(secret) });
+    expect(enabled.status).toBe(200);
+    expect(responseBody<{ user: { twoFactorEnabled: boolean } }>(enabled).user.twoFactorEnabled).toBe(
+      true,
+    );
+    expect(responseBody<{ backupCodes: string[] }>(enabled).backupCodes).toHaveLength(8);
+
+    await request(app).post('/api/v1/auth/logout').set(headers);
+
+    const login = await request(app).post('/api/v1/auth/login').send({
+      email: 'totp-owner@example.com',
+      password: 'password123',
+    });
+    expect(login.status).toBe(200);
+    expect(sessionCookieFlags(login)).toBe('');
+    const challenge = responseBody<{ totpRequired: boolean; challengeToken: string }>(login);
+    expect(challenge.totpRequired).toBe(true);
+    expect(challenge.challengeToken.length).toBeGreaterThan(10);
+
+    const invalid = await request(app).post('/api/v1/auth/login/totp').send({
+      challengeToken: challenge.challengeToken,
+      code: '000000',
+    });
+    expect(invalid.status).toBe(401);
+    expect(errorBody(invalid).code).toBe('TOTP_INVALID');
+
+    const complete = await request(app).post('/api/v1/auth/login/totp').send({
+      challengeToken: challenge.challengeToken,
+      code: totp.generate(secret),
+    });
+    expect(complete.status).toBe(200);
+    expect(sessionCookieFlags(complete)).toContain('HttpOnly');
+    expect(responseBody<{ user: { twoFactorEnabled: boolean } }>(complete).user.twoFactorEnabled).toBe(
+      true,
+    );
   });
 });

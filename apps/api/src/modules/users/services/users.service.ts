@@ -1,7 +1,7 @@
 import { hashPassword } from '@vaultstack/auth';
 import type { PrismaClient } from '@vaultstack/database';
 import { SYSTEM_ROLES } from '@vaultstack/types';
-import { conflict, forbidden, notFound } from '../../../lib/errors.js';
+import { conflict, dependencyError, forbidden, notFound } from '../../../lib/errors.js';
 import { writeAuditLog } from '../../../lib/audit.js';
 import { serializeUser } from '../mappers/user.mapper.js';
 import { createPrismaPermissionResolver } from '../../auth/services/authorization.service.js';
@@ -55,7 +55,9 @@ export class UsersService {
   ) {
     const existing = await this.prisma.user.findUnique({ where: { email: input.email } });
     if (existing) {
-      throw conflict('A user with that email already exists');
+      throw conflict('A user with that email already exists', {
+        email: 'A user with that email already exists',
+      });
     }
 
     const role =
@@ -68,7 +70,9 @@ export class UsersService {
           });
 
     if (!role) {
-      throw notFound('Role not found in this organization');
+      throw dependencyError('Role not found in this organization', {
+        roleId: 'Role not found in this organization',
+      });
     }
 
     const actorPermissions = await createPrismaPermissionResolver(this.prisma).getPermissionKeys(

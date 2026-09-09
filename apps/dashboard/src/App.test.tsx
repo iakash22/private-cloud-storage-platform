@@ -15,6 +15,7 @@ vi.mock('./context/auth-context.js', () => ({
     loading: false,
     error: null,
     login: vi.fn(),
+    verifyTotp: vi.fn(),
     register: vi.fn(),
     logout: vi.fn(),
     refresh: vi.fn(),

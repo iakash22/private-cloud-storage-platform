@@ -712,9 +712,10 @@ function contentLengthOf(body: Readable, expected?: number): number | undefined 
     return expected;
   }
 
-  const header = (body as IncomingMessage).headers['content-length'];
-  if (typeof header === 'string' && header.length > 0) {
-    const parsed = Number.parseInt(header, 10);
+  const header = (body as IncomingMessage).headers?.['content-length'];
+  const raw = Array.isArray(header) ? header[0] : header;
+  if (typeof raw === 'string' && raw.length > 0) {
+    const parsed = Number.parseInt(raw, 10);
     if (Number.isFinite(parsed) && parsed >= 0) {
       return parsed;
     }

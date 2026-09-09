@@ -1,21 +1,40 @@
-import type { ApiErrorCode } from '@vaultstack/types';
+import type { ApiErrorCode, ApiFieldErrors } from '@vaultstack/types';
+
+export interface AppErrorOptions {
+  retryAfterSeconds?: number;
+  fields?: ApiFieldErrors;
+}
 
 export class AppError extends Error {
   readonly statusCode: number;
   readonly code: ApiErrorCode;
   readonly retryAfterSeconds?: number;
+  readonly fields?: ApiFieldErrors;
 
-  constructor(statusCode: number, code: ApiErrorCode, message: string, retryAfterSeconds?: number) {
+  constructor(
+    statusCode: number,
+    code: ApiErrorCode,
+    message: string,
+    options: AppErrorOptions = {},
+  ) {
     super(message);
     this.name = 'AppError';
     this.statusCode = statusCode;
     this.code = code;
-    this.retryAfterSeconds = retryAfterSeconds;
+    this.retryAfterSeconds = options.retryAfterSeconds;
+    this.fields = options.fields;
   }
 }
 
-export function unauthorized(message = 'Authentication is required'): AppError {
-  return new AppError(401, 'UNAUTHORIZED', message);
+export function unauthorized(
+  message = 'Authentication is required',
+  fields?: ApiFieldErrors,
+): AppError {
+  return new AppError(401, 'UNAUTHORIZED', message, { fields });
+}
+
+export function totpInvalid(message = 'Invalid authenticator code'): AppError {
+  return new AppError(401, 'TOTP_INVALID', message, { fields: { code: message } });
 }
 
 export function forbidden(message = 'You do not have permission to perform this action'): AppError {
@@ -26,12 +45,16 @@ export function notFound(message = 'Resource not found'): AppError {
   return new AppError(404, 'NOT_FOUND', message);
 }
 
-export function conflict(message: string): AppError {
-  return new AppError(409, 'CONFLICT', message);
+export function conflict(message: string, fields?: ApiFieldErrors): AppError {
+  return new AppError(409, 'CONFLICT', message, { fields });
 }
 
-export function validationError(message: string): AppError {
-  return new AppError(400, 'VALIDATION_ERROR', message);
+export function validationError(message: string, fields?: ApiFieldErrors): AppError {
+  return new AppError(400, 'VALIDATION_ERROR', message, { fields });
+}
+
+export function dependencyError(message: string, fields?: ApiFieldErrors): AppError {
+  return new AppError(409, 'DEPENDENCY_ERROR', message, { fields });
 }
 
 export function rateLimited(retryAfterSeconds: number): AppError {
@@ -39,7 +62,7 @@ export function rateLimited(retryAfterSeconds: number): AppError {
     429,
     'RATE_LIMITED',
     `Too many requests. Try again in ${retryAfterSeconds} seconds`,
-    retryAfterSeconds,
+    { retryAfterSeconds },
   );
 }
 
@@ -160,11 +183,15 @@ export function shareLinkRevoked(): AppError {
 }
 
 export function sharePasswordRequired(): AppError {
-  return new AppError(401, 'SHARE_PASSWORD_REQUIRED', 'This share link requires a password');
+  return new AppError(401, 'SHARE_PASSWORD_REQUIRED', 'This share link requires a password', {
+    fields: { password: 'This share link requires a password' },
+  });
 }
 
 export function sharePasswordInvalid(): AppError {
-  return new AppError(403, 'SHARE_PASSWORD_INVALID', 'Share password is incorrect');
+  return new AppError(403, 'SHARE_PASSWORD_INVALID', 'Share password is incorrect', {
+    fields: { password: 'Share password is incorrect' },
+  });
 }
 
 export function shareDownloadLimitReached(): AppError {

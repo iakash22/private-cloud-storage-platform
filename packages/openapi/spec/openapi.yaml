@@ -148,11 +148,90 @@ paths:
               $ref: '#/components/schemas/LoginBody'
       responses:
         '200':
+          description: Session cookies set, or a TOTP challenge when two-factor authentication is enabled
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitedError'
+
+  /api/v1/auth/login/totp:
+    post:
+      tags: [Auth]
+      summary: Complete login with authenticator or backup code
+      operationId: verifyTotpLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyTotpLoginBody'
+      responses:
+        '200':
           description: Session cookies set
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '429':
           $ref: '#/components/responses/RateLimitedError'
+
+  /api/v1/auth/2fa/setup:
+    post:
+      tags: [Auth]
+      summary: Start authenticator enrollment for the current user
+      operationId: setupTotp
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      responses:
+        '200':
+          description: Pending TOTP secret, otpauth URI, and QR SVG
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+
+  /api/v1/auth/2fa/enable:
+    post:
+      tags: [Auth]
+      summary: Confirm authenticator enrollment
+      operationId: enableTotp
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnableTotpBody'
+      responses:
+        '200':
+          description: Two-factor authentication enabled; backup codes returned once
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+
+  /api/v1/auth/2fa/disable:
+    post:
+      tags: [Auth]
+      summary: Disable authenticator for the current user
+      operationId: disableTotp
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisableTotpBody'
+      responses:
+        '200':
+          description: Two-factor authentication disabled
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
 
   /api/v1/auth/logout:
     post:
@@ -2411,6 +2490,7 @@ components:
               type: string
               enum:
                 - VALIDATION_ERROR
+                - DEPENDENCY_ERROR
                 - UNAUTHORIZED
                 - FORBIDDEN
                 - NOT_FOUND
@@ -2426,8 +2506,14 @@ components:
                 - ARTIFACT_NOT_FOUND
                 - ARTIFACT_VERSION_NOT_FOUND
                 - ARTIFACT_RELEASE_CONFLICT
+                - TOTP_INVALID
             message:
               type: string
+            fields:
+              type: object
+              additionalProperties:
+                type: string
+              description: Per-field validation or dependency messages keyed by JSON body property.
         requestId:
           type: string
 
@@ -2547,6 +2633,33 @@ components:
           type: string
           format: email
         password:
+          type: string
+
+    VerifyTotpLoginBody:
+      type: object
+      required: [challengeToken, code]
+      properties:
+        challengeToken:
+          type: string
+        code:
+          type: string
+          description: 6-digit TOTP code or a one-time backup code
+
+    EnableTotpBody:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          pattern: '^[0-9]{6}$'
+
+    DisableTotpBody:
+      type: object
+      required: [password, code]
+      properties:
+        password:
+          type: string
+        code:
           type: string
 
     SelectOrganizationBody:

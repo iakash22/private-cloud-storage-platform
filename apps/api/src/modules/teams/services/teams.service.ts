@@ -1,5 +1,5 @@
 import type { PrismaClient } from '@vaultstack/database';
-import { conflict, notFound } from '../../../lib/errors.js';
+import { conflict, dependencyError, notFound } from '../../../lib/errors.js';
 import { writeAuditLog } from '../../../lib/audit.js';
 import { serializeTeam, serializeTeamMember } from '../mappers/team.mapper.js';
 
@@ -30,7 +30,9 @@ export class TeamsService {
   ) {
     const existing = await this.prisma.team.findFirst({ where: { organizationId, name } });
     if (existing) {
-      throw conflict('A team with that name already exists');
+      throw conflict('A team with that name already exists', {
+        name: 'A team with that name already exists',
+      });
     }
 
     const team = await this.prisma.team.create({
@@ -130,7 +132,9 @@ export class TeamsService {
       where: { organizationId, userId },
     });
     if (!membership) {
-      throw notFound('User is not a member of this organization');
+      throw dependencyError('User is not a member of this organization', {
+        userId: 'User is not a member of this organization',
+      });
     }
 
     const existing = await this.prisma.teamMember.findFirst({

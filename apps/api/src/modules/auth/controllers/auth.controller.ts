@@ -1,4 +1,11 @@
-import { loginBodySchema, registerBodySchema, selectOrganizationBodySchema } from '@vaultstack/validation';
+import {
+  disableTotpBodySchema,
+  enableTotpBodySchema,
+  loginBodySchema,
+  registerBodySchema,
+  selectOrganizationBodySchema,
+  verifyTotpLoginBodySchema,
+} from '@vaultstack/validation';
 import type { Request, Response } from 'express';
 import { requestMeta } from '../../../lib/audit.js';
 import { asyncHandler, type AsyncRouteHandler } from '../../../lib/async-handler.js';
@@ -27,6 +34,15 @@ export class AuthController extends AuthenticatedController {
       ...requestMeta(req),
       previousSessionToken: this.container.cookies.readSessionToken(req),
     });
+
+    if (!('session' in result)) {
+      this.ok(res, {
+        totpRequired: true,
+        challengeToken: result.challengeToken,
+      });
+      return;
+    }
+
     this.container.cookies.setSession(res, result.session);
     this.ok(res, {
       user: result.user,
@@ -35,6 +51,56 @@ export class AuthController extends AuthenticatedController {
       csrfToken: result.csrfToken,
     });
   });
+
+  verifyTotpLogin: AsyncRouteHandler = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const result = await this.container.auth.verifyTotpLogin(
+        readBody(req, verifyTotpLoginBodySchema),
+        {
+          ...requestMeta(req),
+          previousSessionToken: this.container.cookies.readSessionToken(req),
+        },
+      );
+      this.container.cookies.setSession(res, result.session);
+      this.ok(res, {
+        user: result.user,
+        organizations: result.organizations,
+        memberships: result.memberships,
+        csrfToken: result.csrfToken,
+      });
+    },
+  );
+
+  setupTotp: AsyncRouteHandler = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const auth = this.requireAuth(req);
+      const result = await this.container.auth.setupTotp(auth.user.id, requestMeta(req));
+      this.ok(res, result);
+    },
+  );
+
+  enableTotp: AsyncRouteHandler = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const auth = this.requireAuth(req);
+      const { code } = readBody(req, enableTotpBodySchema);
+      const result = await this.container.auth.enableTotp(auth.user.id, code, requestMeta(req));
+      this.ok(res, result);
+    },
+  );
+
+  disableTotp: AsyncRouteHandler = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const auth = this.requireAuth(req);
+      const { password, code } = readBody(req, disableTotpBodySchema);
+      const result = await this.container.auth.disableTotp(
+        auth.user.id,
+        password,
+        code,
+        requestMeta(req),
+      );
+      this.ok(res, result);
+    },
+  );
 
   logout: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const auth = this.requireAuth(req);

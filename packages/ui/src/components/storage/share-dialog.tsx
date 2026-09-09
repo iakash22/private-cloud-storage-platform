@@ -4,6 +4,7 @@ import { Dialog, DialogActions } from '../dialog.js';
 import { Input } from '../input.js';
 import { Label } from '../label.js';
 import { Button } from '../button.js';
+import { FieldError } from '../field-error.js';
 
 export interface ShareDialogCreateInput {
   visibility: ShareVisibilityName;
@@ -21,6 +22,7 @@ export interface ShareDialogProps {
   teams?: PublicTeam[];
   submitting?: boolean;
   error?: string | null;
+  fieldErrors?: Record<string, string>;
   createdUrl?: string | null;
   onOpenChange: (open: boolean) => void;
   onCreate?: (input: ShareDialogCreateInput) => void;
@@ -39,6 +41,7 @@ export function ShareDialog({
   teams = [],
   submitting = false,
   error,
+  fieldErrors = {},
   createdUrl,
   onOpenChange,
   onCreate,
@@ -160,6 +163,7 @@ export function ShareDialog({
                   id="share-team"
                   className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
                   value={teamId}
+                  aria-invalid={Boolean(fieldErrors.teamId)}
                   onChange={(event) => {
                     setTeamId(event.target.value);
                   }}
@@ -171,6 +175,7 @@ export function ShareDialog({
                     </option>
                   ))}
                 </select>
+                <FieldError message={fieldErrors.teamId} />
               </div>
             ) : null}
 
@@ -180,10 +185,12 @@ export function ShareDialog({
                 id="share-expires"
                 type="datetime-local"
                 value={expiresAt}
+                aria-invalid={Boolean(fieldErrors.expiresAt)}
                 onChange={(event) => {
                   setExpiresAt(event.target.value);
                 }}
               />
+              <FieldError message={fieldErrors.expiresAt} />
             </div>
 
             <div className="space-y-2">
@@ -193,10 +200,12 @@ export function ShareDialog({
                 type="password"
                 autoComplete="new-password"
                 value={password}
+                aria-invalid={Boolean(fieldErrors.password)}
                 onChange={(event) => {
                   setPassword(event.target.value);
                 }}
               />
+              <FieldError message={fieldErrors.password} />
             </div>
 
             <label className="flex items-center gap-2 text-sm text-slate-700">
@@ -209,6 +218,7 @@ export function ShareDialog({
               />
               Viewer permission
             </label>
+            <FieldError message={fieldErrors.allowView ?? fieldErrors.allowDownload} />
             <label className="flex items-center gap-2 text-sm text-slate-700">
               <input
                 type="checkbox"
@@ -227,10 +237,12 @@ export function ShareDialog({
                 type="number"
                 min={1}
                 value={maxDownloads}
+                aria-invalid={Boolean(fieldErrors.maxDownloads)}
                 onChange={(event) => {
                   setMaxDownloads(event.target.value);
                 }}
               />
+              <FieldError message={fieldErrors.maxDownloads} />
             </div>
           </>
         )}

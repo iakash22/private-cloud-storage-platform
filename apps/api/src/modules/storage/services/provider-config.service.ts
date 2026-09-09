@@ -145,7 +145,9 @@ export function createProviderConfigService(deps: {
           input.bucket !== undefined ||
           input.accountId !== undefined
         ) {
-          throw validationError('Local filesystem providers do not accept S3 connection settings');
+          throw validationError('Local filesystem providers do not accept S3 connection settings', {
+            dialect: 'Local filesystem providers do not accept S3 connection settings',
+          });
         }
       }
 
@@ -168,7 +170,9 @@ export function createProviderConfigService(deps: {
       let secretNonce = existing.secretNonce;
       if (input.secretAccessKey) {
         if (existing.type !== StorageProviderType.S3_COMPATIBLE) {
-          throw validationError('Local filesystem providers do not accept S3 connection settings');
+          throw validationError('Local filesystem providers do not accept S3 connection settings', {
+            secretAccessKey: 'Local filesystem providers do not accept S3 connection settings',
+          });
         }
         const encrypted = encryptProviderSecret(input.secretAccessKey, encryptionKey);
         secretCiphertext = encrypted.ciphertext;
@@ -272,7 +276,7 @@ async function validateAndResolveSettings(input: {
   allowPrivateEndpoints: boolean;
 }): Promise<StorageProviderSettings> {
   if (!input.dialect) {
-    throw validationError('S3 dialect is required');
+    throw validationError('S3 dialect is required', { dialect: 'S3 dialect is required' });
   }
 
   const dialect = getS3Dialect(input.dialect);
@@ -293,7 +297,9 @@ async function validateAndResolveSettings(input: {
     );
     const parsed = new URL(endpoint);
     if (tls && parsed.protocol !== 'https:') {
-      throw validationError('Storage endpoint must use HTTPS');
+      throw validationError('Storage endpoint must use HTTPS', {
+        endpoint: 'Storage endpoint must use HTTPS',
+      });
     }
   }
 
@@ -341,7 +347,9 @@ async function requireProvider(
 function normalizeUniqueViolation(error: unknown): unknown {
   const code = (error as { code?: string } | null)?.code;
   if (code === 'P2002') {
-    return conflict('A storage provider with that name already exists');
+    return conflict('A storage provider with that name already exists', {
+      name: 'A storage provider with that name already exists',
+    });
   }
   return error;
 }

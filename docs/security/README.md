@@ -14,13 +14,15 @@ On login the previous session token, if any, is revoked and a new session is iss
 
 Passwords are hashed with bcrypt. New passwords must be 10–128 characters and include a letter and a number. Disabled users (`User.disabledAt`) cannot log in; their sessions are revoked when they are disabled.
 
+Optional TOTP two-factor authentication (RFC 6238) can be enabled per user in Settings. The authenticator secret is stored as AES-256-GCM ciphertext derived from `JWT_SECRET`. Login with 2FA enabled issues a short-lived challenge JWT instead of a session; the session is created only after a valid authenticator or backup code. Backup codes are stored as SHA-256 hashes and each can be used once. Setup, enable, and disable are audited (`auth.2fa.setup`, `auth.2fa.enable`, `auth.2fa.disable`) without recording secrets or codes.
+
 API keys remain available for automation. Only a SHA-256 hash is stored. Keys are shown once at creation.
 
 Passwords, session tokens, CSRF tokens, cookies, and key hashes are redacted from logs.
 
 ## Rate limiting
 
-Login is limited per IP + email and per IP (Redis in production, in-memory in tests) to slow brute-force attempts. `/api/v1` also has a general per-IP limit. Limited responses use `429` with `RATE_LIMITED` and a `Retry-After` header.
+Login is limited per IP + email and per IP (Redis in production, in-memory in tests) to slow brute-force attempts. `POST /api/v1/auth/login/totp` uses the same limiter. `/api/v1` also has a general per-IP limit. Limited responses use `429` with `RATE_LIMITED` and a `Retry-After` header.
 
 No extra npm packages were added for cookies, rate limiting, or CORS: hashing and cookie serialization live in `@vaultstack/auth`, the limiter is a small Redis/`Map` helper in the API, and browser origins are allowlisted in a small Express middleware.
 

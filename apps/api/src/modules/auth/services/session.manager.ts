@@ -24,11 +24,7 @@ export class SessionManager {
     this.tokens = new TokenService(jwtSecret);
   }
 
-  async create(
-    userId: string,
-    meta: RequestMeta,
-    previousToken?: string,
-  ): Promise<SessionTokens> {
+  async create(userId: string, meta: RequestMeta, previousToken?: string): Promise<SessionTokens> {
     if (previousToken) {
       await this.revokeByToken(previousToken);
     }
@@ -98,6 +94,10 @@ export class SessionManager {
 
 export type SessionService = SessionManager;
 
-export function createSessionService(prisma: PrismaClient, ttlSeconds: number, jwtSecret = 'unused') {
+export function createSessionService(
+  prisma: PrismaClient,
+  ttlSeconds: number,
+  jwtSecret = 'unused',
+) {
   return new SessionManager(prisma, jwtSecret, ttlSeconds);
 }

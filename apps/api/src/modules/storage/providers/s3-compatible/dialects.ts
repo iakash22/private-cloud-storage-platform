@@ -72,7 +72,10 @@ const CLOUDFLARE_R2: S3DialectAdapter = {
   },
   assertConfigured(input) {
     if (!optionalEndpoint(input) && !input.accountId?.trim()) {
-      throw validationError('Cloudflare R2 requires an account id or endpoint');
+      throw validationError('Cloudflare R2 requires an account id or endpoint', {
+        accountId: 'Cloudflare R2 requires an account id or endpoint',
+        endpoint: 'Cloudflare R2 requires an account id or endpoint',
+      });
     }
   },
 };
@@ -187,7 +190,9 @@ const DIALECTS: Record<S3DialectName, S3DialectAdapter> = {
 
 export function getS3Dialect(name: string): S3DialectAdapter {
   if (!isS3DialectName(name)) {
-    throw validationError(`Unsupported S3 dialect: ${name}`);
+    throw validationError(`Unsupported S3 dialect: ${name}`, {
+      dialect: `Unsupported S3 dialect: ${name}`,
+    });
   }
 
   return DIALECTS[name];
@@ -211,7 +216,9 @@ export function resolveDialectEndpoint(
 
 function requireEndpoint(dialect: S3DialectAdapter, input: DialectEndpointInput): void {
   if (!optionalEndpoint(input)) {
-    throw validationError(`${dialect.name} requires an endpoint`);
+    throw validationError(`${dialect.name} requires an endpoint`, {
+      endpoint: `${dialect.name} requires an endpoint`,
+    });
   }
 }
 

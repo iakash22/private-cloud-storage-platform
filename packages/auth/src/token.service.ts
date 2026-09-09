@@ -5,6 +5,7 @@ import {
   ACCESS_TOKEN_TYP,
   CSRF_TOKEN_PREFIX,
   SESSION_TOKEN_PREFIX,
+  TOTP_CHALLENGE_TYP,
   type AccessTokenPayload,
 } from './types.js';
 
@@ -45,6 +46,29 @@ export class TokenService {
       payload.sub.length === 0
     ) {
       throw new Error('Invalid access token');
+    }
+
+    return { userId: payload.sub };
+  }
+
+  async signTotpChallenge(userId: string, expiresIn = '5m'): Promise<string> {
+    return new SignJWT({ typ: TOTP_CHALLENGE_TYP })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setSubject(userId)
+      .setIssuedAt()
+      .setExpirationTime(expiresIn)
+      .sign(secretKey(this.jwtSecret));
+  }
+
+  async verifyTotpChallenge(token: string): Promise<AccessTokenPayload> {
+    const { payload } = await jwtVerify(token, secretKey(this.jwtSecret));
+
+    if (
+      payload.typ !== TOTP_CHALLENGE_TYP ||
+      typeof payload.sub !== 'string' ||
+      payload.sub.length === 0
+    ) {
+      throw new Error('Invalid authenticator challenge');
     }
 
     return { userId: payload.sub };

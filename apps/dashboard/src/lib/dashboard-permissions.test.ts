@@ -1,10 +1,13 @@
 import { PERMISSIONS } from '@vaultstack/types';
 import { describe, expect, it } from 'vitest';
 import {
+  canDeleteArtifacts,
+  canManageAccess,
   canReadAccess,
   canReadActivity,
   canReadArtifacts,
   canReadSettings,
+  canUploadArtifacts,
 } from './dashboard-permissions.js';
 
 describe('dashboard permissions', () => {
@@ -25,7 +28,15 @@ describe('dashboard permissions', () => {
     ];
     expect(canReadArtifacts(administrator)).toBe(true);
     expect(canReadAccess(administrator)).toBe(true);
+    expect(canManageAccess(administrator)).toBe(true);
     expect(canReadActivity(administrator)).toBe(true);
     expect(canReadSettings(administrator)).toBe(true);
+  });
+
+  it('separates artifact upload and delete from read', () => {
+    expect(canUploadArtifacts([PERMISSIONS.ARTIFACT_READ])).toBe(false);
+    expect(canDeleteArtifacts([PERMISSIONS.ARTIFACT_READ])).toBe(false);
+    expect(canUploadArtifacts([PERMISSIONS.ARTIFACT_UPLOAD])).toBe(true);
+    expect(canDeleteArtifacts([PERMISSIONS.ARTIFACT_DELETE])).toBe(true);
   });
 });

@@ -2,10 +2,12 @@ export { Button, buttonVariants, type ButtonProps } from './components/button.js
 export { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/card.js';
 export { Input } from './components/input.js';
 export { Label } from './components/label.js';
+export { FieldError } from './components/field-error.js';
 export { Badge } from './components/badge.js';
 export { Progress } from './components/progress.js';
 export { Skeleton } from './components/skeleton.js';
 export { Dialog, DialogActions, type DialogProps } from './components/dialog.js';
+export { ToastProvider, useToast, type ToastApi, type ToastTone } from './components/toast.js';
 export { cn } from './lib/utils.js';
 export {
   formatBytes,

@@ -1,7 +1,13 @@
 import { BucketVersioningStatus, type Bucket, type PrismaClient } from '@vaultstack/database';
 import type { PublicBucket } from '@vaultstack/types';
 import { writeAuditLog } from '../../../lib/audit.js';
-import { conflict, storageBucketNotEmpty, storageBucketNotFound } from '../../../lib/errors.js';
+import {
+  AppError,
+  conflict,
+  dependencyError,
+  storageBucketNotEmpty,
+  storageBucketNotFound,
+} from '../../../lib/errors.js';
 import { serializeBucket } from '../mappers/storage.mapper.js';
 import { assertValidBucketName } from '../domain/object-key.js';
 import { configuredPhysicalBucket } from '../domain/provider-config.js';
@@ -80,12 +86,24 @@ export function createBucketService(deps: {
 
       const existing = await buckets.findByName(organizationId, name);
       if (existing) {
-        throw conflict('A bucket with that name already exists');
+        throw conflict('A bucket with that name already exists', {
+          name: 'A bucket with that name already exists',
+        });
       }
 
-      const providerRecord = options.storageProviderId
-        ? await storage.findProvider(organizationId, options.storageProviderId)
-        : await storage.defaultProvider(organizationId);
+      let providerRecord;
+      try {
+        providerRecord = options.storageProviderId
+          ? await storage.findProvider(organizationId, options.storageProviderId)
+          : await storage.defaultProvider(organizationId);
+      } catch (error) {
+        if (error instanceof AppError && error.code === 'STORAGE_PROVIDER_NOT_FOUND') {
+          throw dependencyError('Storage provider not found', {
+            storageProviderId: 'Storage provider not found',
+          });
+        }
+        throw error;
+      }
 
       // The row is created first so the physical prefix is derived from a
       // persisted id, then the physical bucket is provisioned. If provisioning
@@ -203,7 +221,9 @@ export function createBucketService(deps: {
 function normalizeUniqueViolation(error: unknown): unknown {
   const code = (error as { code?: string } | null)?.code;
   if (code === 'P2002') {
-    return conflict('A bucket with that name already exists');
+    return conflict('A bucket with that name already exists', {
+      name: 'A bucket with that name already exists',
+    });
   }
   return error;
 }

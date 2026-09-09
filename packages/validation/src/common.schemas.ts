@@ -22,11 +22,16 @@ export const readinessResponseSchema = z.object({
   checks: z.array(dependencyCheckSchema),
 });
 
+export const apiFieldErrorsSchema = z.record(z.string(), z.string());
+
+export const apiErrorBodySchema = z.object({
+  code: z.string(),
+  message: z.string(),
+  fields: apiFieldErrorsSchema.optional(),
+});
+
 export const apiErrorResponseSchema = z.object({
-  error: z.object({
-    code: z.string(),
-    message: z.string(),
-  }),
+  error: apiErrorBodySchema,
   requestId: z.string(),
 });
 

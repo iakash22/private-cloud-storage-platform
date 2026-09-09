@@ -1,57 +1,103 @@
-import { useEffect, useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState, StorageUsage } from '@vaultstack/ui';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  EmptyState,
+  formatBytes,
+  StorageUsage,
+} from '@vaultstack/ui';
+import type { PublicStorageMonitorMetrics } from '@vaultstack/types';
+import { apiClient } from '../../lib/api.js';
 import { computeUsageSummary, useBuckets } from '../../hooks/use-storage.js';
 
 export function UsagePage() {
-  const { buckets, loading, error } = useBuckets();
-  const [usage, setUsage] = useState<{ totalBytes: number; objectCount: number; bucketCount: number }>();
-  const [usageLoading, setUsageLoading] = useState(false);
+  const { buckets } = useBuckets();
+  const [metrics, setMetrics] = useState<PublicStorageMonitorMetrics>();
+  const [fallback, setFallback] = useState<{
+    totalBytes: number;
+    objectCount: number;
+    bucketCount: number;
+  }>();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      setMetrics(await apiClient.getInfrastructureStorage());
+      setFallback(undefined);
+      setError(null);
+    } catch {
+      try {
+        const summary = await computeUsageSummary(buckets);
+        setMetrics(undefined);
+        setFallback(summary);
+        setError(null);
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : 'Unable to load usage');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [buckets]);
 
   useEffect(() => {
-    if (buckets.length === 0) {
-      return;
-    }
+    void refresh();
+  }, [refresh]);
 
-    let cancelled = false;
-    setUsageLoading(true);
-
-    void computeUsageSummary(buckets)
-      .then((summary) => {
-        if (!cancelled) {
-          setUsage(summary);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setUsageLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [buckets]);
+  const summary = metrics
+    ? {
+        totalBytes: metrics.totalBytes,
+        objectCount: metrics.objectCount,
+        bucketCount: metrics.bucketCount,
+        limitBytes: metrics.storageRoot.totalBytes ?? undefined,
+      }
+    : fallback;
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-semibold text-slate-900">Storage usage</h2>
-        <p className="text-sm text-slate-500">Aggregated object counts and bytes for the active organization.</p>
+        <p className="text-sm text-slate-500">
+          Organization capacity from the storage collector, with object listing as a fallback.
+        </p>
       </div>
 
-      {error ? <EmptyState title="Unable to compute usage" description={error} /> : null}
+      {error ? <EmptyState title="Unable to load usage" description={error} /> : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <StorageUsage summary={usage} loading={loading || usageLoading} />
+        <StorageUsage summary={summary} loading={loading} />
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Usage notes</CardTitle>
-            <CardDescription>How this dashboard calculates usage</CardDescription>
+            <CardTitle className="text-base">Buckets</CardTitle>
+            <CardDescription>
+              {metrics
+                ? `${metrics.uploadsLast24h} uploads in the last 24 hours`
+                : fallback
+                  ? 'Estimated from object listings'
+                  : 'Loading…'}
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-2 text-sm text-slate-600">
-            <p>Usage is computed by listing objects across all accessible buckets.</p>
-            <p>Large organizations may require a dedicated usage API in a later phase.</p>
-            <p>No internal filesystem paths or provider credentials are shown.</p>
+          <CardContent className="space-y-2 text-sm">
+            {(metrics?.buckets ?? []).map((bucket) => (
+              <div key={bucket.bucketId} className="flex justify-between gap-3">
+                <span className="font-medium text-slate-900">{bucket.name}</span>
+                <span className="text-slate-500">
+                  {bucket.objectCount} objects · {formatBytes(bucket.bytes)}
+                </span>
+              </div>
+            ))}
+            {!metrics && fallback ? (
+              <p className="text-slate-500">
+                {fallback.objectCount} objects across {fallback.bucketCount} buckets.
+              </p>
+            ) : null}
+            {metrics && metrics.buckets.length === 0 ? (
+              <p className="text-slate-500">No bucket usage recorded yet.</p>
+            ) : null}
           </CardContent>
         </Card>
       </div>

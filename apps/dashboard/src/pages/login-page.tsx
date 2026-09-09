@@ -1,133 +1,164 @@
 import { useState, type FormEvent } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
-import {
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  Input,
-  Label,
-} from '@vaultstack/ui';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Button, FieldError, Input, Label } from '@vaultstack/ui';
+import { loginBodySchema, parseForm, verifyTotpLoginBodySchema } from '@vaultstack/validation';
 import { useAuth } from '../context/auth-context.js';
+import { useFormSubmit } from '../lib/form-errors.js';
+import { AuthLayout } from './auth-layout.js';
 
 export function LoginPage() {
-  const { user, loading, login, register } = useAuth();
+  const { user, loading, login, verifyTotp } = useAuth();
   const navigate = useNavigate();
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const { fieldErrors, validate, catchError, clearFieldErrors } = useFormSubmit();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [organizationName, setOrganizationName] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [code, setCode] = useState('');
+  const [challengeToken, setChallengeToken] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   if (!loading && user) {
     return <Navigate to="/" replace />;
   }
 
-  const handleSubmit = async (event: FormEvent) => {
+  const handlePasswordSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setSubmitting(true);
-    setError(null);
 
     try {
-      if (mode === 'login') {
-        await login({ email, password });
-      } else {
-        await register({ email, password, name, organizationName });
+      const body = validate(parseForm(loginBodySchema, { email, password }));
+      if (!body) {
+        return;
       }
-
+      const result = await login(body);
+      if ('totpRequired' in result) {
+        setChallengeToken(result.challengeToken);
+        setCode('');
+        clearFieldErrors();
+        return;
+      }
       void navigate('/');
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Authentication failed');
+      catchError(caught);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleTotpSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!challengeToken) {
+      return;
+    }
+    setSubmitting(true);
+
+    try {
+      const body = validate(parseForm(verifyTotpLoginBodySchema, { challengeToken, code }));
+      if (!body) {
+        return;
+      }
+      await verifyTotp(body);
+      void navigate('/');
+    } catch (caught) {
+      catchError(caught);
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md items-center px-6 py-12">
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle>VaultStack</CardTitle>
-          <CardDescription>
-            {mode === 'login'
-              ? 'Sign in to manage organization storage.'
-              : 'Create an account and organization.'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form className="space-y-4" onSubmit={(event) => void handleSubmit(event)}>
-            {mode === 'register' ? (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="name">Name</Label>
-                  <Input
-                    id="name"
-                    value={name}
-                    onChange={(event) => {
-                      setName(event.target.value);
-                    }}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="organizationName">Organization</Label>
-                  <Input
-                    id="organizationName"
-                    value={organizationName}
-                    onChange={(event) => {
-                      setOrganizationName(event.target.value);
-                    }}
-                    required
-                  />
-                </div>
-              </>
-            ) : null}
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(event) => {
-                  setEmail(event.target.value);
-                }}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                value={password}
-                onChange={(event) => {
-                  setPassword(event.target.value);
-                }}
-                required
-              />
-            </div>
-            {error ? <p className="text-sm text-red-600">{error}</p> : null}
-            <Button type="submit" className="w-full" disabled={submitting}>
-              {submitting ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'}
-            </Button>
-          </form>
+    <AuthLayout
+      title={challengeToken ? 'Authenticator code' : 'Sign in'}
+      subtitle={
+        challengeToken
+          ? 'Enter the 6-digit code from your authenticator app, or a backup code.'
+          : 'Use your work email to continue to VaultStack.'
+      }
+      footer={
+        challengeToken ? null : (
+          <p>
+            Need an account?{' '}
+            <Link className="font-medium text-slate-900 underline underline-offset-4" to="/signup">
+              Create one
+            </Link>
+          </p>
+        )
+      }
+    >
+      {challengeToken ? (
+        <form className="space-y-4" noValidate onSubmit={(event) => void handleTotpSubmit(event)}>
+          <div className="space-y-2">
+            <Label htmlFor="code">Verification code</Label>
+            <Input
+              id="code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              autoFocus
+              placeholder="123456"
+              value={code}
+              aria-invalid={Boolean(fieldErrors.code)}
+              aria-describedby={fieldErrors.code ? 'code-error' : undefined}
+              onChange={(event) => {
+                setCode(event.target.value);
+              }}
+            />
+            <FieldError id="code-error" message={fieldErrors.code} />
+          </div>
+          <Button type="submit" className="w-full" disabled={submitting}>
+            {submitting ? 'Please wait…' : 'Continue'}
+          </Button>
           <button
             type="button"
-            className="mt-4 text-sm text-slate-600 underline"
+            className="min-h-11 w-full text-sm text-slate-600 underline underline-offset-4"
             onClick={() => {
-              setMode((current) => (current === 'login' ? 'register' : 'login'));
+              setChallengeToken(null);
+              setCode('');
+              clearFieldErrors();
             }}
           >
-            {mode === 'login' ? 'Need an account? Register' : 'Already have an account? Sign in'}
+            Use a different account
           </button>
-        </CardContent>
-      </Card>
-    </main>
+        </form>
+      ) : (
+        <form
+          className="space-y-4"
+          noValidate
+          onSubmit={(event) => void handlePasswordSubmit(event)}
+        >
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              autoComplete="email"
+              value={email}
+              aria-invalid={Boolean(fieldErrors.email)}
+              aria-describedby={fieldErrors.email ? 'email-error' : undefined}
+              onChange={(event) => {
+                setEmail(event.target.value);
+              }}
+            />
+            <FieldError id="email-error" message={fieldErrors.email} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
+            <Input
+              id="password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              aria-invalid={Boolean(fieldErrors.password)}
+              aria-describedby={fieldErrors.password ? 'password-error' : undefined}
+              onChange={(event) => {
+                setPassword(event.target.value);
+              }}
+            />
+            <FieldError id="password-error" message={fieldErrors.password} />
+          </div>
+          <Button type="submit" className="w-full" disabled={submitting}>
+            {submitting ? 'Please wait…' : 'Sign in'}
+          </Button>
+        </form>
+      )}
+    </AuthLayout>
   );
 }

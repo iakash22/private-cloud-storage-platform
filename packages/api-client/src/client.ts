@@ -1,7 +1,11 @@
 import {
   CSRF_HEADER_NAME,
   ORGANIZATION_HEADER_NAME,
+  type AuthLoginResult,
   type AuthSessionPayload,
+  type AuthTotpChallengePayload,
+  type TotpEnablePayload,
+  type TotpSetupPayload,
   type HealthResponse,
   type InitiatedUpload,
   type MultipartPartTransferDescriptor,
@@ -46,8 +50,15 @@ import {
   type PublicS3AccessCredential,
   type BackupTargetName,
   type S3DialectName,
+  type CreatedApiKey,
+  type PublicApiKey,
+  type PublicOrganization,
+  type PublicPermission,
+  type PublicRole,
+  type PublicServiceAccount,
   type PublicTeam,
   type PublicTeamMember,
+  type PublicUser,
   type ReadinessResponse,
   type ShareVisibilityName,
   type StorageLifecycleActionName,
@@ -84,6 +95,10 @@ export type {
   MultipartUploadProgressEvent,
   UploadMultipartFileOptions,
 } from './multipart-upload.js';
+
+function isLoginTotpChallenge(payload: AuthLoginResult): payload is AuthTotpChallengePayload {
+  return 'totpRequired' in payload && payload.totpRequired;
+}
 
 export class VaultStackApiClient {
   private readonly baseUrl: string;
@@ -135,12 +150,37 @@ export class VaultStackApiClient {
     return result;
   }
 
-  async login(input: { email: string; password: string }): Promise<AuthSessionPayload> {
-    const result = await this.request<AuthSessionPayload>('POST', '/api/v1/auth/login', {
+  async login(input: { email: string; password: string }): Promise<AuthLoginResult> {
+    const result = await this.request<AuthLoginResult>('POST', '/api/v1/auth/login', {
+      body: input,
+    });
+    if (!isLoginTotpChallenge(result)) {
+      this.applySession(result);
+    }
+    return result;
+  }
+
+  async verifyTotpLogin(input: {
+    challengeToken: string;
+    code: string;
+  }): Promise<AuthSessionPayload> {
+    const result = await this.request<AuthSessionPayload>('POST', '/api/v1/auth/login/totp', {
       body: input,
     });
     this.applySession(result);
     return result;
+  }
+
+  async setupTotp(): Promise<TotpSetupPayload> {
+    return this.request<TotpSetupPayload>('POST', '/api/v1/auth/2fa/setup');
+  }
+
+  async enableTotp(input: { code: string }): Promise<TotpEnablePayload> {
+    return this.request<TotpEnablePayload>('POST', '/api/v1/auth/2fa/enable', { body: input });
+  }
+
+  async disableTotp(input: { password: string; code: string }): Promise<{ user: PublicUser }> {
+    return this.request<{ user: PublicUser }>('POST', '/api/v1/auth/2fa/disable', { body: input });
   }
 
   async logout(): Promise<void> {
@@ -518,6 +558,197 @@ export class VaultStackApiClient {
     return result.member;
   }
 
+  async createTeam(organizationId: string, name: string): Promise<PublicTeam> {
+    const result = await this.request<{ team: PublicTeam }>(
+      'POST',
+      `/api/v1/organizations/${organizationId}/teams`,
+      { body: { name } },
+    );
+    return result.team;
+  }
+
+  async updateTeam(organizationId: string, teamId: string, name: string): Promise<PublicTeam> {
+    const result = await this.request<{ team: PublicTeam }>(
+      'PATCH',
+      `/api/v1/organizations/${organizationId}/teams/${teamId}`,
+      { body: { name } },
+    );
+    return result.team;
+  }
+
+  async deleteTeam(organizationId: string, teamId: string): Promise<void> {
+    await this.request<undefined>(
+      'DELETE',
+      `/api/v1/organizations/${organizationId}/teams/${teamId}`,
+    );
+  }
+
+  async listTeamMembers(organizationId: string, teamId: string): Promise<PublicTeamMember[]> {
+    const result = await this.request<{ members: PublicTeamMember[] }>(
+      'GET',
+      `/api/v1/organizations/${organizationId}/teams/${teamId}/members`,
+    );
+    return result.members;
+  }
+
+  async removeTeamMember(organizationId: string, teamId: string, userId: string): Promise<void> {
+    await this.request<undefined>(
+      'DELETE',
+      `/api/v1/organizations/${organizationId}/teams/${teamId}/members/${userId}`,
+    );
+  }
+
+  async listUsers(organizationId: string): Promise<PublicUser[]> {
+    const result = await this.request<{ users: PublicUser[] }>(
+      'GET',
+      `/api/v1/organizations/${organizationId}/users`,
+    );
+    return result.users;
+  }
+
+  async createUser(
+    organizationId: string,
+    input: { email: string; password: string; name: string; roleId?: string },
+  ): Promise<PublicUser> {
+    const result = await this.request<{ user: PublicUser }>(
+      'POST',
+      `/api/v1/organizations/${organizationId}/users`,
+      { body: input },
+    );
+    return result.user;
+  }
+
+  async updateUser(
+    organizationId: string,
+    userId: string,
+    input: { name?: string; password?: string; disabled?: boolean },
+  ): Promise<PublicUser> {
+    const result = await this.request<{ user: PublicUser }>(
+      'PATCH',
+      `/api/v1/organizations/${organizationId}/users/${userId}`,
+      { body: input },
+    );
+    return result.user;
+  }
+
+  async listRoles(organizationId: string): Promise<PublicRole[]> {
+    const result = await this.request<{ roles: PublicRole[] }>(
+      'GET',
+      `/api/v1/organizations/${organizationId}/roles`,
+    );
+    return result.roles;
+  }
+
+  async createRole(
+    organizationId: string,
+    input: { name: string; description?: string; permissions: string[] },
+  ): Promise<PublicRole> {
+    const result = await this.request<{ role: PublicRole }>(
+      'POST',
+      `/api/v1/organizations/${organizationId}/roles`,
+      { body: input },
+    );
+    return result.role;
+  }
+
+  async assignRole(organizationId: string, userId: string, roleId: string): Promise<void> {
+    await this.request<undefined>(
+      'POST',
+      `/api/v1/organizations/${organizationId}/users/${userId}/roles`,
+      { body: { roleId } },
+    );
+  }
+
+  async removeRole(organizationId: string, userId: string, roleId: string): Promise<void> {
+    await this.request<undefined>(
+      'DELETE',
+      `/api/v1/organizations/${organizationId}/users/${userId}/roles/${roleId}`,
+    );
+  }
+
+  async listPermissions(): Promise<PublicPermission[]> {
+    const result = await this.request<{ permissions: PublicPermission[] }>(
+      'GET',
+      '/api/v1/permissions',
+    );
+    return result.permissions;
+  }
+
+  async getOrganization(organizationId: string): Promise<PublicOrganization> {
+    const result = await this.request<{ organization: PublicOrganization }>(
+      'GET',
+      `/api/v1/organizations/${organizationId}`,
+    );
+    return result.organization;
+  }
+
+  async updateOrganization(organizationId: string, name: string): Promise<PublicOrganization> {
+    const result = await this.request<{ organization: PublicOrganization }>(
+      'PATCH',
+      `/api/v1/organizations/${organizationId}`,
+      { body: { name } },
+    );
+    return result.organization;
+  }
+
+  async createOrganization(name: string): Promise<PublicOrganization> {
+    const result = await this.request<{ organization: PublicOrganization }>(
+      'POST',
+      '/api/v1/organizations',
+      { body: { name } },
+    );
+    return result.organization;
+  }
+
+  async listApiKeys(organizationId: string): Promise<PublicApiKey[]> {
+    const result = await this.request<{ apiKeys: PublicApiKey[] }>(
+      'GET',
+      `/api/v1/organizations/${organizationId}/api-keys`,
+    );
+    return result.apiKeys;
+  }
+
+  async createApiKey(
+    organizationId: string,
+    input: { name: string; expiresAt?: string },
+  ): Promise<CreatedApiKey> {
+    const result = await this.request<{ apiKey: CreatedApiKey }>(
+      'POST',
+      `/api/v1/organizations/${organizationId}/api-keys`,
+      { body: input },
+    );
+    return result.apiKey;
+  }
+
+  async revokeApiKey(organizationId: string, apiKeyId: string): Promise<PublicApiKey> {
+    const result = await this.request<{ apiKey: PublicApiKey }>(
+      'DELETE',
+      `/api/v1/organizations/${organizationId}/api-keys/${apiKeyId}`,
+    );
+    return result.apiKey;
+  }
+
+  async listServiceAccounts(organizationId: string): Promise<PublicServiceAccount[]> {
+    const result = await this.request<{ serviceAccounts: PublicServiceAccount[] }>(
+      'GET',
+      `/api/v1/organizations/${organizationId}/s3-credentials/service-accounts`,
+    );
+    return result.serviceAccounts;
+  }
+
+  async updateServiceAccount(
+    organizationId: string,
+    serviceAccountId: string,
+    input: { description?: string | null; disabled?: boolean },
+  ): Promise<PublicServiceAccount> {
+    const result = await this.request<{ serviceAccount: PublicServiceAccount }>(
+      'PATCH',
+      `/api/v1/organizations/${organizationId}/s3-credentials/service-accounts/${serviceAccountId}`,
+      { body: input },
+    );
+    return result.serviceAccount;
+  }
+
   async copyObject(
     objectId: string,
     destination: { destinationBucketId: string; destinationKey: string },
@@ -749,6 +980,56 @@ export class VaultStackApiClient {
       'DELETE',
       `/api/v1/artifacts/projects/${projectId}/builds/${buildId}`,
     );
+  }
+
+  async updateBuild(
+    projectId: string,
+    buildId: string,
+    input: {
+      title?: string | null;
+      gitRef?: string | null;
+      commitSha?: string | null;
+      status?: BuildStatusName;
+    },
+  ): Promise<PublicBuild> {
+    const result = await this.request<{ build: PublicBuild }>(
+      'PATCH',
+      `/api/v1/artifacts/projects/${projectId}/builds/${buildId}`,
+      { body: input },
+    );
+    return result.build;
+  }
+
+  async listProjectArtifacts(projectId: string): Promise<PublicArtifact[]> {
+    const result = await this.request<{ artifacts: PublicArtifact[] }>(
+      'GET',
+      `/api/v1/artifacts/projects/${projectId}/artifacts`,
+    );
+    return result.artifacts;
+  }
+
+  async getArtifact(artifactId: string): Promise<PublicArtifact> {
+    const result = await this.request<{ artifact: PublicArtifact }>(
+      'GET',
+      `/api/v1/artifacts/${artifactId}`,
+    );
+    return result.artifact;
+  }
+
+  async listArtifactVersions(artifactId: string): Promise<PublicArtifactVersion[]> {
+    const result = await this.request<{ versions: PublicArtifactVersion[] }>(
+      'GET',
+      `/api/v1/artifacts/${artifactId}/versions`,
+    );
+    return result.versions;
+  }
+
+  async getArtifactVersion(versionId: string): Promise<PublicArtifactVersion> {
+    const result = await this.request<{ version: PublicArtifactVersion }>(
+      'GET',
+      `/api/v1/artifacts/versions/${versionId}`,
+    );
+    return result.version;
   }
 
   async listBuildArtifacts(projectId: string, buildId: string): Promise<PublicArtifact[]> {

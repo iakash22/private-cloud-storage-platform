@@ -5,6 +5,7 @@ export function serializeUser(user: {
   email: string;
   name: string;
   disabledAt?: Date | null;
+  totpEnabledAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }): PublicUser {
@@ -13,6 +14,7 @@ export function serializeUser(user: {
     email: user.email,
     name: user.name,
     disabled: user.disabledAt != null,
+    twoFactorEnabled: user.totpEnabledAt != null,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
   };

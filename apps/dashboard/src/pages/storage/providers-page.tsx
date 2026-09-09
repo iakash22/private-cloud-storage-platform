@@ -11,13 +11,16 @@ import {
   Dialog,
   DialogActions,
   EmptyState,
+  FieldError,
   Input,
   Label,
 } from '@vaultstack/ui';
+import { createStorageProviderBodySchema, parseForm, updateStorageProviderBodySchema } from '@vaultstack/validation';
 import { useAuth } from '../../context/auth-context.js';
 import { useStorageProviders } from '../../hooks/use-storage.js';
 import { apiClient } from '../../lib/api.js';
 import { canDeleteStorage, canUploadStorage } from '../../lib/storage-preferences.js';
+import { useFormSubmit } from '../../lib/form-errors.js';
 
 const DIALECT_LABELS: Record<S3DialectName, string> = {
   AWS_S3: 'AWS S3',
@@ -32,9 +35,10 @@ const DIALECT_LABELS: Record<S3DialectName, string> = {
 export function ProvidersPage() {
   const { permissions } = useAuth();
   const { providers, loading, error, refresh } = useStorageProviders();
+  const { fieldErrors, validate, catchError } = useFormSubmit();
   const [createOpen, setCreateOpen] = useState(false);
+  const [editProviderId, setEditProviderId] = useState<string>();
   const [deleteTarget, setDeleteTarget] = useState<string | undefined>();
-  const [actionError, setActionError] = useState<string | null>(null);
   const [testMessage, setTestMessage] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [dialect, setDialect] = useState<S3DialectName>(S3_DIALECTS.MINIO);
@@ -46,6 +50,8 @@ export function ProvidersPage() {
   const [secretAccessKey, setSecretAccessKey] = useState('');
   const [tls, setTls] = useState(false);
   const [forcePathStyle, setForcePathStyle] = useState(true);
+  const [isDefault, setIsDefault] = useState(false);
+  const [status, setStatus] = useState<'ACTIVE' | 'DEGRADED' | 'DISABLED'>('ACTIVE');
 
   const resetForm = () => {
     setName('');
@@ -58,11 +64,35 @@ export function ProvidersPage() {
     setSecretAccessKey('');
     setTls(false);
     setForcePathStyle(true);
+    setIsDefault(false);
+    setStatus('ACTIVE');
+  };
+
+  const openEdit = (providerId: string) => {
+    const provider = providers.find((item) => item.id === providerId);
+    if (!provider) {
+      return;
+    }
+    setEditProviderId(provider.id);
+    setName(provider.name);
+    setDialect(provider.dialect ?? S3_DIALECTS.GENERIC);
+    setEndpoint(provider.endpoint ?? '');
+    setRegion(provider.region ?? '');
+    setBucket(provider.bucket ?? '');
+    setAccountId(provider.accountId ?? '');
+    setAccessKeyId(provider.accessKeyId ?? '');
+    setSecretAccessKey('');
+    setTls(provider.tls ?? false);
+    setForcePathStyle(provider.forcePathStyle ?? true);
+    setIsDefault(provider.isDefault);
+    setStatus(
+      provider.status === 'DEGRADED' || provider.status === 'DISABLED' ? provider.status : 'ACTIVE',
+    );
   };
 
   const handleCreate = async () => {
-    try {
-      await apiClient.createStorageProvider({
+    const body = validate(
+      parseForm(createStorageProviderBodySchema, {
         name: name.trim(),
         dialect,
         endpoint: endpoint.trim() || undefined,
@@ -73,13 +103,50 @@ export function ProvidersPage() {
         secretAccessKey,
         tls,
         forcePathStyle,
-      });
+      }),
+    );
+    if (!body) {
+      return;
+    }
+    try {
+      await apiClient.createStorageProvider(body);
       setCreateOpen(false);
       resetForm();
-      setActionError(null);
       await refresh();
     } catch (caught) {
-      setActionError(caught instanceof Error ? caught.message : 'Unable to create provider');
+      catchError(caught);
+    }
+  };
+
+  const handleUpdate = async () => {
+    if (!editProviderId) {
+      return;
+    }
+    const body = validate(
+      parseForm(updateStorageProviderBodySchema, {
+        name: name.trim(),
+        endpoint: endpoint.trim() || null,
+        region: region.trim() || null,
+        bucket: bucket.trim() || null,
+        accountId: accountId.trim() || null,
+        accessKeyId: accessKeyId.trim() || undefined,
+        secretAccessKey: secretAccessKey || undefined,
+        tls,
+        forcePathStyle,
+        isDefault,
+        status,
+      }),
+    );
+    if (!body) {
+      return;
+    }
+    try {
+      await apiClient.updateStorageProvider(editProviderId, body);
+      setEditProviderId(undefined);
+      resetForm();
+      await refresh();
+    } catch (caught) {
+      catchError(caught);
     }
   };
 
@@ -93,7 +160,7 @@ export function ProvidersPage() {
       setDeleteTarget(undefined);
       await refresh();
     } catch (caught) {
-      setActionError(caught instanceof Error ? caught.message : 'Unable to delete provider');
+      catchError(caught);
     }
   };
 
@@ -118,7 +185,6 @@ export function ProvidersPage() {
         ) : null}
       </div>
 
-      {actionError ? <p className="text-sm text-red-600">{actionError}</p> : null}
       {testMessage ? <p className="text-sm text-slate-600">{testMessage}</p> : null}
       {error ? <EmptyState title="Unable to load providers" description={error} /> : null}
 
@@ -147,25 +213,33 @@ export function ProvidersPage() {
               </div>
               <div className="flex gap-2">
                 {canUploadStorage(permissions) ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      void apiClient
-                        .testStorageProvider(provider.id)
-                        .then((health) => {
-                          setTestMessage(health.message);
-                        })
-                        .catch((caught: unknown) => {
-                          setActionError(
-                            caught instanceof Error ? caught.message : 'Connection test failed',
-                          );
-                        });
-                    }}
-                  >
-                    Test
-                  </Button>
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openEdit(provider.id)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        void apiClient
+                          .testStorageProvider(provider.id)
+                          .then((health) => {
+                            setTestMessage(health.message);
+                          })
+                          .catch((caught: unknown) => {
+                            catchError(caught);
+                          });
+                      }}
+                    >
+                      Test
+                    </Button>
+                  </>
                 ) : null}
                 {canDeleteStorage(permissions) && !provider.isDefault ? (
                   <Button
@@ -194,7 +268,7 @@ export function ProvidersPage() {
           <DialogActions
             cancelLabel="Cancel"
             confirmLabel="Save"
-            confirmDisabled={!name.trim() || !accessKeyId.trim() || !secretAccessKey}
+            confirmDisabled={false}
             onCancel={() => {
               setCreateOpen(false);
             }}
@@ -208,10 +282,12 @@ export function ProvidersPage() {
             <Input
               id="provider-name"
               value={name}
+              aria-invalid={Boolean(fieldErrors.name)}
               onChange={(event) => {
                 setName(event.target.value);
               }}
             />
+            <FieldError message={fieldErrors.name} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="provider-dialect">Provider</Label>
@@ -236,10 +312,12 @@ export function ProvidersPage() {
               id="provider-endpoint"
               value={endpoint}
               placeholder="https://s3.example.com"
+              aria-invalid={Boolean(fieldErrors.endpoint)}
               onChange={(event) => {
                 setEndpoint(event.target.value);
               }}
             />
+            <FieldError message={fieldErrors.endpoint} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="provider-region">Region</Label>
@@ -278,10 +356,12 @@ export function ProvidersPage() {
             <Input
               id="provider-access-key"
               value={accessKeyId}
+              aria-invalid={Boolean(fieldErrors.accessKeyId)}
               onChange={(event) => {
                 setAccessKeyId(event.target.value);
               }}
             />
+            <FieldError message={fieldErrors.accessKeyId} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="provider-secret">Secret key</Label>
@@ -290,10 +370,12 @@ export function ProvidersPage() {
               type="password"
               autoComplete="new-password"
               value={secretAccessKey}
+              aria-invalid={Boolean(fieldErrors.secretAccessKey)}
               onChange={(event) => {
                 setSecretAccessKey(event.target.value);
               }}
             />
+            <FieldError message={fieldErrors.secretAccessKey} />
           </div>
           <label className="flex items-center gap-2 text-sm text-slate-700">
             <input
@@ -314,6 +396,126 @@ export function ProvidersPage() {
               }}
             />
             Path-style addressing
+          </label>
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(editProviderId)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditProviderId(undefined);
+            resetForm();
+          }
+        }}
+        title="Edit storage provider"
+        description="Leave the secret key blank to keep the stored credential."
+        footer={
+          <DialogActions
+            cancelLabel="Cancel"
+            confirmLabel="Save"
+            confirmDisabled={!name.trim()}
+            onCancel={() => {
+              setEditProviderId(undefined);
+              resetForm();
+            }}
+            onConfirm={() => void handleUpdate()}
+          />
+        }
+      >
+        <div className="grid gap-3">
+          <div className="space-y-2">
+            <Label htmlFor="edit-provider-name">Name</Label>
+            <Input
+              id="edit-provider-name"
+              value={name}
+              aria-invalid={Boolean(fieldErrors.name)}
+              onChange={(event) => setName(event.target.value)}
+            />
+            <FieldError message={fieldErrors.name} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-provider-endpoint">Endpoint</Label>
+            <Input
+              id="edit-provider-endpoint"
+              value={endpoint}
+              aria-invalid={Boolean(fieldErrors.endpoint)}
+              onChange={(event) => setEndpoint(event.target.value)}
+            />
+            <FieldError message={fieldErrors.endpoint} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-provider-region">Region</Label>
+            <Input
+              id="edit-provider-region"
+              value={region}
+              onChange={(event) => setRegion(event.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-provider-bucket">Existing bucket (optional)</Label>
+            <Input
+              id="edit-provider-bucket"
+              value={bucket}
+              onChange={(event) => setBucket(event.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-provider-access-key">Access key</Label>
+            <Input
+              id="edit-provider-access-key"
+              value={accessKeyId}
+              aria-invalid={Boolean(fieldErrors.accessKeyId)}
+              onChange={(event) => setAccessKeyId(event.target.value)}
+            />
+            <FieldError message={fieldErrors.accessKeyId} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-provider-secret">Secret key</Label>
+            <Input
+              id="edit-provider-secret"
+              type="password"
+              autoComplete="new-password"
+              value={secretAccessKey}
+              aria-invalid={Boolean(fieldErrors.secretAccessKey)}
+              onChange={(event) => setSecretAccessKey(event.target.value)}
+            />
+            <FieldError message={fieldErrors.secretAccessKey} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-provider-status">Status</Label>
+            <select
+              id="edit-provider-status"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={status}
+              onChange={(event) =>
+                setStatus(event.target.value as 'ACTIVE' | 'DEGRADED' | 'DISABLED')
+              }
+            >
+              <option value="ACTIVE">Active</option>
+              <option value="DEGRADED">Degraded</option>
+              <option value="DISABLED">Disabled</option>
+            </select>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input type="checkbox" checked={tls} onChange={(event) => setTls(event.target.checked)} />
+            Require TLS
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={forcePathStyle}
+              onChange={(event) => setForcePathStyle(event.target.checked)}
+            />
+            Path-style addressing
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={isDefault}
+              onChange={(event) => setIsDefault(event.target.checked)}
+            />
+            Default provider
           </label>
         </div>
       </Dialog>

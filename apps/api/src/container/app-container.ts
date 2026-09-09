@@ -90,7 +90,7 @@ export class AppContainer {
       config.JWT_SECRET,
     );
     this.authorization = createAuthorizationService(createPrismaPermissionResolver(prisma));
-    this.auth = new AuthService(prisma, this.sessions, config.NODE_ENV);
+    this.auth = new AuthService(prisma, this.sessions, config.NODE_ENV, config.JWT_SECRET);
     this.organizations = new OrganizationsService(prisma);
     this.users = new UsersService(prisma, config.NODE_ENV);
     this.teams = new TeamsService(prisma);

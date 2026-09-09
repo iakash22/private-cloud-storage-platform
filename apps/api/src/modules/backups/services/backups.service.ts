@@ -21,6 +21,7 @@ import {
   backupSnapshotNotFound,
   backupTargetForbidden,
   conflict,
+  dependencyError,
 } from '../../../lib/errors.js';
 import { isOrganizationSuperAdmin } from '../../auth/organization-roles.js';
 import type { RequestMeta } from '../../storage/services/bucket.service.js';
@@ -140,7 +141,9 @@ export class BackupsService {
       where: { organizationId, name: input.name },
     });
     if (existing) {
-      throw conflict('A backup schedule with that name already exists');
+      throw conflict('A backup schedule with that name already exists', {
+        name: 'A backup schedule with that name already exists',
+      });
     }
 
     const intervalMinutes = input.intervalMinutes ?? 1440;
@@ -195,7 +198,9 @@ export class BackupsService {
         where: { organizationId, name: input.name, NOT: { id: scheduleId } },
       });
       if (clash) {
-        throw conflict('A backup schedule with that name already exists');
+        throw conflict('A backup schedule with that name already exists', {
+          name: 'A backup schedule with that name already exists',
+        });
       }
     }
 
@@ -459,7 +464,14 @@ export class BackupsService {
     snapshotId: string,
     meta: RequestMeta,
   ): Promise<PublicBackupRestoreJob> {
-    await this.requireSnapshot(organizationId, snapshotId);
+    const snapshot = await this.prisma.backupSnapshot.findFirst({
+      where: { organizationId, id: snapshotId },
+    });
+    if (!snapshot) {
+      throw dependencyError('Backup snapshot not found', {
+        snapshotId: 'Backup snapshot not found',
+      });
+    }
     const restore = await this.prisma.backupRestoreJob.create({
       data: {
         organizationId,

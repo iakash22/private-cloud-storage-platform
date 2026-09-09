@@ -818,7 +818,9 @@ export function createObjectService(deps: {
         );
 
         if (clash && clash.id !== source.object.id) {
-          throw validationError('An object already exists at the destination key');
+          throw validationError('An object already exists at the destination key', {
+            destinationKey: 'An object already exists at the destination key',
+          });
         }
 
         const renamed = await objects.updateKey(

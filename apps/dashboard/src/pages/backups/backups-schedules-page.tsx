@@ -10,13 +10,16 @@ import {
   Dialog,
   DialogActions,
   EmptyState,
+  FieldError,
   Input,
   Label,
 } from '@vaultstack/ui';
 import type { BackupTargetName, PublicBackupSchedule } from '@vaultstack/types';
+import { createBackupScheduleBodySchema, parseForm, updateBackupScheduleBodySchema } from '@vaultstack/validation';
 import { apiClient } from '../../lib/api.js';
 import { useAuth } from '../../context/auth-context.js';
 import { canCreateBackups, canDeleteBackups } from '../../lib/backup-permissions.js';
+import { useFormSubmit } from '../../lib/form-errors.js';
 
 const TARGETS: BackupTargetName[] = [
   'VAULTSTACK_METADATA',
@@ -29,6 +32,7 @@ const TARGETS: BackupTargetName[] = [
 
 export function BackupsSchedulesPage() {
   const { permissions } = useAuth();
+  const { fieldErrors, validate, catchError } = useFormSubmit();
   const [schedules, setSchedules] = useState<PublicBackupSchedule[]>([]);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('nightly');
@@ -36,6 +40,7 @@ export function BackupsSchedulesPage() {
   const [retentionDays, setRetentionDays] = useState('14');
   const [selected, setSelected] = useState<BackupTargetName[]>(['VAULTSTACK_METADATA']);
   const [deleteId, setDeleteId] = useState<string>();
+  const [editId, setEditId] = useState<string>();
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -59,16 +64,47 @@ export function BackupsSchedulesPage() {
 
   const create = async () => {
     try {
-      await apiClient.createBackupSchedule({
-        name,
-        targets: selected,
-        intervalMinutes: Number(intervalMinutes),
-        retentionDays: Number(retentionDays),
-      });
+      if (editId) {
+        const body = validate(
+          parseForm(updateBackupScheduleBodySchema, {
+            name,
+            targets: selected,
+            intervalMinutes: Number(intervalMinutes),
+            retentionDays: retentionDays.trim() ? Number(retentionDays) : null,
+          }),
+        );
+        if (!body) {
+          return;
+        }
+        await apiClient.updateBackupSchedule(editId, body);
+        setEditId(undefined);
+      } else {
+        const body = validate(
+          parseForm(createBackupScheduleBodySchema, {
+            name,
+            targets: selected,
+            intervalMinutes: Number(intervalMinutes),
+            retentionDays: retentionDays.trim() ? Number(retentionDays) : null,
+          }),
+        );
+        if (!body) {
+          return;
+        }
+        await apiClient.createBackupSchedule(body);
+      }
       setOpen(false);
       await refresh();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Unable to create schedule');
+      catchError(caught);
+    }
+  };
+
+  const toggleEnabled = async (schedule: PublicBackupSchedule) => {
+    try {
+      await apiClient.updateBackupSchedule(schedule.id, { enabled: !schedule.enabled });
+      await refresh();
+    } catch (caught) {
+      catchError(caught);
     }
   };
 
@@ -83,6 +119,11 @@ export function BackupsSchedulesPage() {
           <Button
             type="button"
             onClick={() => {
+              setEditId(undefined);
+              setName('nightly');
+              setIntervalMinutes('1440');
+              setRetentionDays('14');
+              setSelected(['VAULTSTACK_METADATA']);
               setOpen(true);
             }}
           >
@@ -110,18 +151,47 @@ export function BackupsSchedulesPage() {
                   · {schedule.enabled ? 'enabled' : 'disabled'}
                 </p>
               </div>
-              {canDeleteBackups(permissions) ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setDeleteId(schedule.id);
-                  }}
-                >
-                  Delete
-                </Button>
-              ) : null}
+              <div className="flex flex-wrap gap-2">
+                {canCreateBackups(permissions) ? (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void toggleEnabled(schedule)}
+                    >
+                      {schedule.enabled ? 'Disable' : 'Enable'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setEditId(schedule.id);
+                        setName(schedule.name);
+                        setIntervalMinutes(String(schedule.intervalMinutes));
+                        setRetentionDays(String(schedule.retentionDays ?? ''));
+                        setSelected(schedule.targets);
+                        setOpen(true);
+                      }}
+                    >
+                      Edit
+                    </Button>
+                  </>
+                ) : null}
+                {canDeleteBackups(permissions) ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setDeleteId(schedule.id);
+                    }}
+                  >
+                    Delete
+                  </Button>
+                ) : null}
+              </div>
             </div>
           ))}
           {schedules.length === 0 ? (
@@ -132,15 +202,21 @@ export function BackupsSchedulesPage() {
 
       <Dialog
         open={open}
-        onOpenChange={setOpen}
-        title="Create schedule"
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) {
+            setEditId(undefined);
+          }
+        }}
+        title={editId ? 'Edit schedule' : 'Create schedule'}
         footer={
           <DialogActions
             onCancel={() => {
               setOpen(false);
+              setEditId(undefined);
             }}
             onConfirm={() => void create()}
-            confirmLabel="Create"
+            confirmLabel={editId ? 'Save' : 'Create'}
           />
         }
       >
@@ -149,18 +225,22 @@ export function BackupsSchedulesPage() {
           <Input
             id="schedule-name"
             value={name}
+            aria-invalid={Boolean(fieldErrors.name)}
             onChange={(event) => {
               setName(event.target.value);
             }}
           />
+          <FieldError message={fieldErrors.name} />
           <Label htmlFor="schedule-interval">Interval (minutes)</Label>
           <Input
             id="schedule-interval"
             value={intervalMinutes}
+            aria-invalid={Boolean(fieldErrors.intervalMinutes)}
             onChange={(event) => {
               setIntervalMinutes(event.target.value);
             }}
           />
+          <FieldError message={fieldErrors.intervalMinutes} />
           <Label htmlFor="schedule-retention">Retention (days)</Label>
           <Input
             id="schedule-retention"
@@ -200,10 +280,15 @@ export function BackupsSchedulesPage() {
           if (!deleteId) {
             return;
           }
-          void apiClient.deleteBackupSchedule(deleteId).then(() => {
-            setDeleteId(undefined);
-            void refresh();
-          });
+          void apiClient
+            .deleteBackupSchedule(deleteId)
+            .then(() => {
+              setDeleteId(undefined);
+              void refresh();
+            })
+            .catch((caught: unknown) => {
+              catchError(caught);
+            });
         }}
       />
     </div>

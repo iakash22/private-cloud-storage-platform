@@ -83,6 +83,9 @@ describe('Phase 9 external storage providers', () => {
         STORAGE_LOCAL_ROOT: storageRoot,
         STORAGE_MAX_OBJECT_SIZE_BYTES: 8 * 1024 * 1024,
         LOGIN_RATE_LIMIT_MAX: 100,
+        // MinIO testcontainers bind loopback/private addresses. Public dialects
+        // still reject those hosts via their endpoint policy.
+        S3_ALLOW_PRIVATE_ENDPOINTS: true,
       }),
       logger: { error: vi.fn(), info: vi.fn(), warn: vi.fn(), debug: vi.fn() } as never,
       prisma: db.prisma,

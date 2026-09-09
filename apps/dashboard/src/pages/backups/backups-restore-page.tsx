@@ -10,16 +10,20 @@ import {
   Dialog,
   DialogActions,
   EmptyState,
+  FieldError,
 } from '@vaultstack/ui';
 import type { PublicBackupRestoreJob, PublicBackupSnapshot } from '@vaultstack/types';
+import { createBackupRestoreBodySchema, parseForm } from '@vaultstack/validation';
 import { apiClient } from '../../lib/api.js';
 import { useAuth } from '../../context/auth-context.js';
 import { canRestoreBackups } from '../../lib/backup-permissions.js';
+import { useFormSubmit } from '../../lib/form-errors.js';
 
 const ACTIVE = new Set(['QUEUED', 'RUNNING', 'VERIFYING']);
 
 export function BackupsRestorePage() {
   const { permissions } = useAuth();
+  const { fieldErrors, validate, catchError } = useFormSubmit();
   const [restores, setRestores] = useState<PublicBackupRestoreJob[]>([]);
   const [snapshots, setSnapshots] = useState<PublicBackupSnapshot[]>([]);
   const [open, setOpen] = useState(false);
@@ -158,10 +162,19 @@ export function BackupsRestorePage() {
               setOpen(false);
             }}
             onConfirm={() => {
-              void apiClient.createBackupRestore({ snapshotId }).then(() => {
-                setOpen(false);
-                void refresh();
-              });
+              const body = validate(parseForm(createBackupRestoreBodySchema, { snapshotId }));
+              if (!body) {
+                return;
+              }
+              void apiClient
+                .createBackupRestore(body)
+                .then(() => {
+                  setOpen(false);
+                  void refresh();
+                })
+                .catch((caught: unknown) => {
+                  catchError(caught);
+                });
             }}
           />
         }
@@ -172,6 +185,7 @@ export function BackupsRestorePage() {
             aria-label="Snapshot"
             className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
             value={snapshotId}
+            aria-invalid={Boolean(fieldErrors.snapshotId)}
             onChange={(event) => {
               setSnapshotId(event.target.value);
             }}
@@ -183,6 +197,7 @@ export function BackupsRestorePage() {
               </option>
             ))}
           </select>
+          <FieldError message={fieldErrors.snapshotId} />
         </label>
       </Dialog>
     </div>

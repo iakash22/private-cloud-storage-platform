@@ -8,13 +8,17 @@ datasource db {
 }
 
 model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
-  passwordHash String
-  name         String
-  disabledAt   DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id                   String    @id @default(cuid())
+  email                String    @unique
+  passwordHash         String
+  name                 String
+  disabledAt           DateTime?
+  totpEnabledAt        DateTime?
+  totpSecretCiphertext String?
+  totpSecretNonce      String?
+  totpBackupCodeHashes String[]  @default([])
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   userRoles         UserRole[]
   apiKeys           ApiKey[]

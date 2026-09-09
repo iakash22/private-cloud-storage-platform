@@ -8,7 +8,14 @@ import {
   type ReactNode,
 } from 'react';
 import { ApiClientError } from '@vaultstack/api-client';
-import type { AuthSessionPayload, PublicMembership, PublicOrganization, PublicUser } from '@vaultstack/types';
+import type {
+  AuthLoginResult,
+  AuthSessionPayload,
+  AuthTotpChallengePayload,
+  PublicMembership,
+  PublicOrganization,
+  PublicUser,
+} from '@vaultstack/types';
 import { apiClient } from '../lib/api.js';
 
 interface AuthContextValue {
@@ -19,7 +26,8 @@ interface AuthContextValue {
   permissions: string[];
   loading: boolean;
   error: string | null;
-  login: (input: { email: string; password: string }) => Promise<void>;
+  login: (input: { email: string; password: string }) => Promise<AuthLoginResult>;
+  verifyTotp: (input: { challengeToken: string; code: string }) => Promise<void>;
   register: (input: {
     email: string;
     password: string;
@@ -42,6 +50,10 @@ function activeMembership(
   }
 
   return memberships.find((membership) => membership.organizationId === organizationId);
+}
+
+function isTotpChallenge(payload: AuthLoginResult): payload is AuthTotpChallengePayload {
+  return 'totpRequired' in payload && payload.totpRequired;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -84,18 +96,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(
     async (input: { email: string; password: string }) => {
       const payload = await apiClient.login(input);
+      if (isTotpChallenge(payload)) {
+        return payload;
+      }
+      applySession(payload);
+      return payload;
+    },
+    [applySession],
+  );
+
+  const verifyTotp = useCallback(
+    async (input: { challengeToken: string; code: string }) => {
+      const payload = await apiClient.verifyTotpLogin(input);
       applySession(payload);
     },
     [applySession],
   );
 
   const register = useCallback(
-    async (input: {
-      email: string;
-      password: string;
-      name: string;
-      organizationName: string;
-    }) => {
+    async (input: { email: string; password: string; name: string; organizationName: string }) => {
       const payload = await apiClient.register(input);
       applySession(payload);
     },
@@ -117,7 +136,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AuthContextValue>(() => {
     const activeOrganizationId =
-      session?.activeOrganizationId ?? session?.organization?.id ?? session?.organizations[0]?.id ?? null;
+      session?.activeOrganizationId ??
+      session?.organization?.id ??
+      session?.organizations[0]?.id ??
+      null;
     const permissions =
       activeMembership(session?.memberships ?? [], activeOrganizationId)?.permissions ?? [];
 
@@ -130,12 +152,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       error,
       login,
+      verifyTotp,
       register,
       logout,
       refresh,
       selectOrganization,
     };
-  }, [session, loading, error, login, register, logout, refresh, selectOrganization]);
+  }, [session, loading, error, login, verifyTotp, register, logout, refresh, selectOrganization]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

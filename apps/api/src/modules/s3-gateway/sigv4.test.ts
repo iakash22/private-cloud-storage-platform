@@ -41,4 +41,18 @@ describe('verifySigV4Request', () => {
       'service mismatch',
     );
   });
+
+  it('accepts a fresh compact SigV4 timestamp and then checks the signature', () => {
+    const fresh = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+
+    expect(() => verifySigV4Request(request(fresh), 'secret', 'vaultstack')).toThrow(
+      'Signature mismatch',
+    );
+  });
+
+  it('rejects calendar-invalid request dates', () => {
+    expect(() => verifySigV4Request(request('20260231T000000Z'), 'secret', 'vaultstack')).toThrow(
+      'stale',
+    );
+  });
 });

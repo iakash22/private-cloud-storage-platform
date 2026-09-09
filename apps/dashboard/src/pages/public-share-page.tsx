@@ -1,6 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useParams } from 'react-router-dom';
-import { ApiClientError } from '@vaultstack/api-client';
 import type { PublicShareAccess } from '@vaultstack/types';
 import {
   Button,
@@ -9,20 +8,23 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  FieldError,
   Input,
   Label,
 } from '@vaultstack/ui';
+import { parseForm, unlockShareBodySchema } from '@vaultstack/validation';
 import { apiClient } from '../lib/api.js';
 import { useAuth } from '../context/auth-context.js';
+import { useFormSubmit } from '../lib/form-errors.js';
 
 export function PublicSharePage() {
   const { token } = useParams<{ token: string }>();
   const { loading: authLoading } = useAuth();
+  const { fieldErrors, validate, catchError } = useFormSubmit();
   const [passwordRequired, setPasswordRequired] = useState(false);
   const [password, setPassword] = useState('');
   const [accessToken, setAccessToken] = useState<string | undefined>();
   const [share, setShare] = useState<PublicShareAccess | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
 
@@ -32,7 +34,6 @@ export function PublicSharePage() {
     }
 
     setLoading(true);
-    setError(null);
     void apiClient
       .inspectPublicShare(token)
       .then((result) => {
@@ -40,26 +41,29 @@ export function PublicSharePage() {
         setShare(result.share);
       })
       .catch((caught: unknown) => {
-        setError(messageOf(caught));
+        catchError(caught);
       })
       .finally(() => {
         setLoading(false);
       });
-  }, [token]);
+  }, [catchError, token]);
 
   const handleUnlock = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
     if (!token) {
       return;
     }
-    setError(null);
+    const body = validate(parseForm(unlockShareBodySchema, { password }));
+    if (!body) {
+      return;
+    }
     try {
-      const result = await apiClient.unlockPublicShare(token, password);
+      const result = await apiClient.unlockPublicShare(token, body.password);
       setAccessToken(result.accessToken);
       setShare(result.share);
       setPasswordRequired(false);
     } catch (caught) {
-      setError(messageOf(caught));
+      catchError(caught);
     }
   };
 
@@ -68,7 +72,6 @@ export function PublicSharePage() {
       return;
     }
     setDownloading(true);
-    setError(null);
     try {
       const download = await apiClient.createPublicShareDownloadUrl(token, {
         password: password || undefined,
@@ -76,7 +79,7 @@ export function PublicSharePage() {
       });
       window.location.assign(download.url);
     } catch (caught) {
-      setError(messageOf(caught));
+      catchError(caught);
     } finally {
       setDownloading(false);
     }
@@ -93,7 +96,6 @@ export function PublicSharePage() {
         </CardHeader>
         <CardContent className="space-y-4">
           {loading || authLoading ? <p className="text-sm text-slate-500">Loading share…</p> : null}
-          {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
           {passwordRequired && !share ? (
             <form className="space-y-4" onSubmit={(event) => void handleUnlock(event)}>
@@ -103,11 +105,13 @@ export function PublicSharePage() {
                   id="share-unlock-password"
                   type="password"
                   value={password}
+                  aria-invalid={Boolean(fieldErrors.password)}
                   onChange={(event) => {
                     setPassword(event.target.value);
                   }}
                   required
                 />
+                <FieldError message={fieldErrors.password} />
               </div>
               <Button type="submit" disabled={authLoading}>
                 Unlock
@@ -143,11 +147,4 @@ export function PublicSharePage() {
       </Card>
     </main>
   );
-}
-
-function messageOf(caught: unknown): string {
-  if (caught instanceof ApiClientError) {
-    return caught.message;
-  }
-  return caught instanceof Error ? caught.message : 'Unable to open this share';
 }

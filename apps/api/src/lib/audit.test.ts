@@ -21,6 +21,22 @@ describe('audit logging', () => {
     });
   });
 
+  it('preserves null metadata fields', () => {
+    expect(
+      sanitizeAuditMetadata({
+        name: 'aws-default',
+        dialect: 'AWS_S3',
+        endpoint: null,
+        isDefault: false,
+      }),
+    ).toEqual({
+      name: 'aws-default',
+      dialect: 'AWS_S3',
+      endpoint: null,
+      isDefault: false,
+    });
+  });
+
   it('adds request context fields without logging secrets', async () => {
     const create = vi.fn(async () => undefined);
     const prisma = {

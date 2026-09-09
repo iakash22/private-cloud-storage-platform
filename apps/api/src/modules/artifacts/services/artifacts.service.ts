@@ -79,7 +79,9 @@ export class ArtifactsService {
       where: { organizationId, slug },
     });
     if (existing) {
-      throw conflict('A project with that slug already exists');
+      throw conflict('A project with that slug already exists', {
+        slug: 'A project with that slug already exists',
+      });
     }
 
     const project = await this.prisma.project.create({

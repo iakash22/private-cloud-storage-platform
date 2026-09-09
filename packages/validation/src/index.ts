@@ -2,6 +2,7 @@ import { healthResponseSchema, readinessResponseSchema } from './common.schemas.
 import type { z } from 'zod';
 
 export * from './common.schemas.js';
+export * from './form-errors.js';
 export * from './auth.schemas.js';
 export * from './organization.schemas.js';
 export * from './storage.schemas.js';

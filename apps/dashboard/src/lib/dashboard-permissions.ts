@@ -4,8 +4,20 @@ export function canReadArtifacts(permissions: string[]): boolean {
   return permissions.includes(PERMISSIONS.ARTIFACT_READ);
 }
 
+export function canUploadArtifacts(permissions: string[]): boolean {
+  return permissions.includes(PERMISSIONS.ARTIFACT_UPLOAD);
+}
+
+export function canDeleteArtifacts(permissions: string[]): boolean {
+  return permissions.includes(PERMISSIONS.ARTIFACT_DELETE);
+}
+
 export function canReadAccess(permissions: string[]): boolean {
   return permissions.includes(PERMISSIONS.USERS_READ);
+}
+
+export function canManageAccess(permissions: string[]): boolean {
+  return permissions.includes(PERMISSIONS.USERS_MANAGE);
 }
 
 export function canReadActivity(permissions: string[]): boolean {

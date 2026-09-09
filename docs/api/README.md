@@ -22,18 +22,29 @@ Every error includes a request id:
 ```json
 {
   "error": {
-    "code": "FORBIDDEN",
-    "message": "You do not have permission to perform this action"
+    "code": "VALIDATION_ERROR",
+    "message": "email: Invalid email",
+    "fields": {
+      "email": "Invalid email"
+    }
   },
   "requestId": "..."
 }
 ```
 
-Common codes: `VALIDATION_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `RATE_LIMITED`, `INTERNAL_ERROR`.
+`fields` is present for request-body validation (Zod), unique-constraint conflicts, and related-record dependency failures that map to a JSON body property. Field keys match JSON body property names.
+
+`DEPENDENCY_ERROR` is returned when a related record is missing (foreign key or referenced id) or a required backend dependency such as PostgreSQL cannot be reached. When the missing relation is a request field, `fields` includes that property.
+
+Common codes: `VALIDATION_ERROR`, `DEPENDENCY_ERROR`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `RATE_LIMITED`, `INTERNAL_ERROR`, `TOTP_INVALID`.
 
 ## Authentication
 
 Browser clients authenticate with HTTP-only session cookies. Login and register set `vs_session` (HTTP-only) and `vs_csrf`. They do **not** return a bearer token.
+
+If the account has two-factor authentication enabled, `POST /api/v1/auth/login` does **not** set a session. It returns `{ totpRequired: true, challengeToken }`. Complete sign-in with `POST /api/v1/auth/login/totp` using the challenge token plus a 6-digit authenticator code or a one-time backup code. Challenge tokens expire in five minutes.
+
+Users enable or disable 2FA for themselves from Settings (`POST /api/v1/auth/2fa/setup`, `/2fa/enable`, `/2fa/disable`). The authenticator secret is encrypted at rest. Backup codes are hashed; plaintext codes are returned only when 2FA is first enabled.
 
 The dashboard origin must be allowlisted (`CORS_ORIGINS`, with localhost defaults in development) so credentialed `fetch` from `:5173` is not blocked by the browser.
 
@@ -48,7 +59,11 @@ Programmatic clients may still use `Authorization: Bearer <api-key>`.
 ### Auth
 
 - `POST /api/v1/auth/register` — create SUPER_ADMIN user + organization, start session
-- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/login` — session cookies, or a TOTP challenge when 2FA is on
+- `POST /api/v1/auth/login/totp` — complete 2FA login
+- `POST /api/v1/auth/2fa/setup` — start authenticator enrollment (current user)
+- `POST /api/v1/auth/2fa/enable` — confirm enrollment; backup codes returned once
+- `POST /api/v1/auth/2fa/disable` — turn 2FA off (password + code)
 - `POST /api/v1/auth/logout`
 - `GET  /api/v1/auth/me`
 

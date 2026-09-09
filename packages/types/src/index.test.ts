@@ -9,6 +9,8 @@ import {
   STORAGE_PROVIDER_TYPES,
   SYSTEM_ROLE_PERMISSIONS,
   SYSTEM_ROLES,
+  isTotpChallenge,
+  type AuthSessionPayload,
   type HealthResponse,
   type MultipartPartTransferDescriptor,
   type PublicMultipartSessionDetail,
@@ -124,5 +126,11 @@ describe('@vaultstack/types', () => {
 
     expect(version).not.toHaveProperty('physicalKey');
     expect(policy.lifecycleAction).toBe('EXPIRE_NONCURRENT');
+  });
+
+  it('distinguishes TOTP login challenges from sessions', () => {
+    const session = { csrfToken: 'csrf' } as AuthSessionPayload;
+    expect(isTotpChallenge({ totpRequired: true, challengeToken: 'token' })).toBe(true);
+    expect(isTotpChallenge(session)).toBe(false);
   });
 });

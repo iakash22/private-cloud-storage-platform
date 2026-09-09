@@ -21,6 +21,7 @@ import {
   storageObjectNotFound,
   unauthorized,
   validationError,
+  dependencyError,
 } from '../../../lib/errors.js';
 import type { AuthContext } from '../../auth/auth.types.js';
 import {
@@ -99,7 +100,9 @@ export class ShareService {
         where: { id: input.teamId, organizationId },
       });
       if (!team) {
-        throw validationError('Team not found in this organization');
+        throw dependencyError('Team not found in this organization', {
+          teamId: 'Team not found in this organization',
+        });
       }
     }
 
@@ -164,7 +167,10 @@ export class ShareService {
     const allowView = input.allowView ?? existing.allowView;
     const allowDownload = input.allowDownload ?? existing.allowDownload;
     if (!allowView && !allowDownload) {
-      throw validationError('A share must allow viewing or downloading');
+      throw validationError('A share must allow viewing or downloading', {
+        allowView: 'A share must allow viewing or downloading',
+        allowDownload: 'A share must allow viewing or downloading',
+      });
     }
 
     let expiresAt = existing.expiresAt;
@@ -177,7 +183,9 @@ export class ShareService {
       input.maxDownloads !== null &&
       input.maxDownloads < existing.accessCount
     ) {
-      throw validationError('maxDownloads cannot be below the current access count');
+      throw validationError('maxDownloads cannot be below the current access count', {
+        maxDownloads: 'maxDownloads cannot be below the current access count',
+      });
     }
 
     const share = await this.prisma.shareLink.update({
@@ -424,14 +432,20 @@ export class ShareService {
   private parseExpiresAt(value: string | undefined): Date {
     const expiresAt = value ? new Date(value) : new Date(Date.now() + DEFAULT_SHARE_TTL_MS);
     if (Number.isNaN(expiresAt.getTime())) {
-      throw validationError('expiresAt is not a valid timestamp');
+      throw validationError('expiresAt is not a valid timestamp', {
+        expiresAt: 'expiresAt is not a valid timestamp',
+      });
     }
     const now = Date.now();
     if (expiresAt.getTime() <= now) {
-      throw validationError('expiresAt must be in the future');
+      throw validationError('expiresAt must be in the future', {
+        expiresAt: 'expiresAt must be in the future',
+      });
     }
     if (expiresAt.getTime() - now > MAX_SHARE_TTL_MS) {
-      throw validationError('Share expiration cannot exceed 365 days');
+      throw validationError('Share expiration cannot exceed 365 days', {
+        expiresAt: 'Share expiration cannot exceed 365 days',
+      });
     }
     return expiresAt;
   }

@@ -120,10 +120,11 @@ function isFreshSigV4Timestamp(value: string, dateStamp: string): boolean {
   const minute = Number(match.groups.minute);
   const second = Number(match.groups.second);
   const timestamp = Date.UTC(year, month - 1, day, hour, minute, second);
-  if (
-    !Number.isFinite(timestamp) ||
-    new Date(timestamp).toISOString().replace(/\.\d{3}Z$/, 'Z') !== value
-  ) {
+  const compact = new Date(timestamp)
+    .toISOString()
+    .replace(/[-:]/g, '')
+    .replace(/\.\d{3}Z$/, 'Z');
+  if (!Number.isFinite(timestamp) || compact !== value) {
     return false;
   }
 

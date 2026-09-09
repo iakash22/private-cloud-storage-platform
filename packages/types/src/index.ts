@@ -22,6 +22,7 @@ export interface ReadinessResponse {
 
 export type ApiErrorCode =
   | 'VALIDATION_ERROR'
+  | 'DEPENDENCY_ERROR'
   | 'UNAUTHORIZED'
   | 'FORBIDDEN'
   | 'NOT_FOUND'
@@ -67,13 +68,19 @@ export type ApiErrorCode =
   | 'BACKUP_RESTORE_NOT_FOUND'
   | 'BACKUP_INVALID_STATE'
   | 'BACKUP_TARGET_FORBIDDEN'
-  | 'BACKUP_VERIFICATION_FAILED';
+  | 'BACKUP_VERIFICATION_FAILED'
+  | 'TOTP_INVALID';
+
+export type ApiFieldErrors = Record<string, string>;
+
+export interface ApiErrorBody {
+  code: string;
+  message: string;
+  fields?: ApiFieldErrors;
+}
 
 export interface ApiErrorResponse {
-  error: {
-    code: string;
-    message: string;
-  };
+  error: ApiErrorBody;
   requestId: string;
 }
 
@@ -184,6 +191,7 @@ export interface PublicUser {
   email: string;
   name: string;
   disabled: boolean;
+  twoFactorEnabled: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -300,6 +308,11 @@ export interface PublicApiKey {
   expiresAt: string | null;
   revokedAt: string | null;
   createdAt: string;
+}
+
+/** Returned once at creation. The plaintext token is never persisted. */
+export interface CreatedApiKey extends PublicApiKey {
+  token: string;
 }
 
 export interface PublicAuditLog {
@@ -611,6 +624,28 @@ export interface AuthSessionPayload {
   csrfToken: string;
   organization?: PublicOrganization;
   activeOrganizationId?: string | null;
+}
+
+export interface AuthTotpChallengePayload {
+  totpRequired: true;
+  challengeToken: string;
+}
+
+export type AuthLoginResult = AuthSessionPayload | AuthTotpChallengePayload;
+
+export function isTotpChallenge(payload: AuthLoginResult): payload is AuthTotpChallengePayload {
+  return 'totpRequired' in payload && payload.totpRequired;
+}
+
+export interface TotpSetupPayload {
+  secret: string;
+  otpauthUri: string;
+  qrSvg: string | null;
+}
+
+export interface TotpEnablePayload {
+  backupCodes: string[];
+  user: PublicUser;
 }
 
 export interface PublicServiceAccount {

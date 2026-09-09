@@ -4,9 +4,11 @@ import { Badge, Button, EmptyState, formatDate } from '@vaultstack/ui';
 import { apiClient } from '../../lib/api.js';
 import { canShareStorage } from '../../lib/storage-preferences.js';
 import { useAuth } from '../../context/auth-context.js';
+import { useFormSubmit } from '../../lib/form-errors.js';
 
 export function SharesPage() {
   const { permissions } = useAuth();
+  const { catchError } = useFormSubmit();
   const [shares, setShares] = useState<PublicShareLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -122,7 +124,10 @@ export function SharesPage() {
                               const next = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
                               void apiClient
                                 .updateShare(share.id, { expiresAt: next })
-                                .then(() => void load());
+                                .then(() => void load())
+                                .catch((caught: unknown) => {
+                                  catchError(caught);
+                                });
                             }}
                           >
                             Extend 24h
@@ -132,7 +137,27 @@ export function SharesPage() {
                             size="sm"
                             variant="outline"
                             onClick={() => {
-                              void apiClient.revokeShare(share.id).then(() => void load());
+                              void apiClient
+                                .updateShare(share.id, { allowDownload: !share.allowDownload })
+                                .then(() => void load())
+                                .catch((caught: unknown) => {
+                                  catchError(caught);
+                                });
+                            }}
+                          >
+                            {share.allowDownload ? 'Disable download' : 'Allow download'}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              void apiClient
+                                .revokeShare(share.id)
+                                .then(() => void load())
+                                .catch((caught: unknown) => {
+                                  catchError(caught);
+                                });
                             }}
                           >
                             Revoke

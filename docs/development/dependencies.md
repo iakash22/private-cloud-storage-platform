@@ -52,10 +52,17 @@ No new dependency was needed for:
 
 ## API documentation (OpenAPI)
 
-| Package | Where | Why |
-| --- | --- | --- |
-| `yaml` | `@vaultstack/openapi` | Parse the checked-in OpenAPI YAML spec at runtime |
-| `swagger-ui-express` | `apps/api` | Serve interactive Swagger UI at `/api/docs` without exposing secrets |
-| `@types/swagger-ui-express` | `apps/api` (dev) | TypeScript types for Swagger UI middleware |
+| Package                     | Where                 | Why                                                                  |
+| --------------------------- | --------------------- | -------------------------------------------------------------------- |
+| `yaml`                      | `@vaultstack/openapi` | Parse the checked-in OpenAPI YAML spec at runtime                    |
+| `swagger-ui-express`        | `apps/api`            | Serve interactive Swagger UI at `/api/docs` without exposing secrets |
+| `@types/swagger-ui-express` | `apps/api` (dev)      | TypeScript types for Swagger UI middleware                           |
 
 The OpenAPI spec (`packages/openapi/spec/openapi.yaml`) is the machine-readable source mirrored by Swagger UI. Markdown reference remains at `docs/api/README.md`. Both must stay aligned with routes and Zod schemas when APIs change.
+
+## Two-factor authentication
+
+| Package         | Where                    | Why                                                                                                                                                                   |
+| --------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `qrcode`        | `@vaultstack/auth`       | Render authenticator `otpauth://` URIs as SVG during 2FA enrollment. A hand-rolled QR encoder is not reliable; the secret is never sent to an external image service. |
+| `@types/qrcode` | `@vaultstack/auth` (dev) | TypeScript types for `qrcode`                                                                                                                                         |

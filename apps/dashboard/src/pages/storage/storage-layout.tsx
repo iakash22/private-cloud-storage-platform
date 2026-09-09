@@ -11,6 +11,7 @@ const navItems: {
   { to: '/storage/buckets', label: 'Buckets' },
   { to: '/storage/providers', label: 'Providers' },
   { to: '/storage/shares', label: 'Shares' },
+  { to: '/storage/policies', label: 'Policies' },
   { to: '/storage/usage', label: 'Usage' },
   { to: '/storage/trash', label: 'Trash' },
 ];

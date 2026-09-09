@@ -13,9 +13,11 @@ import type { PublicBackupSummary } from '@vaultstack/types';
 import { apiClient } from '../../lib/api.js';
 import { useAuth } from '../../context/auth-context.js';
 import { canCreateBackups } from '../../lib/backup-permissions.js';
+import { useFormSubmit } from '../../lib/form-errors.js';
 
 export function BackupsOverviewPage() {
   const { permissions } = useAuth();
+  const { catchError } = useFormSubmit();
   const [summary, setSummary] = useState<PublicBackupSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -41,7 +43,7 @@ export function BackupsOverviewPage() {
       });
       await refresh();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Unable to create backup');
+      catchError(caught);
     } finally {
       setCreating(false);
     }

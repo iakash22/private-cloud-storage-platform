@@ -1,8 +1,16 @@
-import { PasswordService } from '@vaultstack/auth';
+import {
+  PasswordService,
+  TokenService,
+  TotpService,
+  decryptSecret,
+  deriveSecretKey,
+  encryptSecret,
+  qrSvg,
+} from '@vaultstack/auth';
 import type { PrismaClient } from '@vaultstack/database';
 import { uniqueSlug } from '@vaultstack/database';
 import type { PublicMembership, RequestMeta } from '@vaultstack/types';
-import { conflict, forbidden, unauthorized } from '../../../lib/errors.js';
+import { conflict, forbidden, totpInvalid, unauthorized } from '../../../lib/errors.js';
 import { writeAuditLog } from '../../../lib/audit.js';
 import { serializeOrganization, serializeUser } from '../../../lib/serializers.js';
 import { createDefaultOrganizationRoles, getUserOrganizationIds } from '../organization-roles.js';
@@ -20,8 +28,26 @@ export interface LoginInput {
   password: string;
 }
 
+export interface VerifyTotpLoginInput {
+  challengeToken: string;
+  code: string;
+}
+
 export interface SessionMeta extends RequestMeta {
   previousSessionToken?: string;
+}
+
+interface LoginSessionResult {
+  user: ReturnType<typeof serializeUser>;
+  organizations: ReturnType<typeof serializeOrganization>[];
+  memberships: PublicMembership[];
+  csrfToken: string;
+  session: SessionTokens;
+}
+
+interface LoginChallengeResult {
+  totpRequired: true;
+  challengeToken: string;
 }
 
 async function loadMemberships(
@@ -71,19 +97,27 @@ async function loadMemberships(
 
 export class AuthService {
   private readonly passwords: PasswordService;
+  private readonly tokens: TokenService;
+  private readonly totp = new TotpService();
+  private readonly totpKey: Buffer;
 
   constructor(
     private readonly prisma: PrismaClient,
     private readonly sessions: SessionManager,
     nodeEnv: string,
+    jwtSecret: string,
   ) {
     this.passwords = new PasswordService(nodeEnv);
+    this.tokens = new TokenService(jwtSecret);
+    this.totpKey = deriveSecretKey(jwtSecret, 'totp-secret');
   }
 
   async register(input: RegisterInput, meta: SessionMeta) {
     const existing = await this.prisma.user.findUnique({ where: { email: input.email } });
     if (existing) {
-      throw conflict('A user with that email already exists');
+      throw conflict('A user with that email already exists', {
+        email: 'A user with that email already exists',
+      });
     }
 
     const passwordHash = await this.passwords.hash(input.password);
@@ -142,7 +176,10 @@ export class AuthService {
     };
   }
 
-  async login(input: LoginInput, meta: SessionMeta) {
+  async login(
+    input: LoginInput,
+    meta: SessionMeta,
+  ): Promise<LoginSessionResult | LoginChallengeResult> {
     const user = await this.prisma.user.findUnique({ where: { email: input.email } });
     if (!user) {
       throw unauthorized('Invalid email or password');
@@ -158,29 +195,136 @@ export class AuthService {
       throw forbidden('This account is disabled');
     }
 
-    const session = await this.sessions.create(user.id, meta, meta.previousSessionToken);
-    const memberships = await loadMemberships(this.prisma, user.id);
+    if (user.totpEnabledAt) {
+      const challengeToken = await this.tokens.signTotpChallenge(user.id);
+      return { totpRequired: true, challengeToken };
+    }
 
-    const primaryOrganizationId = memberships.organizations[0]?.id;
-    if (primaryOrganizationId) {
-      await writeAuditLog(this.prisma, {
-        organizationId: primaryOrganizationId,
-        userId: user.id,
-        action: 'auth.login',
-        resourceType: 'session',
-        resourceId: session.sessionId,
-        ipAddress: meta.ipAddress,
-        userAgent: meta.userAgent,
+    return this.issueLoginSession(user.id, meta);
+  }
+
+  async verifyTotpLogin(
+    input: VerifyTotpLoginInput,
+    meta: SessionMeta,
+  ): Promise<LoginSessionResult> {
+    let userId: string;
+    try {
+      ({ userId } = await this.tokens.verifyTotpChallenge(input.challengeToken));
+    } catch {
+      throw unauthorized('Invalid or expired authenticator challenge');
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user?.totpEnabledAt) {
+      throw unauthorized('Invalid or expired authenticator challenge');
+    }
+
+    if (user.disabledAt) {
+      throw forbidden('This account is disabled');
+    }
+
+    const remainingBackupHashes = this.verifyUserTotpOrBackup(user, input.code);
+    if (remainingBackupHashes === undefined) {
+      await this.recordLoginFailure(user.id, 'totp_invalid', meta);
+      throw totpInvalid();
+    }
+
+    if (remainingBackupHashes !== user.totpBackupCodeHashes) {
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { totpBackupCodeHashes: remainingBackupHashes },
       });
     }
 
+    return this.issueLoginSession(user.id, meta);
+  }
+
+  async setupTotp(userId: string, meta: RequestMeta) {
+    const user = await this.requireActiveUser(userId);
+    if (user.totpEnabledAt) {
+      throw conflict('Two-factor authentication is already enabled');
+    }
+
+    const secret = this.totp.generateSecret();
+    const otpauthUri = this.totp.otpauthUri(user.email, secret);
+    const sealed = encryptSecret(secret, this.totpKey);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        totpSecretCiphertext: sealed.ciphertext,
+        totpSecretNonce: sealed.nonce,
+        totpBackupCodeHashes: [],
+      },
+    });
+
+    await this.recordSecurityAudit(user.id, 'auth.2fa.setup', meta);
+
+    let qr: string | null = null;
+    try {
+      qr = await qrSvg(otpauthUri);
+    } catch {
+      qr = null;
+    }
+
+    return { secret, otpauthUri, qrSvg: qr };
+  }
+
+  async enableTotp(userId: string, code: string, meta: RequestMeta) {
+    const user = await this.requireActiveUser(userId);
+    if (user.totpEnabledAt) {
+      throw conflict('Two-factor authentication is already enabled');
+    }
+
+    const secret = this.decryptUserSecret(user);
+    if (!secret || !this.totp.verify(secret, code)) {
+      throw totpInvalid();
+    }
+
+    const backupCodes = this.totp.generateBackupCodes();
+    const updated = await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        totpEnabledAt: new Date(),
+        totpBackupCodeHashes: backupCodes.map((item) => this.totp.hashBackupCode(item)),
+      },
+    });
+
+    await this.recordSecurityAudit(user.id, 'auth.2fa.enable', meta);
+
     return {
-      user: serializeUser(user),
-      organizations: memberships.organizations,
-      memberships: memberships.memberships,
-      csrfToken: session.csrfToken,
-      session,
+      backupCodes,
+      user: serializeUser(updated),
     };
+  }
+
+  async disableTotp(userId: string, password: string, code: string, meta: RequestMeta) {
+    const user = await this.requireActiveUser(userId);
+    if (!user.totpEnabledAt) {
+      throw conflict('Two-factor authentication is not enabled');
+    }
+
+    if (!(await this.passwords.verify(password, user.passwordHash))) {
+      throw unauthorized('Invalid password', { password: 'Invalid password' });
+    }
+
+    if (this.verifyUserTotpOrBackup(user, code) === undefined) {
+      throw totpInvalid();
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        totpEnabledAt: null,
+        totpSecretCiphertext: null,
+        totpSecretNonce: null,
+        totpBackupCodeHashes: [],
+      },
+    });
+
+    await this.recordSecurityAudit(user.id, 'auth.2fa.disable', meta);
+
+    return { user: serializeUser(updated) };
   }
 
   async logout(userId: string, sessionId: string | undefined, meta: SessionMeta): Promise<void> {
@@ -220,6 +364,101 @@ export class AuthService {
     };
   }
 
+  private async issueLoginSession(userId: string, meta: SessionMeta): Promise<LoginSessionResult> {
+    const user = await this.requireActiveUser(userId);
+    const session = await this.sessions.create(user.id, meta, meta.previousSessionToken);
+    const memberships = await loadMemberships(this.prisma, user.id);
+
+    const primaryOrganizationId = memberships.organizations[0]?.id;
+    if (primaryOrganizationId) {
+      await writeAuditLog(this.prisma, {
+        organizationId: primaryOrganizationId,
+        userId: user.id,
+        action: 'auth.login',
+        resourceType: 'session',
+        resourceId: session.sessionId,
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      });
+    }
+
+    return {
+      user: serializeUser(user),
+      organizations: memberships.organizations,
+      memberships: memberships.memberships,
+      csrfToken: session.csrfToken,
+      session,
+    };
+  }
+
+  private async requireActiveUser(userId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw unauthorized('Invalid session');
+    }
+    if (user.disabledAt) {
+      throw forbidden('This account is disabled');
+    }
+    return user;
+  }
+
+  private decryptUserSecret(user: {
+    totpSecretCiphertext: string | null;
+    totpSecretNonce: string | null;
+  }): string | null {
+    if (!user.totpSecretCiphertext || !user.totpSecretNonce) {
+      return null;
+    }
+
+    try {
+      return decryptSecret(user.totpSecretCiphertext, user.totpSecretNonce, this.totpKey);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Returns remaining backup hashes when verification succeeds.
+   * The same array instance means a TOTP code was used; a new array means a backup code was consumed.
+   */
+  private verifyUserTotpOrBackup(
+    user: {
+      totpSecretCiphertext: string | null;
+      totpSecretNonce: string | null;
+      totpBackupCodeHashes: string[];
+    },
+    code: string,
+  ): string[] | undefined {
+    const secret = this.decryptUserSecret(user);
+    if (secret && this.totp.verify(secret, code)) {
+      return user.totpBackupCodeHashes;
+    }
+
+    return this.totp.consumeBackupCode(user.totpBackupCodeHashes, code);
+  }
+
+  private async recordSecurityAudit(
+    userId: string,
+    action: string,
+    meta: RequestMeta,
+  ): Promise<void> {
+    const organizationId = (await getUserOrganizationIds(this.prisma, userId))[0];
+    if (!organizationId) {
+      return;
+    }
+
+    await writeAuditLog(this.prisma, {
+      organizationId,
+      userId,
+      action,
+      resourceType: 'user',
+      resourceId: userId,
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+      requestId: meta.requestId,
+    });
+  }
+
   private async recordLoginFailure(
     userId: string,
     reason: string,
@@ -248,8 +487,9 @@ export function createAuthService(
   prisma: PrismaClient,
   sessions: SessionManager,
   nodeEnv: string,
+  jwtSecret: string,
 ): AuthService {
-  return new AuthService(prisma, sessions, nodeEnv);
+  return new AuthService(prisma, sessions, nodeEnv, jwtSecret);
 }
 
 export type IssuedSession = SessionTokens;

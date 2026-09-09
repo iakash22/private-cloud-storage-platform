@@ -1,6 +1,12 @@
 import type { PrismaClient } from '@vaultstack/database';
 import { ALL_SYSTEM_ROLES } from '@vaultstack/types';
-import { conflict, forbidden, notFound, validationError } from '../../../lib/errors.js';
+import {
+  conflict,
+  dependencyError,
+  forbidden,
+  notFound,
+  validationError,
+} from '../../../lib/errors.js';
 import { writeAuditLog } from '../../../lib/audit.js';
 import { serializeRole } from '../mappers/role.mapper.js';
 import { createPrismaPermissionResolver } from '../../auth/services/authorization.service.js';
@@ -50,14 +56,18 @@ export class RolesService {
       where: { organizationId, name: input.name },
     });
     if (existing) {
-      throw conflict('A role with that name already exists');
+      throw conflict('A role with that name already exists', {
+        name: 'A role with that name already exists',
+      });
     }
 
     const permissionRecords = await this.prisma.permission.findMany({
       where: { key: { in: input.permissions } },
     });
     if (permissionRecords.length !== input.permissions.length) {
-      throw validationError('One or more permissions are invalid');
+      throw validationError('One or more permissions are invalid', {
+        permissions: 'One or more permissions are invalid',
+      });
     }
 
     const actorPermissions = await createPrismaPermissionResolver(this.prisma).getPermissionKeys(
@@ -115,10 +125,10 @@ export class RolesService {
     ]);
 
     if (!role) {
-      throw notFound('Role not found');
+      throw dependencyError('Role not found', { roleId: 'Role not found' });
     }
     if (!user) {
-      throw notFound('User not found');
+      throw dependencyError('User not found', { userId: 'User not found' });
     }
 
     const actorPermissions = await createPrismaPermissionResolver(this.prisma).getPermissionKeys(

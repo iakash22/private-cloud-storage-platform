@@ -5,6 +5,7 @@ import { CryptoUtil } from './crypto.util.js';
 import { PasswordService } from './password.service.js';
 import { ShareTokenService } from './share-token.service.js';
 import { TokenService } from './token.service.js';
+import { TotpService } from './totp.service.js';
 import {
   API_KEY_PREFIX,
   CSRF_TOKEN_PREFIX,
@@ -26,9 +27,12 @@ export {
   PasswordService,
   ShareTokenService,
   TokenService,
+  TotpService,
 };
 export type { AccessTokenPayload, CookieOptions, GeneratedApiKey };
 export type { GeneratedShareToken } from './share-token.service.js';
+export { qrSvg } from './qr.js';
+export { decryptSecret, deriveSecretKey, encryptSecret } from './secret-box.js';
 
 export function passwordHashRounds(nodeEnv: string): number {
   return new PasswordService(nodeEnv).getRounds();
@@ -55,6 +59,17 @@ export async function verifyAccessToken(
   secret: string,
 ): Promise<AccessTokenPayload> {
   return new TokenService(secret).verifyAccessToken(token);
+}
+
+export async function signTotpChallenge(userId: string, secret: string): Promise<string> {
+  return new TokenService(secret).signTotpChallenge(userId);
+}
+
+export async function verifyTotpChallenge(
+  token: string,
+  secret: string,
+): Promise<AccessTokenPayload> {
+  return new TokenService(secret).verifyTotpChallenge(token);
 }
 
 export function hashToken(plaintext: string): string {

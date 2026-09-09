@@ -1,5 +1,9 @@
 import { Router } from 'express';
-import { apiKeyIdParamsSchema, createApiKeyBodySchema, organizationIdParamsSchema } from '@vaultstack/validation';
+import {
+  apiKeyIdParamsSchema,
+  createApiKeyBodySchema,
+  organizationIdParamsSchema,
+} from '@vaultstack/validation';
 import type { AppContainer } from '../../container/app-container.js';
 import { validateBody, validateParams } from '../../middleware/validate.js';
 import { ApiKeysController } from './controllers/api-keys.controller.js';

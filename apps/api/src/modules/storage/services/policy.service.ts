@@ -6,7 +6,7 @@ import {
 import type { Logger } from '@vaultstack/logger';
 import type { PublicStoragePolicy, StorageLifecycleActionName } from '@vaultstack/types';
 import { writeAuditLog } from '../../../lib/audit.js';
-import { conflict, notFound, storageBucketNotFound } from '../../../lib/errors.js';
+import { conflict, dependencyError, notFound } from '../../../lib/errors.js';
 import {
   evaluateLifecyclePolicies,
   type LifecyclePolicyRule,
@@ -91,7 +91,9 @@ export function createPolicyService(deps: {
     async createLifecycle(organizationId, userId, input, meta) {
       if (input.bucketId) {
         await storage.resolveBucket(organizationId, input.bucketId).catch(() => {
-          throw storageBucketNotFound();
+          throw dependencyError('Bucket not found', {
+            bucketId: 'Bucket not found',
+          });
         });
       }
 
@@ -108,7 +110,9 @@ export function createPolicyService(deps: {
         });
       } catch (error) {
         if ((error as { code?: string }).code === 'P2002') {
-          throw conflict('A storage policy with that name already exists');
+          throw conflict('A storage policy with that name already exists', {
+            name: 'A storage policy with that name already exists',
+          });
         }
         throw error;
       }

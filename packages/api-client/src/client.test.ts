@@ -43,6 +43,7 @@ describe('VaultStackApiClient storage + auth', () => {
             email: 'a@b.com',
             name: 'A',
             disabled: false,
+            twoFactorEnabled: false,
             createdAt: '',
             updatedAt: '',
           },
@@ -63,6 +64,29 @@ describe('VaultStackApiClient storage + auth', () => {
 
     expect(client.getCsrfToken()).toBe('csrf-token');
     expect(client.getOrganizationId()).toBe('org-1');
+  });
+
+  it('does not store a session from a TOTP login challenge', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () =>
+        Promise.resolve({
+          totpRequired: true,
+          challengeToken: 'challenge-token',
+        }),
+    });
+
+    const client = new VaultStackApiClient({
+      baseUrl: 'http://localhost:3000',
+      fetchImpl,
+    });
+
+    const result = await client.login({ email: 'a@b.com', password: 'password123' });
+
+    expect(result).toEqual({ totpRequired: true, challengeToken: 'challenge-token' });
+    expect(client.getCsrfToken()).toBeUndefined();
+    expect(client.getOrganizationId()).toBeUndefined();
   });
 
   it('initiates and completes uploads through the API', async () => {
@@ -169,6 +193,33 @@ describe('VaultStackApiClient storage + auth', () => {
     });
   });
 
+  it('patches a build and lists project artifacts', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ build: { id: 'build-1' }, artifacts: [] }),
+    });
+
+    const client = new VaultStackApiClient({
+      baseUrl: 'http://localhost:3000',
+      fetchImpl,
+    });
+    client.setCsrfToken('csrf-token');
+    client.setOrganizationId('org-1');
+
+    await client.updateBuild('project-1', 'build-1', { status: 'SUCCEEDED' });
+    await client.listProjectArtifacts('project-1');
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://localhost:3000/api/v1/artifacts/projects/project-1/builds/build-1',
+      expect.objectContaining({ method: 'PATCH' }),
+    );
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://localhost:3000/api/v1/artifacts/projects/project-1/artifacts',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
   it('creates a backup job through the backups API', async () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,
@@ -210,5 +261,54 @@ describe('VaultStackApiClient storage + auth', () => {
       'http://localhost:3000/api/v1/infrastructure/summary',
       expect.objectContaining({ method: 'GET' }),
     );
+  });
+
+  it('lists organization users through the access API', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ users: [] }),
+    });
+
+    const client = new VaultStackApiClient({
+      baseUrl: 'http://localhost:3000',
+      fetchImpl,
+    });
+    client.setOrganizationId('org-1');
+
+    await client.listUsers('org-1');
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://localhost:3000/api/v1/organizations/org-1/users',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('surfaces API field errors on client failures', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      statusText: 'Bad Request',
+      json: () =>
+        Promise.resolve({
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'email: Invalid email',
+            fields: { email: 'Invalid email' },
+          },
+          requestId: 'req-9',
+        }),
+    });
+
+    const client = new VaultStackApiClient({
+      baseUrl: 'http://localhost:3000',
+      fetchImpl,
+    });
+
+    await expect(client.login({ email: 'bad', password: 'x' })).rejects.toMatchObject({
+      name: 'ApiClientError',
+      code: 'VALIDATION_ERROR',
+      fields: { email: 'Invalid email' },
+    });
   });
 });

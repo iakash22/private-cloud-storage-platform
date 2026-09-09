@@ -94,6 +94,10 @@ erDiagram
         string passwordHash
         string name
         datetime disabledAt
+        datetime totpEnabledAt
+        string totpSecretCiphertext
+        string totpSecretNonce
+        string totpBackupCodeHashes
     }
 
     Session {
@@ -385,7 +389,7 @@ erDiagram
 
 | Domain                | Models                                                                              | Notes                                                                                                                                                                                                                                                                        |
 | --------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Identity              | `User`, `Session`                                                                   | Sessions store hashed tokens; plaintext never persisted                                                                                                                                                                                                                      |
+| Identity              | `User`, `Session`                                                                   | Sessions store hashed tokens; plaintext never persisted. TOTP secrets are AES-256-GCM (`totpSecretCiphertext` + `totpSecretNonce`); backup codes are SHA-256 hashes. Plaintext authenticator secret and backup codes are returned only at setup. |
 | Tenancy               | `Organization`, `Team`, `TeamMember`                                                | Every org-owned row carries `organizationId`. Team shares require membership.                                                                                                                                                                                                |
 | Sharing               | `ShareLink`                                                                         | Public identifier is a hashed high-entropy token, never the sequential id. Password hashes, expiry, download limits, and revocation are enforced at read time.                                                                                                               |
 | RBAC                  | `Role`, `Permission`, `RolePermission`, `UserRole`                                  | Permissions seeded from `@vaultstack/types`                                                                                                                                                                                                                                  |
