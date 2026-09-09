@@ -49,7 +49,14 @@ const organizationResponseSchema = z.object({
 });
 
 const auditLogsResponseSchema = z.object({
-  auditLogs: z.array(z.object({ id: z.string() })),
+  auditLogs: z.array(
+    z.object({
+      id: z.string(),
+      action: z.string(),
+      result: z.enum(['success', 'failure']),
+      requestId: z.string().nullable(),
+    }),
+  ),
 });
 
 function createMockRedis(): DependencyClients['redis'] {
@@ -228,5 +235,8 @@ describe('Phase 1 backend foundation', () => {
     const logs = auditLogsResponseSchema.parse(auditLogs.body);
     expect(auditLogs.status).toBe(200);
     expect(logs.auditLogs.length).toBeGreaterThan(0);
+    expect(logs.auditLogs.some((log) => log.action === 'auth.register')).toBe(true);
+    expect(logs.auditLogs.every((log) => log.result === 'success')).toBe(true);
+    expect(logs.auditLogs.every((log) => log.requestId)).toBe(true);
   });
 });

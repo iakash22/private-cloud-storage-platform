@@ -1,6 +1,8 @@
 export interface RequestMeta {
   ipAddress: string | null;
   userAgent: string | null;
+  requestId?: string | null;
+  serviceAccountId?: string | null;
 }
 
 export interface RequestCookies {

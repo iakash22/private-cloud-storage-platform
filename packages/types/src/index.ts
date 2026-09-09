@@ -306,9 +306,14 @@ export interface PublicAuditLog {
   id: string;
   organizationId: string;
   userId: string | null;
+  serviceAccountId: string | null;
+  actorName: string | null;
   action: string;
   resourceType: string;
   resourceId: string | null;
+  result: 'success' | 'failure';
+  requestId: string | null;
+  ipAddress: string | null;
   metadata: Record<string, unknown> | null;
   createdAt: string;
 }

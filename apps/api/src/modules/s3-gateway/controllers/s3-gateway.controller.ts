@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { AppError } from '../../../lib/errors.js';
+import { setRequestServiceAccount } from '../../../lib/request-context.js';
 import { asyncHandler, type AsyncRouteHandler } from '../../../lib/async-handler.js';
 import type { StorageModule } from '../../storage/storage.module.js';
 import type { S3AuthStrategy } from '../s3-auth.strategy.js';
@@ -33,6 +34,7 @@ export class S3GatewayController {
 
     try {
       const principal = await this.auth.authenticate(req);
+      setRequestServiceAccount(principal.principalId);
       await this.handlers.handle(principal, target, req, res);
     } catch (error: unknown) {
       const status = error instanceof AppError ? error.statusCode : 403;

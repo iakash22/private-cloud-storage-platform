@@ -110,9 +110,17 @@ export const apiKeyIdParamsSchema = z.object({
   apiKeyId: z.string().min(1),
 });
 
-export const auditLogQuerySchema = z.object({
-  limit: z.coerce.number().int().min(1).max(100).optional(),
-});
+export const auditLogQuerySchema = z
+  .object({
+    userId: z.string().min(1).optional(),
+    action: z.string().trim().min(1).max(120).optional(),
+    resourceType: z.string().trim().min(1).max(80).optional(),
+    dateFrom: z.string().date().optional(),
+    dateTo: z.string().date().optional(),
+    result: z.enum(['success', 'failure']).optional(),
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+  })
+  .strict();
 
 export type CreateOrganizationBody = z.infer<typeof createOrganizationBodySchema>;
 export type CreateUserBody = z.infer<typeof createUserBodySchema>;

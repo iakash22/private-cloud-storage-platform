@@ -23,6 +23,10 @@ import { StorageLayout } from './pages/storage/storage-layout.js';
 import { StorageOverviewPage } from './pages/storage/storage-overview-page.js';
 import { TrashPage } from './pages/storage/trash-page.js';
 import { UsagePage } from './pages/storage/usage-page.js';
+import { ActivityPage } from './pages/activity-page.js';
+import { DashboardPage } from './pages/dashboard-page.js';
+import { DashboardShell } from './pages/dashboard-shell.js';
+import { SectionPlaceholderPage } from './pages/section-placeholder-page.js';
 
 export function App() {
   return (
@@ -31,32 +35,62 @@ export function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/s/:token" element={<PublicSharePage />} />
         <Route element={<ProtectedRoute />}>
-          <Route path="/" element={<Navigate to="/storage" replace />} />
-          <Route path="/storage" element={<StorageLayout />}>
-            <Route index element={<StorageOverviewPage />} />
-            <Route path="files" element={<FilesPage />} />
-            <Route path="buckets" element={<BucketsPage />} />
-            <Route path="providers" element={<ProvidersPage />} />
-            <Route path="shares" element={<SharesPage />} />
-            <Route path="usage" element={<UsagePage />} />
-            <Route path="trash" element={<TrashPage />} />
-          </Route>
-          <Route path="/backups" element={<BackupsLayout />}>
-            <Route index element={<BackupsOverviewPage />} />
-            <Route path="jobs" element={<BackupsJobsPage />} />
-            <Route path="schedules" element={<BackupsSchedulesPage />} />
-            <Route path="snapshots" element={<BackupsSnapshotsPage />} />
-            <Route path="restore" element={<BackupsRestorePage />} />
-          </Route>
-          <Route path="/infrastructure" element={<InfrastructureLayout />}>
-            <Route index element={<InfrastructureOverviewPage />} />
-            <Route path="server" element={<InfrastructureServerPage />} />
-            <Route path="disks" element={<InfrastructureDisksPage />} />
-            <Route path="storage" element={<InfrastructureStoragePage />} />
-            <Route path="docker" element={<InfrastructureDockerPage />} />
+          <Route element={<DashboardShell />}>
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/storage" element={<StorageLayout />}>
+              <Route index element={<StorageOverviewPage />} />
+              <Route path="files" element={<FilesPage />} />
+              <Route path="buckets" element={<BucketsPage />} />
+              <Route path="providers" element={<ProvidersPage />} />
+              <Route path="shares" element={<SharesPage />} />
+              <Route path="usage" element={<UsagePage />} />
+              <Route path="trash" element={<TrashPage />} />
+            </Route>
+            <Route
+              path="/artifacts"
+              element={
+                <SectionPlaceholderPage
+                  title="Artifacts"
+                  description="Manage CI/CD projects, builds, and artifact versions."
+                />
+              }
+            />
+            <Route path="/backups" element={<BackupsLayout />}>
+              <Route index element={<BackupsOverviewPage />} />
+              <Route path="jobs" element={<BackupsJobsPage />} />
+              <Route path="schedules" element={<BackupsSchedulesPage />} />
+              <Route path="snapshots" element={<BackupsSnapshotsPage />} />
+              <Route path="restore" element={<BackupsRestorePage />} />
+            </Route>
+            <Route path="/infrastructure" element={<InfrastructureLayout />}>
+              <Route index element={<InfrastructureOverviewPage />} />
+              <Route path="server" element={<InfrastructureServerPage />} />
+              <Route path="disks" element={<InfrastructureDisksPage />} />
+              <Route path="storage" element={<InfrastructureStoragePage />} />
+              <Route path="docker" element={<InfrastructureDockerPage />} />
+            </Route>
+            <Route
+              path="/access"
+              element={
+                <SectionPlaceholderPage
+                  title="Access"
+                  description="Manage users, roles, teams, API keys, and service accounts."
+                />
+              }
+            />
+            <Route path="/activity" element={<ActivityPage />} />
+            <Route
+              path="/settings"
+              element={
+                <SectionPlaceholderPage
+                  title="Settings"
+                  description="Configure organization and platform preferences."
+                />
+              }
+            />
           </Route>
         </Route>
-        <Route path="*" element={<Navigate to="/storage" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AuthProvider>
   );

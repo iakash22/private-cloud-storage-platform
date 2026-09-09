@@ -1,4 +1,10 @@
-import { expect, test, type APIRequestContext, type APIResponse, type Page } from '@playwright/test';
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type APIResponse,
+  type Page,
+} from '@playwright/test';
 
 const apiBase = 'http://127.0.0.1:3000';
 
@@ -65,7 +71,13 @@ async function pollUntil<T>(
 async function refreshUntilVisible(page: Page, text: string, timeoutMs = 90_000): Promise<void> {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
-    if (await page.getByText(text).first().isVisible().catch(() => false)) {
+    if (
+      await page
+        .getByText(text)
+        .first()
+        .isVisible()
+        .catch(() => false)
+    ) {
       return;
     }
     const refresh = page.getByRole('button', { name: 'Refresh' });
@@ -94,11 +106,11 @@ test.describe('VaultStack backups dashboard', () => {
     await page.getByLabel('Password').fill(password);
     await page.getByRole('button', { name: 'Create account' }).click();
 
-    await expect(page.getByRole('heading', { name: 'Storage overview' })).toBeVisible({
+    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({
       timeout: 15_000,
     });
 
-    await page.getByRole('button', { name: 'Backups' }).click();
+    await page.getByRole('link', { name: 'Backups', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Backup overview' })).toBeVisible();
 
     await page.getByRole('button', { name: 'Create backup' }).click();
@@ -140,8 +152,9 @@ test.describe('VaultStack backups dashboard', () => {
 
     const snapshots = await request.get(`${apiBase}/api/v1/backups/snapshots`, { headers });
     await expectOk(snapshots, 'list snapshots');
-    const snapshotList = ((await snapshots.json()) as { snapshots: { verificationPassed: boolean }[] })
-      .snapshots;
+    const snapshotList = (
+      (await snapshots.json()) as { snapshots: { verificationPassed: boolean }[] }
+    ).snapshots;
     expect(snapshotList.length).toBeGreaterThan(0);
     expect(snapshotList[0]?.verificationPassed).toBe(true);
 

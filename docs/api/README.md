@@ -97,7 +97,11 @@ Programmatic clients may still use `Authorization: Bearer <api-key>`.
 - `POST /api/v1/organizations/:organizationId/s3-credentials/:credentialId/rotate` — revoke old credential and return a new secret once
 - `GET /api/v1/organizations/:organizationId/s3-credentials/service-accounts` — list service accounts
 - `PATCH /api/v1/organizations/:organizationId/s3-credentials/service-accounts/:serviceAccountId` — enable, disable, or describe a service account
-- `GET /api/v1/organizations/:organizationId/audit-logs` — `audit.read`
+- `GET /api/v1/organizations/:organizationId/audit-logs` — `audit.read`; filters:
+  `userId`, `action`, `resourceType`, `dateFrom`, `dateTo`, `result`, and `limit`.
+  Entries include the actor, result, request id, IP address where available, and
+  sanitized metadata. Passwords, credentials, authorization headers, presigned
+  URLs, and file contents are never persisted.
 
 ### Storage (Phase 3)
 

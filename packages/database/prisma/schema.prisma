@@ -190,19 +190,28 @@ model AuditLog {
   id             String   @id @default(cuid())
   organizationId String
   userId         String?
+  serviceAccountId String?
   action         String
   resourceType   String
   resourceId     String?
+  result         String   @default("success")
+  requestId      String?
   metadata       Json?
   ipAddress      String?
   userAgent      String?
   createdAt      DateTime @default(now())
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  serviceAccount ServiceAccount? @relation(fields: [serviceAccountId], references: [id], onDelete: SetNull)
 
   @@index([organizationId, createdAt])
+  @@index([organizationId, action, createdAt])
+  @@index([organizationId, result, createdAt])
+  @@index([organizationId, resourceType, createdAt])
   @@index([userId])
+  @@index([serviceAccountId])
+  @@index([requestId])
 }
 
 // ---------------------------------------------------------------------------
@@ -610,6 +619,7 @@ model ServiceAccount {
 
   organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   credentials  S3AccessCredential[]
+  auditLogs    AuditLog[]
 
   @@unique([organizationId, name])
   @@index([organizationId])

@@ -66,7 +66,7 @@ export function InfrastructureDockerPage() {
               <Badge>{item.state}</Badge>
             </div>
           ))}
-          {docker && docker.items.length === 0 ? (
+          {docker?.items.length === 0 ? (
             <p className="text-slate-500">
               {docker.available ? 'No running containers.' : 'Docker collector could not connect.'}
             </p>

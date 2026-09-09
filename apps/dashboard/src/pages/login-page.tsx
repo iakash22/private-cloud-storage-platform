@@ -1,6 +1,15 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Label } from '@vaultstack/ui';
+import {
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+} from '@vaultstack/ui';
 import { useAuth } from '../context/auth-context.js';
 
 export function LoginPage() {
@@ -15,7 +24,7 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
 
   if (!loading && user) {
-    return <Navigate to="/storage" replace />;
+    return <Navigate to="/" replace />;
   }
 
   const handleSubmit = async (event: FormEvent) => {
@@ -30,7 +39,7 @@ export function LoginPage() {
         await register({ email, password, name, organizationName });
       }
 
-      void navigate('/storage');
+      void navigate('/');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Authentication failed');
     } finally {
@@ -44,7 +53,9 @@ export function LoginPage() {
         <CardHeader>
           <CardTitle>VaultStack</CardTitle>
           <CardDescription>
-            {mode === 'login' ? 'Sign in to manage organization storage.' : 'Create an account and organization.'}
+            {mode === 'login'
+              ? 'Sign in to manage organization storage.'
+              : 'Create an account and organization.'}
           </CardDescription>
         </CardHeader>
         <CardContent>

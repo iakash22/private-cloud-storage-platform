@@ -7,8 +7,12 @@ import { OrganizationScopedController } from '../../../http/organization-scoped.
 
 export class AuditController extends OrganizationScopedController {
   list: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    const { limit = 50 } = auditLogQuerySchema.parse(req.query);
-    const auditLogs = await this.container.audit.list(routeParam(req, 'organizationId'), limit);
+    const { limit = 50, ...filters } = auditLogQuerySchema.parse(req.query);
+    const auditLogs = await this.container.audit.list(
+      routeParam(req, 'organizationId'),
+      filters,
+      limit,
+    );
     this.ok(res, { auditLogs });
   });
 

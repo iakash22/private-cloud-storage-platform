@@ -11,6 +11,7 @@ import type { StorageService } from './storage.service.js';
 export interface RequestMeta {
   ipAddress?: string | null;
   userAgent?: string | null;
+  requestId?: string | null;
 }
 
 export interface CreateBucketOptions {

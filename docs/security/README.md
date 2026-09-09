@@ -57,4 +57,4 @@ Every organization-owned row has `organizationId`. Lookups always filter by that
 
 ## Audit
 
-Register, login, logout, organization/user/team/role/API-key changes, role assignment, and user disable write `AuditLog` rows. Failed logins are not audited (avoids user enumeration in logs); they are rate limited instead.
+Register, login, logout, organization/user/team/role/API-key changes, role assignment, and user disable write `AuditLog` rows. Failed logins for known users are recorded with a failure result and reason; unknown identities are not persisted. Audit metadata is sanitized so passwords, credentials, authorization headers, presigned URLs, and file contents are never stored.

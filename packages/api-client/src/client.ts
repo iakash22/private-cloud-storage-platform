@@ -36,6 +36,7 @@ import {
   type PublicBackupSnapshot,
   type PublicBackupSummary,
   type PublicBackupVerification,
+  type PublicAuditLog,
   type PublicDiskMetrics,
   type PublicDockerMetrics,
   type PublicInfrastructureSummary,
@@ -842,6 +843,31 @@ export class VaultStackApiClient {
     return result.credentials;
   }
 
+  async listAuditLogs(
+    filters: {
+      userId?: string;
+      action?: string;
+      resourceType?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      result?: 'success' | 'failure';
+      limit?: number;
+    } = {},
+  ): Promise<PublicAuditLog[]> {
+    const search = new URLSearchParams();
+    for (const [key, value] of Object.entries(filters)) {
+      if (value) {
+        search.set(key, String(value));
+      }
+    }
+    const query = search.toString();
+    const result = await this.request<{ auditLogs: PublicAuditLog[] }>(
+      'GET',
+      `/api/v1/organizations/${this.organizationId ?? ''}/audit-logs${query ? `?${query}` : ''}`,
+    );
+    return result.auditLogs;
+  }
+
   async createS3Credential(
     organizationId: string,
     input: {
@@ -877,7 +903,10 @@ export class VaultStackApiClient {
     return result.credential;
   }
 
-  async revokeS3Credential(organizationId: string, credentialId: string): Promise<PublicS3AccessCredential> {
+  async revokeS3Credential(
+    organizationId: string,
+    credentialId: string,
+  ): Promise<PublicS3AccessCredential> {
     const result = await this.request<{ credential: PublicS3AccessCredential }>(
       'POST',
       `/api/v1/organizations/${organizationId}/s3-credentials/${credentialId}/revoke`,

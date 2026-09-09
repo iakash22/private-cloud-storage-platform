@@ -119,12 +119,15 @@ export class StorageController extends StorageScopedController {
 
   createDownloadUrl: AsyncRouteHandler = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
+      const auth = this.requireAuth(req);
       const body = downloadUrlBodySchema.parse(req.body ?? {});
       const url = await this.container.storage.objects.createDownloadUrl(
         this.organizationId(req),
         routeParam(req, 'objectId'),
         this.container.storage.baseUrl(req),
         body.versionId,
+        auth.user.id,
+        requestMeta(req),
       );
       this.ok(res, { download: url });
     },

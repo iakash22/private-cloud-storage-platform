@@ -144,11 +144,17 @@ export class AuthService {
 
   async login(input: LoginInput, meta: SessionMeta) {
     const user = await this.prisma.user.findUnique({ where: { email: input.email } });
-    if (!user || !(await this.passwords.verify(input.password, user.passwordHash))) {
+    if (!user) {
+      throw unauthorized('Invalid email or password');
+    }
+
+    if (!(await this.passwords.verify(input.password, user.passwordHash))) {
+      await this.recordLoginFailure(user.id, 'invalid_credentials', meta);
       throw unauthorized('Invalid email or password');
     }
 
     if (user.disabledAt) {
+      await this.recordLoginFailure(user.id, 'account_disabled', meta);
       throw forbidden('This account is disabled');
     }
 
@@ -212,6 +218,29 @@ export class AuthService {
       organizations: memberships.organizations,
       memberships: memberships.memberships,
     };
+  }
+
+  private async recordLoginFailure(
+    userId: string,
+    reason: string,
+    meta: SessionMeta,
+  ): Promise<void> {
+    const organizationId = (await getUserOrganizationIds(this.prisma, userId))[0];
+    if (!organizationId) {
+      return;
+    }
+
+    await writeAuditLog(this.prisma, {
+      organizationId,
+      userId,
+      action: 'auth.login',
+      resourceType: 'session',
+      result: 'failure',
+      metadata: { reason },
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+      requestId: meta.requestId,
+    });
   }
 }
 

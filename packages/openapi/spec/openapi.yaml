@@ -681,9 +681,46 @@ paths:
             type: integer
             minimum: 1
             maximum: 100
+        - name: userId
+          in: query
+          schema:
+            type: string
+        - name: action
+          in: query
+          schema:
+            type: string
+        - name: resourceType
+          in: query
+          schema:
+            type: string
+        - name: dateFrom
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: dateTo
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: result
+          in: query
+          schema:
+            type: string
+            enum: [success, failure]
       responses:
         '200':
-          description: Audit log page
+          description: Audit log entries
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [auditLogs]
+                properties:
+                  auditLogs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PublicAuditLog'
 
   /api/v1/storage/providers:
     get:
@@ -2407,6 +2444,60 @@ components:
           format: date-time
         uptime:
           type: number
+
+    PublicAuditLog:
+      type: object
+      required:
+        - id
+        - organizationId
+        - userId
+        - serviceAccountId
+        - actorName
+        - action
+        - resourceType
+        - resourceId
+        - result
+        - requestId
+        - ipAddress
+        - metadata
+        - createdAt
+      properties:
+        id:
+          type: string
+        organizationId:
+          type: string
+        userId:
+          type: string
+          nullable: true
+        serviceAccountId:
+          type: string
+          nullable: true
+        actorName:
+          type: string
+          nullable: true
+        action:
+          type: string
+        resourceType:
+          type: string
+        resourceId:
+          type: string
+          nullable: true
+        result:
+          type: string
+          enum: [success, failure]
+        requestId:
+          type: string
+          nullable: true
+        ipAddress:
+          type: string
+          nullable: true
+        metadata:
+          type: object
+          nullable: true
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
 
     ReadinessResponse:
       type: object

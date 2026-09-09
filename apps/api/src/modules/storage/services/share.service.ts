@@ -308,6 +308,15 @@ export class ShareService {
       SHARE_DOWNLOAD_TTL_SECONDS,
     );
 
+    await writeAuditLog(this.prisma, {
+      organizationId: share.organizationId,
+      userId: auth?.user.id ?? null,
+      action: 'storage.object.downloaded',
+      resourceType: 'object',
+      resourceId: share.objectId,
+      metadata: { shareId: share.id, key: share.object.key },
+    });
+
     return {
       url: `${baseUrl}/api/v1/storage/objects/${share.objectId}/content?token=${issued.token}`,
       method: 'GET',

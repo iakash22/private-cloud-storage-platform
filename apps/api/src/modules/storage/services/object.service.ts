@@ -72,6 +72,8 @@ export interface ObjectService {
     objectId: string,
     baseUrl: string,
     versionId?: string,
+    userId?: string,
+    meta?: RequestMeta,
   ): Promise<PublicPresignedUrl>;
   remove(
     organizationId: string,
@@ -430,6 +432,13 @@ export function createObjectService(deps: {
           range: options.range,
           signal: options.signal,
         });
+        await writeAuditLog(prisma, {
+          organizationId,
+          action: 'storage.object.downloaded',
+          resourceType: 'object',
+          resourceId: object.id,
+          metadata: { bucketId: object.bucketId, key: object.key },
+        });
         return { object, stream };
       }
 
@@ -438,6 +447,13 @@ export function createObjectService(deps: {
         ...storage.locationFor(bucket, object.physicalKey),
         range: options?.range,
         signal: options?.signal,
+      });
+      await writeAuditLog(prisma, {
+        organizationId,
+        action: 'storage.object.downloaded',
+        resourceType: 'object',
+        resourceId: object.id,
+        metadata: { bucketId: object.bucketId, key: object.key },
       });
 
       return { object, stream };
@@ -451,7 +467,7 @@ export function createObjectService(deps: {
      * object (and optional version). Either way the browser receives no
      * storage credentials.
      */
-    async createDownloadUrl(organizationId, objectId, baseUrl, versionId) {
+    async createDownloadUrl(organizationId, objectId, baseUrl, versionId, userId, meta) {
       if (versionId) {
         const { object, bucket, provider, version } = await requireVersion(
           organizationId,
@@ -468,22 +484,46 @@ export function createObjectService(deps: {
             expiresInSeconds: limits.presignedUrlTtlSeconds,
             downloadFilename: object.key.split('/').at(-1),
           });
-          return {
+          const download = {
             url: presigned.url,
             method: presigned.method,
             expiresAt: presigned.expiresAt.toISOString(),
           };
+          await writeAuditLog(prisma, {
+            organizationId,
+            userId,
+            action: 'storage.object.downloaded',
+            resourceType: 'object',
+            resourceId: object.id,
+            metadata: { bucketId: object.bucketId, key: object.key, versionId },
+            ipAddress: meta?.ipAddress,
+            userAgent: meta?.userAgent,
+            requestId: meta?.requestId,
+          });
+          return download;
         }
 
         const issued = tokens.issue(
           { purpose: 'download', organizationId, subjectId: object.id, versionId },
           limits.presignedUrlTtlSeconds,
         );
-        return {
+        const download = {
           url: `${baseUrl}/api/v1/storage/objects/${object.id}/content?token=${issued.token}`,
           method: 'GET',
           expiresAt: issued.expiresAt.toISOString(),
         };
+        await writeAuditLog(prisma, {
+          organizationId,
+          userId,
+          action: 'storage.object.downloaded',
+          resourceType: 'object',
+          resourceId: object.id,
+          metadata: { bucketId: object.bucketId, key: object.key, versionId },
+          ipAddress: meta?.ipAddress,
+          userAgent: meta?.userAgent,
+          requestId: meta?.requestId,
+        });
+        return download;
       }
 
       const { object, bucket, provider } = await requireLiveObject(organizationId, objectId);
@@ -495,11 +535,23 @@ export function createObjectService(deps: {
           downloadFilename: object.key.split('/').at(-1),
         });
 
-        return {
+        const download = {
           url: presigned.url,
           method: presigned.method,
           expiresAt: presigned.expiresAt.toISOString(),
         };
+        await writeAuditLog(prisma, {
+          organizationId,
+          userId,
+          action: 'storage.object.downloaded',
+          resourceType: 'object',
+          resourceId: object.id,
+          metadata: { bucketId: object.bucketId, key: object.key },
+          ipAddress: meta?.ipAddress,
+          userAgent: meta?.userAgent,
+          requestId: meta?.requestId,
+        });
+        return download;
       }
 
       const issued = tokens.issue(
@@ -507,11 +559,23 @@ export function createObjectService(deps: {
         limits.presignedUrlTtlSeconds,
       );
 
-      return {
+      const download = {
         url: `${baseUrl}/api/v1/storage/objects/${object.id}/content?token=${issued.token}`,
         method: 'GET',
         expiresAt: issued.expiresAt.toISOString(),
       };
+      await writeAuditLog(prisma, {
+        organizationId,
+        userId,
+        action: 'storage.object.downloaded',
+        resourceType: 'object',
+        resourceId: object.id,
+        metadata: { bucketId: object.bucketId, key: object.key },
+        ipAddress: meta?.ipAddress,
+        userAgent: meta?.userAgent,
+        requestId: meta?.requestId,
+      });
+      return download;
     },
 
     async remove(organizationId, objectId, userId, meta, versionId) {
@@ -635,7 +699,9 @@ export function createObjectService(deps: {
             ? result.checksum.value
             : version.checksum,
       }).catch(async (error: unknown) => {
-        await provider.deleteObject(storage.locationFor(bucket, physicalKey)).catch(() => undefined);
+        await provider
+          .deleteObject(storage.locationFor(bucket, physicalKey))
+          .catch(() => undefined);
         throw error;
       });
 

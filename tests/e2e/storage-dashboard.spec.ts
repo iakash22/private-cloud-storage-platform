@@ -63,9 +63,11 @@ test.describe('VaultStack storage dashboard', () => {
     await page.getByLabel('Password').fill(password);
     await page.getByRole('button', { name: 'Create account' }).click();
 
-    await expect(page.getByRole('heading', { name: 'Storage overview' })).toBeVisible({
+    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({
       timeout: 15_000,
     });
+    await page.getByRole('link', { name: 'Storage', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Storage overview' })).toBeVisible();
 
     await page.getByRole('link', { name: 'Buckets', exact: true }).click();
     await page.getByRole('button', { name: 'Create bucket' }).click();
@@ -121,9 +123,9 @@ test.describe('VaultStack storage dashboard', () => {
         'x-vaultstack-organization': organizationId,
       },
     });
-    const bucketId = ((await buckets.json()) as { buckets: { id: string; name: string }[] }).buckets.find(
-      (bucket) => bucket.name === bucketName,
-    )?.id;
+    const bucketId = (
+      (await buckets.json()) as { buckets: { id: string; name: string }[] }
+    ).buckets.find((bucket) => bucket.name === bucketName)?.id;
     expect(bucketId).toBeTruthy();
 
     const otherEmail = `storage-other-${Date.now()}@example.com`;
@@ -163,9 +165,11 @@ test.describe('VaultStack storage dashboard', () => {
     await page.getByLabel('Password').fill(password);
     await page.getByRole('button', { name: 'Create account' }).click();
 
-    await expect(page.getByRole('heading', { name: 'Storage overview' })).toBeVisible({
+    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({
       timeout: 15_000,
     });
+    await page.getByRole('link', { name: 'Storage', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Storage overview' })).toBeVisible();
     await page.getByRole('link', { name: 'Buckets', exact: true }).click();
     await page.getByRole('button', { name: 'Create bucket' }).click();
     await page.getByLabel('Bucket name').fill(bucketName);
@@ -183,7 +187,9 @@ test.describe('VaultStack storage dashboard', () => {
     });
 
     await expect(page.getByText('Uploads')).toBeVisible();
-    await expect(page.getByText(/uploading|completing|completed/i)).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText(/uploading|completing|completed/i)).toBeVisible({
+      timeout: 60_000,
+    });
     await expect(page.getByText('completed')).toBeVisible({ timeout: 60_000 });
   });
 
