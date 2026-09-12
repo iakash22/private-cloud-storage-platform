@@ -34,7 +34,9 @@ printf '%s\n' "${grafana_admin_password}" > "${secret_dir}/grafana_admin_passwor
 printf 'postgresql://vaultstack:%s@postgres:5432/vaultstack\n' "${postgres_password}" \
   > "${secret_dir}/database_url"
 
-chmod 0600 \
+# 0644 so non-root API/worker containers (USER node) can read Docker file secrets.
+# Host directory remains 0700; only the secret file contents are world-readable on the host.
+chmod 0644 \
   "${secret_dir}/database_url" \
   "${secret_dir}/jwt_secret" \
   "${secret_dir}/postgres_password" \

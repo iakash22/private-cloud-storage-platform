@@ -1,0 +1,43 @@
+# THANOS / home-server override for ivaultstack.com
+#
+# Use with:
+#   docker compose --env-file /srv/vaultstack/config/compose.env \
+#     -f docker-compose.yml -f docker-compose.ivaultstack.yml up
+#
+# Requires compose.env keys:
+#   VAULTSTACK_PUBLIC_IP   LAN IP Caddy binds (e.g. 192.168.1.9) — avoids Opsiva nginx on 127.0.0.1:80
+#   REDIS_PASSWORD         redis-cli requirepass (also used in REDIS_URL)
+#   VAULTSTACK_DATA_ROOT   e.g. /mnt/thanos-backup/vaultstack/data
+#   REDIS_URL              redis://:${REDIS_PASSWORD}@redis:6379
+
+services:
+  caddy:
+    ports: !override
+      - '${VAULTSTACK_PUBLIC_IP}:80:80'
+      - '${VAULTSTACK_PUBLIC_IP}:443:443'
+
+  postgres:
+    ports:
+      - '5433:5432'
+    volumes: !override
+      - ${VAULTSTACK_POSTGRES_DATA_ROOT:-/mnt/thanos-backup/vaultstack/postgres}:/var/lib/postgresql/data
+
+  redis:
+    command:
+      - redis-server
+      - --appendonly
+      - 'yes'
+      - --save
+      - '60'
+      - '1'
+      - --requirepass
+      - ${REDIS_PASSWORD:?Set REDIS_PASSWORD in compose.env}
+    ports:
+      - '6380:6379'
+    volumes: !override
+      - ${VAULTSTACK_REDIS_DATA_ROOT:-/mnt/thanos-backup/vaultstack/redis}:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD}', 'ping']
+
+  # REDIS_URL for api/workers/redis-exporter comes from compose.env
+  # (REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379)

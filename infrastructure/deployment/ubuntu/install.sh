@@ -47,6 +47,14 @@ install -m 0644 \
 install -m 0644 \
   "${source_dir}/infrastructure/docker/s3-gateway.nginx.conf" \
   "${compose_dir}/s3-gateway.nginx.conf"
+# Home-server / ivaultstack override (optional). Do not delete a customized copy.
+if [[ -f "${source_dir}/infrastructure/docker/docker-compose.ivaultstack.yml" ]]; then
+  if [[ ! -f "${compose_dir}/docker-compose.ivaultstack.yml" ]]; then
+    install -m 0644 \
+      "${source_dir}/infrastructure/docker/docker-compose.ivaultstack.yml" \
+      "${compose_dir}/docker-compose.ivaultstack.yml"
+  fi
+fi
 rsync -a --delete \
   "${source_dir}/infrastructure/monitoring/" "${monitoring_dir}/"
 install -m 0644 \
@@ -59,21 +67,25 @@ if [[ ! -f "${config_dir}/compose.env" ]]; then
   echo "Created ${config_dir}/compose.env; edit domains before starting VaultStack."
 fi
 
+# Empty placeholders must be readable by USER node inside containers once populated.
 if [[ ! -f "${secret_dir}/database_url" ]]; then
-  install -m 0600 /dev/null "${secret_dir}/database_url"
+  install -m 0644 /dev/null "${secret_dir}/database_url"
 fi
 if [[ ! -f "${secret_dir}/jwt_secret" ]]; then
-  install -m 0600 /dev/null "${secret_dir}/jwt_secret"
+  install -m 0644 /dev/null "${secret_dir}/jwt_secret"
 fi
 if [[ ! -f "${secret_dir}/postgres_password" ]]; then
-  install -m 0600 /dev/null "${secret_dir}/postgres_password"
+  install -m 0644 /dev/null "${secret_dir}/postgres_password"
 fi
 if [[ ! -f "${secret_dir}/metrics_token" ]]; then
-  install -m 0600 /dev/null "${secret_dir}/metrics_token"
+  install -m 0644 /dev/null "${secret_dir}/metrics_token"
 fi
 if [[ ! -f "${secret_dir}/grafana_admin_password" ]]; then
-  install -m 0600 /dev/null "${secret_dir}/grafana_admin_password"
+  install -m 0644 /dev/null "${secret_dir}/grafana_admin_password"
 fi
+# Ensure populated secrets stay readable by the non-root API user.
+chmod 0644 "${secret_dir}"/* 2>/dev/null || true
+chmod 0700 "${secret_dir}"
 
 install -m 0644 \
   "${source_dir}/infrastructure/deployment/ubuntu/vaultstack.service" \

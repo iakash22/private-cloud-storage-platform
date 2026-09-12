@@ -40,7 +40,7 @@ services:
 
   dashboard:
     build:
-      context: ../..
+      context: ${VAULTSTACK_BUILD_CONTEXT:-../..}
       dockerfile: Dockerfile
       target: dashboard
       args:
@@ -70,13 +70,16 @@ services:
 
   migrate:
     build:
-      context: ../..
+      context: ${VAULTSTACK_BUILD_CONTEXT:-../..}
       dockerfile: Dockerfile
       target: api-runtime
+    # api-runtime image defaults to USER node; run migrate as root so file
+    # secrets remain readable even when host mode is restrictive.
+    user: '0:0'
     command:
       - sh
       - -c
-      - 'export DATABASE_URL="$$(cat /run/secrets/database_url)" && exec prisma migrate deploy --schema=/app/prisma/schema.prisma'
+      - 'export DATABASE_URL="$$(cat /run/secrets/database_url)" && exec ./node_modules/.bin/prisma migrate deploy --schema=/app/prisma/schema.prisma'
     restart: 'no'
     depends_on:
       postgres:
@@ -95,7 +98,7 @@ services:
 
   api:
     build:
-      context: ../..
+      context: ${VAULTSTACK_BUILD_CONTEXT:-../..}
       dockerfile: Dockerfile
       target: api-runtime
     restart: unless-stopped
@@ -115,7 +118,7 @@ services:
       DATABASE_URL_FILE: /run/secrets/database_url
       JWT_SECRET_FILE: /run/secrets/jwt_secret
       METRICS_TOKEN_FILE: /run/secrets/metrics_token
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       STORAGE_DRIVER: local
       STORAGE_LOCAL_ROOT: /data
       S3_ALLOW_PRIVATE_ENDPOINTS: ${S3_ALLOW_PRIVATE_ENDPOINTS:-false}
@@ -188,7 +191,7 @@ services:
 
   backup-worker:
     build:
-      context: ../..
+      context: ${VAULTSTACK_BUILD_CONTEXT:-../..}
       dockerfile: Dockerfile
       target: api-runtime
     command: ['node', 'dist/workers/index.js']
@@ -205,7 +208,7 @@ services:
       WORKER_ROLE: backup
       DATABASE_URL_FILE: /run/secrets/database_url
       JWT_SECRET_FILE: /run/secrets/jwt_secret
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       STORAGE_DRIVER: local
       STORAGE_LOCAL_ROOT: /data
       S3_ALLOW_PRIVATE_ENDPOINTS: ${S3_ALLOW_PRIVATE_ENDPOINTS:-false}
@@ -235,7 +238,7 @@ services:
 
   artifact-worker:
     build:
-      context: ../..
+      context: ${VAULTSTACK_BUILD_CONTEXT:-../..}
       dockerfile: Dockerfile
       target: api-runtime
     command: ['node', 'dist/workers/index.js']
@@ -252,7 +255,7 @@ services:
       WORKER_ROLE: artifact
       DATABASE_URL_FILE: /run/secrets/database_url
       JWT_SECRET_FILE: /run/secrets/jwt_secret
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       STORAGE_DRIVER: local
       STORAGE_LOCAL_ROOT: /data
       S3_ALLOW_PRIVATE_ENDPOINTS: ${S3_ALLOW_PRIVATE_ENDPOINTS:-false}
@@ -484,10 +487,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # Image ENTRYPOINT is postgres_exporter; override so we can export DSN from the secret.
+    entrypoint: ['/bin/sh', '-c']
     command:
-      - sh
-      - -c
       - 'export DATA_SOURCE_NAME="$$(cat /run/secrets/database_url)" && exec /bin/postgres_exporter'
+    user: '0:0'
     secrets:
       - database_url
     networks:
@@ -515,7 +519,7 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-    command: ['--redis.addr=redis://redis:6379']
+    command: ['--redis.addr=${REDIS_URL:-redis://redis:6379}']
     networks:
       - private
       - monitoring
