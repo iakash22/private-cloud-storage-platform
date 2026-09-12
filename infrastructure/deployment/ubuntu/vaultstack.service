@@ -7,9 +7,9 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/srv/vaultstack/compose
-# Optional ivaultstack/THANOS override is included when present.
-ExecStart=/bin/bash -c 'FILES=(-f /srv/vaultstack/compose/docker-compose.yml); [[ -f /srv/vaultstack/compose/docker-compose.ivaultstack.yml ]] && FILES+=(-f /srv/vaultstack/compose/docker-compose.ivaultstack.yml); exec /usr/bin/docker compose --env-file /srv/vaultstack/config/compose.env "${FILES[@]}" up --remove-orphans'
-ExecStop=/bin/bash -c 'FILES=(-f /srv/vaultstack/compose/docker-compose.yml); [[ -f /srv/vaultstack/compose/docker-compose.ivaultstack.yml ]] && FILES+=(-f /srv/vaultstack/compose/docker-compose.ivaultstack.yml); exec /usr/bin/docker compose --env-file /srv/vaultstack/config/compose.env "${FILES[@]}" down'
+# $$ → $ for bash. Systemd must not expand ${args[@]} itself.
+ExecStart=/bin/bash -c 'set -euo pipefail; args=(--env-file /srv/vaultstack/config/compose.env -f /srv/vaultstack/compose/docker-compose.yml); if [[ -f /srv/vaultstack/compose/docker-compose.ivaultstack.yml ]]; then args+=(-f /srv/vaultstack/compose/docker-compose.ivaultstack.yml); fi; exec /usr/bin/docker compose "$${args[@]}" up --remove-orphans'
+ExecStop=/bin/bash -c 'set -euo pipefail; args=(--env-file /srv/vaultstack/config/compose.env -f /srv/vaultstack/compose/docker-compose.yml); if [[ -f /srv/vaultstack/compose/docker-compose.ivaultstack.yml ]]; then args+=(-f /srv/vaultstack/compose/docker-compose.ivaultstack.yml); fi; exec /usr/bin/docker compose "$${args[@]}" down'
 Restart=always
 RestartSec=10
 TimeoutStartSec=0
