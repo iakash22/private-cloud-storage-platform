@@ -27,8 +27,23 @@ fi
 
 install -d -m 0755 "${monitoring_dir}"
 bash "${source_repo}/infrastructure/deployment/ubuntu/backup.sh"
-git -C "${source_repo}" fetch --tags --prune
-git -C "${source_repo}" archive "${git_ref}" | tar -x -C "${staging_dir}"
+
+# Root often has no GitHub SSH key; run git as the checkout owner when possible.
+repo_owner="$(stat -c '%U' "${source_repo}/.git" 2>/dev/null || true)"
+run_git() {
+  if [[ -n "${repo_owner}" && "${repo_owner}" != "root" ]] && id -u "${repo_owner}" >/dev/null 2>&1; then
+    runuser -u "${repo_owner}" -- git -C "${source_repo}" "$@"
+  else
+    git -C "${source_repo}" "$@"
+  fi
+}
+
+if [[ "${VAULTSTACK_SKIP_GIT_FETCH:-0}" == "1" ]]; then
+  echo "Skipping git fetch (VAULTSTACK_SKIP_GIT_FETCH=1); packaging local ${git_ref}."
+else
+  run_git fetch --tags --prune
+fi
+run_git archive "${git_ref}" | tar -x -C "${staging_dir}"
 
 rsync -a --delete \
   --exclude '.git' \
