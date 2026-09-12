@@ -24,6 +24,7 @@
 22. When changing `packages/database/prisma/schema.prisma` (models, fields, or relations), update `docs/architecture/database-schema.md` in the same change.
 23. READ `/Goal.md`.
 24. Follow `docs/architecture/api-modules.md` for all API module work: class-based controllers/services, `AppContainer` wiring, Zod validation in `@vaultstack/validation`, security via `@vaultstack/auth` and `AuthenticationService` — do not add ad-hoc crypto or fat routers.
+25. THANOS / `ivaultstack.com` production ops: read `docs/deployment/thanos.md` and `.cursor/rules/thanos-deployment.mdc` before changing deploy scripts, Compose overrides, or host paths. Never target Opsiva Redis/nginx ports.
 
 VaultStack Storage Engine
         │

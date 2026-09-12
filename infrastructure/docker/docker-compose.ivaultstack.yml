@@ -1,5 +1,7 @@
 # THANOS / home-server override for ivaultstack.com
 #
+# Operator docs: docs/deployment/thanos.md
+#
 # Use with:
 #   docker compose --env-file /srv/vaultstack/config/compose.env \
 #     -f docker-compose.yml -f docker-compose.ivaultstack.yml up
@@ -9,6 +11,10 @@
 #   REDIS_PASSWORD         redis-cli requirepass (also used in REDIS_URL)
 #   VAULTSTACK_DATA_ROOT   e.g. /mnt/thanos-backup/vaultstack/data
 #   REDIS_URL              redis://:${REDIS_PASSWORD}@redis:6379
+#
+# Cloudflare Tunnel (typical THANOS edge): publish dashboard/api/s3-gateway on
+# 127.0.0.1:3100/3101/3102 in a host-local override if not already mapped, then
+# point Zero Trust Public Hostnames at those origins.
 
 services:
   caddy:

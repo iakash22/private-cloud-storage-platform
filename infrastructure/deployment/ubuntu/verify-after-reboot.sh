@@ -3,9 +3,11 @@ set -euo pipefail
 
 root_dir="${VAULTSTACK_ROOT:-/srv/vaultstack}"
 env_file="${root_dir}/config/compose.env"
-compose_file="${root_dir}/compose/docker-compose.yml"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=compose-lib.sh
+source "${script_dir}/compose-lib.sh"
 
-if [[ ! -f "${env_file}" || ! -f "${compose_file}" ]]; then
+if [[ ! -f "${env_file}" || ! -f "${root_dir}/compose/docker-compose.yml" ]]; then
   echo "VaultStack is not installed at ${root_dir}." >&2
   exit 1
 fi
@@ -13,10 +15,10 @@ fi
 systemctl is-active --quiet docker
 systemctl is-active --quiet vaultstack
 
-docker compose --env-file "${env_file}" -f "${compose_file}" up -d --wait
+vaultstack_compose up -d --wait
 
-for service in caddy dashboard api s3-gateway postgres redis backup-worker artifact-worker; do
-  status="$(docker compose --env-file "${env_file}" -f "${compose_file}" ps --format '{{.Service}} {{.Health}}' "${service}")"
+for service in dashboard api s3-gateway postgres redis backup-worker artifact-worker; do
+  status="$(vaultstack_compose ps --format '{{.Service}} {{.Health}}' "${service}")"
   case "${status}" in
     *healthy*) ;;
     *)
@@ -26,12 +28,27 @@ for service in caddy dashboard api s3-gateway postgres redis backup-worker artif
   esac
 done
 
-source "${env_file}"
-curl --fail --silent --show-error "https://${DASHBOARD_DOMAIN}/" >/dev/null
-curl --fail --silent --show-error "https://${API_DOMAIN}/api/v1/ready" >/dev/null
+# Caddy is optional when Cloudflare Tunnel fronts localhost ports.
+if vaultstack_compose ps --services 2>/dev/null | grep -qx caddy; then
+  caddy_status="$(vaultstack_compose ps --format '{{.Service}} {{.Health}}' caddy || true)"
+  case "${caddy_status}" in
+    *healthy*) ;;
+    *running*) ;;
+    *)
+      echo "Warning: caddy is not healthy (${caddy_status}); continuing if Tunnel edge is used." >&2
+      ;;
+  esac
+fi
 
-# An unauthenticated S3 request should still reach the gateway and return an
-# S3 response (normally 403), rather than a proxy or TLS error.
+set -a
+# shellcheck disable=SC1090
+source "${env_file}"
+set +a
+
+curl --fail --silent --show-error "https://${DASHBOARD_DOMAIN}/" >/dev/null
+curl --fail --silent --show-error "https://${API_DOMAIN}/ready" >/dev/null \
+  || curl --fail --silent --show-error "https://${API_DOMAIN}/api/v1/ready" >/dev/null
+
 s3_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
   "https://${S3_DOMAIN}/api/v1/s3")"
 case "${s3_status}" in

@@ -14,6 +14,9 @@ monitoring_dir="${root_dir}/monitoring"
 env_file="${root_dir}/config/compose.env"
 compose_file="${compose_dir}/docker-compose.yml"
 staging_dir="$(mktemp -d "${root_dir}/config/.upgrade.XXXXXX")"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=compose-lib.sh
+source "${script_dir}/compose-lib.sh"
 
 cleanup() {
   rm -rf "${staging_dir}"
@@ -54,8 +57,15 @@ install -m 0644 "${staging_dir}/infrastructure/docker/docker-compose.prod.yml" "
 install -m 0644 "${staging_dir}/infrastructure/docker/Caddyfile" "${compose_dir}/Caddyfile"
 install -m 0644 "${staging_dir}/infrastructure/docker/s3-gateway.nginx.conf" \
   "${compose_dir}/s3-gateway.nginx.conf"
+# Refresh override template only when the host does not already customize it.
+if [[ ! -f "${compose_dir}/docker-compose.ivaultstack.yml" ]] && \
+  [[ -f "${staging_dir}/infrastructure/docker/docker-compose.ivaultstack.yml" ]]; then
+  install -m 0644 \
+    "${staging_dir}/infrastructure/docker/docker-compose.ivaultstack.yml" \
+    "${compose_dir}/docker-compose.ivaultstack.yml"
+fi
 rsync -a --delete "${staging_dir}/infrastructure/monitoring/" "${monitoring_dir}/"
 
-docker compose --env-file "${env_file}" -f "${compose_file}" build --pull
-docker compose --env-file "${env_file}" -f "${compose_file}" up -d --wait --remove-orphans
+vaultstack_compose build --pull
+vaultstack_compose up -d --wait --remove-orphans
 echo "VaultStack upgraded to ${git_ref}."

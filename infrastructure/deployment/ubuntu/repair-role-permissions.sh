@@ -4,9 +4,19 @@
 #   sudo bash infrastructure/deployment/ubuntu/repair-role-permissions.sh
 set -euo pipefail
 
-CONTAINER="${VAULTSTACK_POSTGRES_CONTAINER:-vaultstack-postgres}"
+CONTAINER="${VAULTSTACK_POSTGRES_CONTAINER:-}"
 DB_USER="${VAULTSTACK_DB_USER:-vaultstack}"
 DB_NAME="${VAULTSTACK_DB_NAME:-vaultstack}"
+
+if [[ -z "${CONTAINER}" ]]; then
+  CONTAINER="$(docker ps --format '{{.Names}}' | grep -E 'postgres' | head -1 || true)"
+fi
+if [[ -z "${CONTAINER}" ]]; then
+  echo "No running Postgres container found. Set VAULTSTACK_POSTGRES_CONTAINER or start the stack." >&2
+  exit 1
+fi
+
+echo "Using Postgres container: ${CONTAINER}"
 
 docker exec -i "$CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" <<'SQL'
 WITH keys(key, description) AS (

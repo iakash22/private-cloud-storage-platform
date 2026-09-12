@@ -3,6 +3,11 @@
 Phase 17 provides a production-oriented Compose topology in
 `infrastructure/docker/docker-compose.prod.yml`.
 
+**THANOS / ivaultstack.com home server:** see the full operator runbook
+[`thanos.md`](./thanos.md) (disks, Tunnel edge, Compose override, Postgres/Redis
+access, partial rebuilds, upgrades, troubleshooting). Cursor agents also load
+`.cursor/rules/thanos-deployment.mdc`.
+
 ## Topology
 
 Only Caddy publishes host ports (`80` and `443`). It routes

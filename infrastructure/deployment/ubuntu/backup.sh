@@ -2,32 +2,39 @@
 set -euo pipefail
 
 root_dir="${VAULTSTACK_ROOT:-/srv/vaultstack}"
-compose_file="${root_dir}/compose/docker-compose.yml"
 env_file="${root_dir}/config/compose.env"
 backup_dir="${root_dir}/backups"
 retention_days="${BACKUP_RETENTION_DAYS:-30}"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 work_dir="$(mktemp -d "${backup_dir}/.backup-${stamp}.XXXXXX")"
 archive="${backup_dir}/vaultstack-${stamp}.tar.gz"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=compose-lib.sh
+source "${script_dir}/compose-lib.sh"
 
 cleanup() {
   rm -rf "${work_dir}"
 }
 trap cleanup EXIT
 
-if [[ ! -f "${compose_file}" || ! -f "${env_file}" ]]; then
+if [[ ! -f "${root_dir}/compose/docker-compose.yml" || ! -f "${env_file}" ]]; then
   echo "VaultStack is not installed at ${root_dir}." >&2
   exit 1
 fi
 
 install -d -m 0700 "${backup_dir}"
 
-docker compose --env-file "${env_file}" -f "${compose_file}" exec -T postgres \
+vaultstack_compose exec -T postgres \
   sh -c 'export PGPASSWORD="$(cat /run/secrets/postgres_password)"; pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
   > "${work_dir}/metadata.sql"
 
+data_root="${root_dir}/data"
+if [[ -L "${data_root}" ]]; then
+  data_root="$(readlink -f "${data_root}")"
+fi
+
 tar --numeric-owner --xattrs --acls \
-  -C "${root_dir}/data" -czf "${work_dir}/objects.tar.gz" .
+  -C "${data_root}" -czf "${work_dir}/objects.tar.gz" .
 
 {
   printf 'created_at=%s\n' "${stamp}"

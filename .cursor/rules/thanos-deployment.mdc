@@ -1,0 +1,42 @@
+---
+description: THANOS (ivaultstack.com) production deployment context for VaultStack
+alwaysApply: true
+---
+
+# THANOS deployment context
+
+Production host for VaultStack is **THANOS** (`thanos@thanos`), domains
+`vault` / `api` / `s3` `.ivaultstack.com`.
+
+## Paths (do not invent alternatives)
+
+- Control plane: `/srv/vaultstack`
+- Git clone: `/srv/src/private-cloud-storage-platform`
+- Durable disk: `/mnt/thanos-backup/vaultstack/{data,postgres,redis,backups}`
+- Compose: `/srv/vaultstack/compose/docker-compose.yml` **plus**
+  `docker-compose.ivaultstack.yml`
+- Env: `/srv/vaultstack/config/compose.env` (0600)
+- Secrets: `/srv/vaultstack/config/secrets/`
+
+Full runbook: `docs/deployment/thanos.md`.
+
+## Hard constraints
+
+- PostgreSQL = metadata only; object bytes on local filesystem under data root.
+- Do not use Opsiva Redis `:6379` or bind VaultStack to `127.0.0.1:80` (Opsiva nginx).
+- Prefer Cloudflare Tunnel over public ACME when ISP blocks 80/443.
+- Prod Postgres container is usually `vaultstack-postgres-1`, not `vaultstack-postgres`.
+- Always include the ivaultstack Compose override in docker compose commands.
+- `sudo git fetch` often fails (no root SSH key): pull as `thanos`, then
+  `VAULTSTACK_SKIP_GIT_FETCH=1 upgrade.sh`.
+- Dashboard-only UI changes: rebuild/recreate `dashboard` service only;
+  `VITE_API_URL` is build-time.
+- Schema: `vaultstack_compose run --rm migrate` (migrate + permission seed).
+- Empty nav (only Dashboard/Settings): missing RolePermissions →
+  `repair-role-permissions.sh` or seed; then hard refresh / re-login.
+- Chrome “Dangerous site” is Google Safe Browsing, not SPA routing.
+
+## When changing deploy files
+
+Update `docs/deployment/thanos.md` in the same change. Keep
+`infrastructure/deployment/ubuntu/compose-lib.sh` as the shared compose entry.
