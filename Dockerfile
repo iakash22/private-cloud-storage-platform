@@ -6,6 +6,11 @@ ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 WORKDIR /workspace
 
+# OpenSSL is required for Prisma engines; build tools cover optional native deps.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates openssl python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
+
 RUN corepack enable && corepack prepare pnpm@9.15.2 --activate
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
@@ -24,9 +29,11 @@ COPY packages/ui/package.json packages/ui/package.json
 COPY packages/validation/package.json packages/validation/package.json
 COPY services/artifact-worker/package.json services/artifact-worker/package.json
 COPY services/backup-worker/package.json services/backup-worker/package.json
-RUN pnpm install --frozen-lockfile
+# Schema is not present yet; skip lifecycle scripts (husky/prisma) until COPY . .
+RUN pnpm install --frozen-lockfile --ignore-scripts
 
 COPY . .
+RUN pnpm --filter @vaultstack/database generate
 
 FROM workspace AS api-build
 RUN pnpm --filter @vaultstack/api... build
@@ -36,6 +43,10 @@ FROM node:22-bookworm-slim AS api-runtime
 
 ENV NODE_ENV=production
 WORKDIR /app
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates openssl \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=api-build /prod/api ./
 COPY --from=api-build /workspace/packages/database/prisma ./prisma
