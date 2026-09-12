@@ -2,6 +2,8 @@
 
 All business APIs are served under `/api/v1`.
 
+**How to use VaultStack from apps/CI** (connectivity, per-feature routes, curl tests): see [`../usage/README.md`](../usage/README.md).
+
 Infrastructure probes remain at `/health` and `/ready` (also mirrored at `/api/v1/health` and `/api/v1/ready`).
 
 ## Interactive docs (OpenAPI / Swagger)
@@ -311,6 +313,8 @@ See [../../infrastructure/monitoring/README.md](../../infrastructure/monitoring/
 
 ### S3-compatible gateway
 
-Mounted at `/api/v1/s3` when `S3_GATEWAY_ENABLED=true`. Phase 3 provides the
-protocol foundation only; see
+Mounted at `/api/v1/s3` when `S3_GATEWAY_ENABLED=true`. Use AWS SDK / SigV4
+service-account credentials (`VSKA…`). See
+[../storage/s3-gateway.md](../storage/s3-gateway.md) and
+[../usage/s3-gateway.md](../usage/s3-gateway.md). Historical Phase 3 notes:
 [../storage/s3-compatibility.md](../storage/s3-compatibility.md).

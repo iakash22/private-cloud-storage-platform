@@ -12,6 +12,7 @@ build/
 .env
 .env.local
 .env.*.local
+docs/usage/examples/env.local.sh
 infrastructure/docker/compose.env
 
 # Logs
