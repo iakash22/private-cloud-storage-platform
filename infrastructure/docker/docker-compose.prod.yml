@@ -79,7 +79,10 @@ services:
     command:
       - sh
       - -c
-      - 'export DATABASE_URL="$$(cat /run/secrets/database_url)" && exec ./node_modules/.bin/prisma migrate deploy --schema=/app/prisma/schema.prisma'
+      - >-
+        export DATABASE_URL="$$(cat /run/secrets/database_url)"
+        && ./node_modules/.bin/prisma migrate deploy --schema=/app/prisma/schema.prisma
+        && node dist/scripts/seed-runtime.js
     restart: 'no'
     depends_on:
       postgres:

@@ -21,7 +21,7 @@ export {
 } from './client.js';
 export { applyMigrations, getDatabasePackageRoot } from './migrate.js';
 export { PERMISSION_DESCRIPTIONS, SEEDED_PERMISSION_KEYS } from './permissions.js';
-export { seedDatabase, seedPermissions } from './seed.js';
+export { seedDatabase, seedPermissions, syncSystemRolePermissions } from './seed.js';
 export { slugifyName, uniqueSlug } from './slug.js';
 
 export type {

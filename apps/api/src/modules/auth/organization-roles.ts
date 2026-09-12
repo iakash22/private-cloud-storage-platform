@@ -15,6 +15,19 @@ export async function createDefaultOrganizationRoles(
 ): Promise<Record<SystemRoleName, string>> {
   const permissions = await prisma.permission.findMany();
   const permissionByKey = new Map(permissions.map((permission) => [permission.key, permission.id]));
+  const missingKeys = [
+    ...new Set(
+      ALL_SYSTEM_ROLES.flatMap((name) =>
+        SYSTEM_ROLE_PERMISSIONS[name].filter((key) => !permissionByKey.has(key)),
+      ),
+    ),
+  ];
+  if (missingKeys.length > 0) {
+    throw new Error(
+      `Cannot create organization roles: missing seeded permissions (${missingKeys.join(', ')}). Run database seed before registering organizations.`,
+    );
+  }
+
   const roleIds = {} as Record<SystemRoleName, string>;
 
   for (const name of ALL_SYSTEM_ROLES) {
@@ -25,9 +38,12 @@ export async function createDefaultOrganizationRoles(
         description: SYSTEM_ROLE_DESCRIPTIONS[name],
         isSystem: true,
         permissions: {
-          create: SYSTEM_ROLE_PERMISSIONS[name].flatMap((key) => {
+          create: SYSTEM_ROLE_PERMISSIONS[name].map((key) => {
             const permissionId = permissionByKey.get(key);
-            return permissionId ? [{ permissionId }] : [];
+            if (!permissionId) {
+              throw new Error(`Missing seeded permission: ${key}`);
+            }
+            return { permissionId };
           }),
         },
       },

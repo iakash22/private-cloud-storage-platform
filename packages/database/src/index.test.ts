@@ -14,4 +14,10 @@ describe('@vaultstack/database', () => {
     expect(slugifyName('Acme Cloud')).toBe('acme-cloud');
     expect(uniqueSlug('Acme Cloud')).toMatch(/^acme-cloud-[a-f0-9]{6}$/);
   });
+
+  it('exports syncSystemRolePermissions from the package entry', async () => {
+    const database = await import('./index.js');
+    expect(typeof database.syncSystemRolePermissions).toBe('function');
+    expect(typeof database.seedDatabase).toBe('function');
+  });
 });

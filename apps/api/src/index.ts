@@ -1,5 +1,5 @@
 import { loadEnv } from '@vaultstack/config';
-import { createPrismaClient } from '@vaultstack/database';
+import { createPrismaClient, seedDatabase } from '@vaultstack/database';
 import { createLogger } from '@vaultstack/logger';
 import { printStartupBanner } from '@vaultstack/startup';
 import { createApp } from './app.js';
@@ -28,42 +28,58 @@ const app = createApp({
   container,
 });
 
-const server = app.listen(config.API_PORT, config.API_HOST, () => {
-  logger.info({ host: config.API_HOST, port: config.API_PORT }, 'VaultStack API listening');
-  void printStartupBanner({
-    serverName: 'VaultStack',
-    environment: config.NODE_ENV,
-    apiHost: config.API_HOST,
-    apiPort: config.API_PORT,
-    databaseUrl: config.DATABASE_URL,
-    redisUrl: config.REDIS_URL,
-    minioEndpoint: config.MINIO_ENDPOINT,
-    minioPort: config.MINIO_PORT,
-    dashboardPort: 5173,
-    checkDatabase: async () => {
-      const result = await checkPostgres(prisma);
-      return { ok: result.status === 'ok', message: result.message };
-    },
-    checkRedis: async () => {
-      const result = await checkRedis(redis);
-      return { ok: result.status === 'ok', message: result.message };
-    },
+async function start(): Promise<void> {
+  try {
+    await seedDatabase(prisma);
+    logger.info('Permission catalog and system role grants are up to date');
+  } catch (error) {
+    logger.error({ err: error }, 'Failed to seed permission catalog');
+    throw error;
+  }
+
+  const server = app.listen(config.API_PORT, config.API_HOST, () => {
+    logger.info({ host: config.API_HOST, port: config.API_PORT }, 'VaultStack API listening');
+    void printStartupBanner({
+      serverName: 'VaultStack',
+      environment: config.NODE_ENV,
+      apiHost: config.API_HOST,
+      apiPort: config.API_PORT,
+      databaseUrl: config.DATABASE_URL,
+      redisUrl: config.REDIS_URL,
+      minioEndpoint: config.MINIO_ENDPOINT,
+      minioPort: config.MINIO_PORT,
+      dashboardPort: 5173,
+      checkDatabase: async () => {
+        const result = await checkPostgres(prisma);
+        return { ok: result.status === 'ok', message: result.message };
+      },
+      checkRedis: async () => {
+        const result = await checkRedis(redis);
+        return { ok: result.status === 'ok', message: result.message };
+      },
+    });
+  });
+
+  async function shutdown(signal: string): Promise<void> {
+    logger.info({ signal }, 'Shutting down API');
+    server.close();
+    await shutdownDependencyClients({ redis, prisma });
+    process.exit(0);
+  }
+
+  process.on('SIGINT', () => {
+    void shutdown('SIGINT');
+  });
+  process.on('SIGTERM', () => {
+    void shutdown('SIGTERM');
+  });
+}
+
+void start().catch((error: unknown) => {
+  logger.error({ err: error }, 'API failed to start');
+  void shutdownDependencyClients({ redis, prisma }).finally(() => {
+    process.exit(1);
   });
 });
 
-async function shutdown(signal: string): Promise<void> {
-  logger.info({ signal }, 'Shutting down API');
-  server.close();
-  await shutdownDependencyClients({ redis, prisma });
-  process.exit(0);
-}
-
-process.on('SIGINT', () => {
-  void shutdown('SIGINT');
-});
-
-process.on('SIGTERM', () => {
-  void shutdown('SIGTERM');
-});
-
-export { app, server };
+export { app };
