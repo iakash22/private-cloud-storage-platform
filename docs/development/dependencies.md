@@ -66,3 +66,26 @@ The OpenAPI spec (`packages/openapi/spec/openapi.yaml`) is the machine-readable 
 | --------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `qrcode`        | `@vaultstack/auth`       | Render authenticator `otpauth://` URIs as SVG during 2FA enrollment. A hand-rolled QR encoder is not reliable; the secret is never sent to an external image service. |
 | `@types/qrcode` | `@vaultstack/auth` (dev) | TypeScript types for `qrcode`                                                                                                                                         |
+
+## API client S3 helper
+
+`@vaultstack/api-client` declares `@aws-sdk/client-s3` as an optional peer
+dependency. REST-only users do not install it. Projects that use
+`createVaultStackS3Client` should install the peer explicitly:
+
+```bash
+pnpm add @aws-sdk/client-s3
+```
+
+The helper is only for the optional VaultStack S3 gateway and does not expose
+provider credentials to browser code.
+
+## Dashboard UX
+
+| Package              | Where            | Why                                                                             |
+| -------------------- | ---------------- | ------------------------------------------------------------------------------- |
+| `react-helmet-async` | `apps/dashboard` | Route-aware browser titles and metadata without mutating document head manually |
+| `lucide-react`       | `apps/dashboard` | Consistent accessible navigation and page icons                                 |
+| `highlight.js`       | `apps/dashboard` | Safe generated syntax highlighting for text/code share previews                 |
+| `recharts`           | `apps/dashboard` | Responsive time-series charts for API-backed infrastructure monitoring          |
+| `fflate`             | `apps/api`       | Bounded ZIP/TAR.GZ archive inspection without extracting members publicly       |

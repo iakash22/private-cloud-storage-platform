@@ -1,4 +1,5 @@
-import { type ReactNode, useEffect, useRef } from 'react';
+import { type ReactNode, useEffect, useId, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '../lib/utils.js';
 import { Button } from './button.js';
 
@@ -10,6 +11,9 @@ export interface DialogProps {
   children: ReactNode;
   footer?: ReactNode;
   className?: string;
+  /** When false, body prefers no scroll; footer always stays visible. Default true. */
+  scrollable?: boolean;
+  dirty?: boolean;
 }
 
 export function Dialog({
@@ -20,62 +24,93 @@ export function Dialog({
   children,
   footer,
   className,
+  scrollable = true,
+  dirty: _dirty = false,
 }: DialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  const descriptionId = useId();
 
   useEffect(() => {
+    if (!open) {
+      return;
+    }
+
     const dialog = dialogRef.current;
     if (!dialog) {
       return;
     }
 
-    if (open && !dialog.open) {
+    if (!dialog.open) {
       dialog.showModal();
     }
 
-    if (!open && dialog.open) {
-      dialog.close();
-    }
+    return () => {
+      if (dialog.open) {
+        dialog.close();
+      }
+    };
   }, [open]);
 
-  if (!open) {
+  if (!open || typeof document === 'undefined') {
     return null;
   }
 
-  return (
+  const requestClose = () => {
+    onOpenChange(false);
+  };
+
+  return createPortal(
     <dialog
       ref={dialogRef}
-      aria-labelledby="dialog-title"
-      aria-describedby={description ? 'dialog-description' : undefined}
+      aria-labelledby={titleId}
+      aria-describedby={description ? descriptionId : undefined}
       className={cn(
-        'fixed inset-0 z-50 m-auto w-full max-w-lg rounded-lg border border-slate-200 bg-white p-0 shadow-xl backdrop:bg-slate-900/40',
+        'vs-dialog-enter fixed inset-0 z-[100] m-auto flex h-fit max-h-[min(90dvh,40rem)] w-[min(100%-1rem,32rem)] max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 shadow-2xl',
         className,
       )}
       onCancel={(event) => {
         event.preventDefault();
-        onOpenChange(false);
+        requestClose();
       }}
       onClick={(event) => {
         if (event.target === dialogRef.current) {
-          onOpenChange(false);
+          requestClose();
         }
       }}
     >
-      <div className="flex flex-col">
-        <div className="border-b border-slate-200 px-6 py-4">
-          <h2 id="dialog-title" className="text-lg font-semibold text-slate-900">
+      <div
+        className="flex max-h-[min(90dvh,40rem)] w-full flex-col"
+        onClick={(event) => {
+          event.stopPropagation();
+        }}
+      >
+        <div className="shrink-0 space-y-1.5 border-b border-slate-200 px-5 py-4 sm:px-6">
+          <h2 id={titleId} className="font-display text-lg font-semibold tracking-tight text-slate-900">
             {title}
           </h2>
           {description ? (
-            <p id="dialog-description" className="mt-1 text-sm text-slate-500">
+            <p id={descriptionId} className="text-sm leading-6 text-slate-500">
               {description}
             </p>
           ) : null}
         </div>
-        <div className="px-6 py-4">{children}</div>
-        {footer ? <div className="flex justify-end gap-2 border-t border-slate-200 px-6 py-4">{footer}</div> : null}
+        <div
+          className={cn(
+            'min-h-0 flex-1 space-y-4 px-5 py-4 sm:px-6',
+            'custom-scrollbar overflow-y-auto overscroll-contain',
+          )}
+        >
+          {children}
+        </div>
+        {footer ? (
+          <div className="shrink-0 border-t border-slate-200 bg-white px-5 py-3 sm:px-6 sm:py-4">
+            <div className="flex justify-end gap-2">{footer}</div>
+          </div>
+        ) : null}
       </div>
-    </dialog>
+    </dialog>,
+    document.body,
   );
 }
 
@@ -85,21 +120,30 @@ export function DialogActions({
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
   confirmDisabled = false,
+  confirmLoading = false,
   confirmVariant = 'default',
 }: {
   onCancel: () => void;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<unknown>;
   confirmLabel?: string;
   cancelLabel?: string;
   confirmDisabled?: boolean;
+  confirmLoading?: boolean;
   confirmVariant?: 'default' | 'outline';
 }) {
   return (
     <>
-      <Button type="button" variant="outline" onClick={onCancel}>
+      <Button type="button" variant="outline" onClick={onCancel} disabled={confirmLoading}>
         {cancelLabel}
       </Button>
-      <Button type="button" variant={confirmVariant} onClick={onConfirm} disabled={confirmDisabled}>
+      <Button
+        type="button"
+        variant={confirmVariant}
+        onClick={onConfirm}
+        disabled={confirmDisabled}
+        loading={confirmLoading}
+        loadingLabel={confirmLabel}
+      >
         {confirmLabel}
       </Button>
     </>

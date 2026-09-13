@@ -13,7 +13,9 @@ import {
   FieldError,
   Input,
   Label,
+  PageHeader,
 } from '@vaultstack/ui';
+import { CalendarClock } from 'lucide-react';
 import type { BackupTargetName, PublicBackupSchedule } from '@vaultstack/types';
 import { createBackupScheduleBodySchema, parseForm, updateBackupScheduleBodySchema } from '@vaultstack/validation';
 import { apiClient } from '../../lib/api.js';
@@ -110,27 +112,28 @@ export function BackupsSchedulesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold text-slate-900">Backup schedules</h2>
-          <p className="text-sm text-slate-500">Interval, targets, and retention policy.</p>
-        </div>
-        {canCreateBackups(permissions) ? (
-          <Button
-            type="button"
-            onClick={() => {
-              setEditId(undefined);
-              setName('nightly');
-              setIntervalMinutes('1440');
-              setRetentionDays('14');
-              setSelected(['VAULTSTACK_METADATA']);
-              setOpen(true);
-            }}
-          >
-            Create schedule
-          </Button>
-        ) : null}
-      </div>
+      <PageHeader
+        title="Backup schedules"
+        description="Interval, targets, and retention policy."
+        icon={<CalendarClock className="h-5 w-5" aria-hidden="true" />}
+        actions={
+          canCreateBackups(permissions) ? (
+            <Button
+              type="button"
+              onClick={() => {
+                setEditId(undefined);
+                setName('nightly');
+                setIntervalMinutes('1440');
+                setRetentionDays('14');
+                setSelected(['VAULTSTACK_METADATA']);
+                setOpen(true);
+              }}
+            >
+              Create schedule
+            </Button>
+          ) : null
+        }
+      />
       {error ? <EmptyState title="Unable to load schedules" description={error} /> : null}
 
       <Card>

@@ -1,5 +1,6 @@
 import type { InitiatedUpload } from '@vaultstack/types';
 import { ApiClientError } from './errors.js';
+import type { HttpFetch } from './http.js';
 
 export interface UploadProgressEvent {
   loaded: number;
@@ -10,12 +11,62 @@ export interface UploadProgressEvent {
 export interface UploadWithProgressOptions {
   onProgress?: (event: UploadProgressEvent) => void;
   signal?: AbortSignal;
+  fetchImpl?: HttpFetch;
+  headers?: Record<string, string>;
 }
+
+export type UploadBody = Blob | Uint8Array | ReadableStream<Uint8Array> | string;
 
 export interface UploadTransferResult {
   etag?: string;
   size?: number;
   checksumSha256?: string;
+}
+
+export async function uploadBytes(
+  initiated: InitiatedUpload,
+  body: UploadBody,
+  options: UploadWithProgressOptions = {},
+): Promise<UploadTransferResult> {
+  if (
+    options.onProgress &&
+    typeof XMLHttpRequest !== 'undefined' &&
+    typeof Blob !== 'undefined' &&
+    body instanceof Blob
+  ) {
+    return uploadBlobWithProgress(initiated, body, options);
+  }
+
+  const fetchImpl =
+    options.fetchImpl ??
+    (async (input, init) => {
+      const response = await fetch(input, init as RequestInit);
+      return {
+        ok: response.ok,
+        status: response.status,
+        statusText: response.statusText,
+        json: () => response.json(),
+      };
+    });
+  const headers: Record<string, string> = { ...initiated.headers, ...options.headers };
+  if (!headers['Content-Type'] && !headers['content-type']) {
+    headers['Content-Type'] = 'application/octet-stream';
+  }
+  const response = await fetchImpl(initiated.uploadUrl, {
+    method: initiated.method,
+    headers,
+    body,
+    credentials: 'omit',
+  });
+  if (!response.ok) {
+    throw new ApiClientError(
+      'STORAGE_UPLOAD_FAILED',
+      response.statusText ?? 'Upload failed',
+      response.status,
+    );
+  }
+  options.onProgress?.({ loaded: 0, total: 0, percent: 100 });
+  return {};
 }
 
 export function uploadBlobWithProgress(

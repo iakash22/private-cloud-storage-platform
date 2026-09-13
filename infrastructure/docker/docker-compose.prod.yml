@@ -286,6 +286,52 @@ services:
           cpus: '1.00'
           memory: 512M
 
+  preview-worker:
+    build:
+      context: ${VAULTSTACK_BUILD_CONTEXT:-../..}
+      dockerfile: Dockerfile
+      target: preview-worker
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      WORKER_ROLE: preview
+      DATABASE_URL_FILE: /run/secrets/database_url
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      STORAGE_DRIVER: local
+      STORAGE_LOCAL_ROOT: /data
+      S3_ALLOW_PRIVATE_ENDPOINTS: ${S3_ALLOW_PRIVATE_ENDPOINTS:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    secrets:
+      - database_url
+      - jwt_secret
+    volumes:
+      - vaultstack_data:/data
+    networks:
+      - private
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ['CMD-SHELL', 'kill -0 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '2.00'
+          memory: 1G
+
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped

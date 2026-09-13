@@ -25,23 +25,23 @@ import {
   formatDate,
   Input,
   Label,
+  PageHeader,
+  Progress,
+  Select,
 } from '@vaultstack/ui';
-import { createBuildBodySchema, initiateArtifactBodySchema, parseForm, updateProjectBodySchema } from '@vaultstack/validation';
+import { Package } from 'lucide-react';
+import {
+  createBuildBodySchema,
+  initiateArtifactBodySchema,
+  parseForm,
+  updateProjectBodySchema,
+} from '@vaultstack/validation';
 import { useAuth } from '../../context/auth-context.js';
 import { apiClient } from '../../lib/api.js';
-import {
-  canDeleteArtifacts,
-  canUploadArtifacts,
-} from '../../lib/dashboard-permissions.js';
+import { canDeleteArtifacts, canUploadArtifacts } from '../../lib/dashboard-permissions.js';
 import { useFormSubmit } from '../../lib/form-errors.js';
 
-const BUILD_STATUSES: BuildStatusName[] = [
-  'QUEUED',
-  'RUNNING',
-  'SUCCEEDED',
-  'FAILED',
-  'CANCELED',
-];
+const BUILD_STATUSES: BuildStatusName[] = ['QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED', 'CANCELED'];
 
 const ARTIFACT_KINDS: ArtifactKindName[] = [
   'GENERIC',
@@ -57,7 +57,7 @@ export function ArtifactsProjectPage() {
   const { permissions } = useAuth();
   const canUpload = canUploadArtifacts(permissions);
   const canDelete = canDeleteArtifacts(permissions);
-  const { fieldErrors, validate, catchError } = useFormSubmit();
+  const { fieldErrors, validate, catchError, toastSuccess } = useFormSubmit();
   const [project, setProject] = useState<PublicProject | null>(null);
   const [builds, setBuilds] = useState<PublicBuild[]>([]);
   const [artifacts, setArtifacts] = useState<PublicArtifact[]>([]);
@@ -80,6 +80,8 @@ export function ArtifactsProjectPage() {
   const [versionLabel, setVersionLabel] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadLoaded, setUploadLoaded] = useState(0);
 
   const refresh = useCallback(async () => {
     if (!projectId) {
@@ -174,6 +176,8 @@ export function ArtifactsProjectPage() {
       return;
     }
     setUploading(true);
+    setUploadProgress(0);
+    setUploadLoaded(0);
     const body = validate(
       parseForm(initiateArtifactBodySchema, {
         name: artifactName.trim() || file.name,
@@ -199,12 +203,23 @@ export function ArtifactsProjectPage() {
           headers: initiated.headers,
         },
         file,
+        {
+          onProgress: (event) => {
+            setUploadProgress(event.percent);
+            setUploadLoaded(event.loaded);
+          },
+        },
       );
+      setUploadProgress(100);
+      setUploadLoaded(file.size);
       await apiClient.completeArtifactUpload(initiated.version.id);
+      toastSuccess(`Uploaded ${file.name}`);
       setUploadOpen(false);
       setArtifactName('');
       setVersionLabel('');
       setFile(null);
+      setUploadProgress(0);
+      setUploadLoaded(0);
       await refresh();
     } catch (caught) {
       catchError(caught);
@@ -237,29 +252,32 @@ export function ArtifactsProjectPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <Link className="text-sm text-slate-500 hover:underline" to="/artifacts">
-            ← Projects
-          </Link>
-          <h2 className="text-2xl font-semibold text-slate-900">{project?.name ?? 'Project'}</h2>
-          <p className="text-sm text-slate-500">
-            {project?.slug}
-            {project?.retentionDays ? ` · retain ${project.retentionDays}d` : ''}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {canUpload ? (
-            <>
-              <Button type="button" variant="outline" onClick={() => setEditOpen(true)}>
-                Edit project
-              </Button>
-              <Button type="button" onClick={() => setBuildOpen(true)}>
-                New build
-              </Button>
-            </>
-          ) : null}
-        </div>
+      <div className="space-y-2">
+        <Link className="text-sm text-slate-500 hover:underline" to="/artifacts">
+          ← Projects
+        </Link>
+        <PageHeader
+          title={project?.name ?? 'Project'}
+          description={[
+            project?.slug,
+            project?.retentionDays ? `retain ${project.retentionDays}d` : null,
+          ]
+            .filter(Boolean)
+            .join(' · ') || undefined}
+          icon={<Package className="h-5 w-5" aria-hidden="true" />}
+          actions={
+            canUpload ? (
+              <>
+                <Button type="button" variant="outline" onClick={() => setEditOpen(true)}>
+                  Edit project
+                </Button>
+                <Button type="button" onClick={() => setBuildOpen(true)}>
+                  New build
+                </Button>
+              </>
+            ) : null
+          }
+        />
       </div>
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
@@ -303,9 +321,7 @@ export function ArtifactsProjectPage() {
                     <p className="text-sm text-slate-500">
                       {selectedBuild.title ?? 'Untitled'}
                       {selectedBuild.gitRef ? ` · ${selectedBuild.gitRef}` : ''}
-                      {selectedBuild.commitSha
-                        ? ` · ${selectedBuild.commitSha.slice(0, 12)}`
-                        : ''}
+                      {selectedBuild.commitSha ? ` · ${selectedBuild.commitSha.slice(0, 12)}` : ''}
                     </p>
                   </div>
                   <Badge>{selectedBuild.status}</Badge>
@@ -315,18 +331,17 @@ export function ArtifactsProjectPage() {
                     <Label htmlFor="build-status" className="sr-only">
                       Build status
                     </Label>
-                    <select
+                    <Select
                       id="build-status"
-                      className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm"
+                      aria-label="Build status"
+                      className="w-auto min-w-[10rem]"
                       value={selectedBuild.status}
-                      onChange={(event) => void handleStatus(event.target.value as BuildStatusName)}
-                    >
-                      {BUILD_STATUSES.map((status) => (
-                        <option key={status} value={status}>
-                          {status}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(value) => void handleStatus(value as BuildStatusName)}
+                      options={BUILD_STATUSES.map((status) => ({
+                        value: status,
+                        label: status,
+                      }))}
+                    />
                     <Button type="button" onClick={() => setUploadOpen(true)}>
                       Upload artifact
                     </Button>
@@ -469,13 +484,25 @@ export function ArtifactsProjectPage() {
         }
       >
         <div className="space-y-3">
+          <p className="text-sm text-slate-500">
+            Git ref and commit SHA are optional. Artifact bytes go to the automatic
+            <span className="font-medium"> vs-artifacts</span> bucket.
+          </p>
           <div>
             <Label htmlFor="build-title">Title</Label>
-            <Input id="build-title" value={title} onChange={(event) => setTitle(event.target.value)} />
+            <Input
+              id="build-title"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+            />
           </div>
           <div>
             <Label htmlFor="build-ref">Git ref</Label>
-            <Input id="build-ref" value={gitRef} onChange={(event) => setGitRef(event.target.value)} />
+            <Input
+              id="build-ref"
+              value={gitRef}
+              onChange={(event) => setGitRef(event.target.value)}
+            />
           </div>
           <div>
             <Label htmlFor="build-sha">Commit SHA</Label>
@@ -542,14 +569,26 @@ export function ArtifactsProjectPage() {
         title="Upload artifact"
         footer={
           <DialogActions
-            confirmLabel={uploading ? 'Uploading…' : 'Upload'}
-            confirmDisabled={!file || uploading}
+            confirmLabel="Upload"
+            confirmDisabled={!file}
+            confirmLoading={uploading}
             onCancel={() => setUploadOpen(false)}
-            onConfirm={() => void handleUpload()}
+            onConfirm={() => handleUpload()}
           />
         }
       >
         <div className="space-y-3">
+          <p className="text-sm text-slate-500">
+            Uploads use the automatic <span className="font-medium">vs-artifacts</span> bucket.{' '}
+            <a
+              className="text-slate-900 underline"
+              href="/docs/usage/sdk-client.md"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Use from your app
+            </a>
+          </p>
           <div>
             <Label htmlFor="artifact-name">Name</Label>
             <Input
@@ -563,18 +602,13 @@ export function ArtifactsProjectPage() {
           </div>
           <div>
             <Label htmlFor="artifact-kind">Kind</Label>
-            <select
+            <Select
               id="artifact-kind"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              aria-label="Kind"
               value={artifactKind}
-              onChange={(event) => setArtifactKind(event.target.value as ArtifactKindName)}
-            >
-              {ARTIFACT_KINDS.map((kind) => (
-                <option key={kind} value={kind}>
-                  {kind}
-                </option>
-              ))}
-            </select>
+              onChange={(value) => setArtifactKind(value as ArtifactKindName)}
+              options={ARTIFACT_KINDS.map((kind) => ({ value: kind, label: kind }))}
+            />
           </div>
           <div>
             <Label htmlFor="artifact-label">Version label</Label>
@@ -591,9 +625,22 @@ export function ArtifactsProjectPage() {
             <Input
               id="artifact-file"
               type="file"
+              disabled={uploading}
               onChange={(event) => setFile(event.target.files?.[0] ?? null)}
             />
           </div>
+          {uploading || uploadProgress > 0 ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
+                <span>
+                  {formatBytes(uploadLoaded)}
+                  {file ? ` / ${formatBytes(file.size)}` : ''}
+                </span>
+                <span>{uploadProgress}%</span>
+              </div>
+              <Progress value={uploadProgress} />
+            </div>
+          ) : null}
         </div>
       </Dialog>
 

@@ -1183,6 +1183,52 @@ paths:
         '200':
           description: Short-lived download URL with token
 
+  /api/v1/storage/objects/{objectId}/previews:
+    parameters:
+      - $ref: '#/components/parameters/objectId'
+    post:
+      tags: [Storage]
+      summary: Queue an archive or Office preview
+      operationId: createPreviewJob
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind]
+              properties:
+                kind:
+                  type: string
+                  enum: [ARCHIVE, OFFICE]
+      responses:
+        '202':
+          description: Preview job queued
+
+  /api/v1/storage/previews/{jobId}:
+    parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Storage]
+      summary: Get preview job status and result
+      operationId: getPreviewJob
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Preview job
+        '404':
+          description: Preview job not found
+
   /api/v1/storage/objects/{objectId}/shares:
     parameters:
       - $ref: '#/components/parameters/objectId'
@@ -1327,6 +1373,31 @@ paths:
       responses:
         '200':
           description: VaultStack-signed download URL (no provider credentials)
+
+  /api/v1/public/shares/{token}/preview-url:
+    parameters:
+      - $ref: '#/components/parameters/shareToken'
+    post:
+      tags: [Sharing]
+      summary: Issue a short-lived preview URL for a view-enabled share
+      operationId: createPublicSharePreviewUrl
+      security: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+                accessToken:
+                  type: string
+      responses:
+        '200':
+          description: VaultStack-signed preview URL; does not consume a download limit
+        '403':
+          description: Share does not allow viewing
 
   /api/v1/organizations/{organizationId}/teams/{teamId}/members:
     parameters:

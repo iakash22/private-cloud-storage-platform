@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, formatBytes } from '@vaultstack/ui';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, formatBytes, PageHeader } from '@vaultstack/ui';
+import { Disc3 } from 'lucide-react';
 import type { PublicDiskMetrics } from '@vaultstack/types';
 import { apiClient } from '../../lib/api.js';
 
@@ -22,15 +23,16 @@ export function InfrastructureDisksPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold text-slate-900">Disks</h2>
-          <p className="text-sm text-slate-500">Physical filesystems and the storage root via statfs.</p>
-        </div>
-        <Button type="button" variant="outline" onClick={() => void refresh()}>
-          Refresh
-        </Button>
-      </div>
+      <PageHeader
+        title="Disks"
+        description="Physical filesystems and the storage root via statfs."
+        icon={<Disc3 className="h-5 w-5" aria-hidden="true" />}
+        actions={
+          <Button type="button" variant="outline" loadingLabel="Refreshing…" onClick={() => refresh()}>
+            Refresh
+          </Button>
+        }
+      />
       {error ? <EmptyState title="Unable to load disks" description={error} /> : null}
       <Card>
         <CardHeader>

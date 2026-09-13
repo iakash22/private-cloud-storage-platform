@@ -40,6 +40,7 @@ erDiagram
     Organization ||--o{ BackupSnapshot : "owns"
     Organization ||--o{ BackupJobLog : "owns"
     Organization ||--o{ BackupRestoreJob : "owns"
+    Organization ||--o{ PreviewJob : "owns"
 
     Team ||--o{ TeamMember : "has"
     Team ||--o{ ShareLink : "receives"
@@ -69,6 +70,7 @@ erDiagram
     StorageObject ||--o{ ObjectVersion : "versioned_as"
     StorageObject ||--o{ ShareLink : "shared_via"
     StorageObject ||--o{ ArtifactVersion : "holds_bytes"
+    StorageObject ||--o{ PreviewJob : "previews"
     StorageObject }o..o| ObjectVersion : "currentVersionId (logical)"
 
     Project ||--o{ Build : "has"

@@ -69,6 +69,45 @@ Download URL response: short-lived `GET` URL (token or provider-native), same id
 2. **Storage → Buckets** — Create bucket (name only if single provider).
 3. **Storage → Files** — upload/list objects in a bucket.
 
+## MinIO setup
+
+MinIO is optional in development and is not required by the local filesystem
+backend:
+
+```bash
+docker compose -f infrastructure/docker/docker-compose.dev.yml --profile minio up -d
+```
+
+Then add a provider with:
+
+```json
+{
+  "name": "Local MinIO",
+  "dialect": "MINIO",
+  "endpoint": "http://localhost:9000",
+  "region": "us-east-1",
+  "bucket": "vaultstack",
+  "forcePathStyle": true,
+  "tls": false,
+  "accessKeyId": "vaultstack_minio",
+  "secretAccessKey": "<MINIO_ROOT_PASSWORD>"
+}
+```
+
+Use the API key from **Access → API keys** for REST calls. Provider credentials
+are accepted only by the server and are never returned to the browser:
+
+```bash
+curl -X POST "$VS_API/api/v1/storage/providers" \
+  -H "Authorization: Bearer $VS_KEY" \
+  -H "Content-Type: application/json" \
+  -d @minio-provider.json
+```
+
+After the provider is saved, create a VaultStack logical bucket and select the
+MinIO provider. The logical bucket name is separate from MinIO's physical
+bucket. For AWS SDK or `aws-cli` access, use the optional S3 gateway guide.
+
 ## Test
 
 - [examples/02-storage-upload.sh](./examples/02-storage-upload.sh)

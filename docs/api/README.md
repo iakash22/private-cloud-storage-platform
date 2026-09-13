@@ -2,7 +2,9 @@
 
 All business APIs are served under `/api/v1`.
 
-**How to use VaultStack from apps/CI** (connectivity, per-feature routes, curl tests): see [`../usage/README.md`](../usage/README.md).
+**How to use VaultStack from apps/CI** (dashboard, SDK client, routes, and
+curl tests): see [`../usage/README.md`](../usage/README.md) and the
+[`../usage/sdk-client.md`](../usage/sdk-client.md) guide.
 
 Infrastructure probes remain at `/health` and `/ready` (also mirrored at `/api/v1/health` and `/api/v1/ready`).
 
@@ -157,6 +159,8 @@ Objects:
 - `GET    /api/v1/storage/buckets/:bucketId/objects` — `storage.read` (`prefix`, `delimiter`, `limit`, `cursor`)
 - `GET    /api/v1/storage/objects/:objectId` — `storage.read`
 - `POST   /api/v1/storage/objects/:objectId/download-url` — `storage.read` (optional `versionId`)
+- `POST   /api/v1/storage/objects/:objectId/previews` — queue bounded archive or Office preview
+- `GET    /api/v1/storage/previews/:jobId` — preview job status/result
 - `DELETE /api/v1/storage/objects/:objectId` — `storage.delete` (delete marker when versioning is enabled; `?versionId=` permanently deletes that version)
 - `GET    /api/v1/storage/objects/:objectId/versions` — `storage.read`
 - `GET    /api/v1/storage/objects/:objectId/versions/:versionId` — `storage.read`
@@ -188,6 +192,8 @@ Public consumption (optional session for private/team/org shares):
 - `GET  /api/v1/public/shares/:token` — inspect; `{ passwordRequired: true }` when locked
 - `POST /api/v1/public/shares/:token/unlock` — password; rate-limited
 - `POST /api/v1/public/shares/:token/download-url` — short-lived `GET /storage/objects/:id/content?token=`
+- `POST /api/v1/public/shares/:token/preview-url` — short-lived view URL for
+  `allowView` shares; does not consume a download limit
 
 Share error codes: `SHARE_LINK_NOT_FOUND`, `SHARE_LINK_EXPIRED`, `SHARE_LINK_REVOKED`, `SHARE_PASSWORD_REQUIRED`, `SHARE_PASSWORD_INVALID`, `SHARE_DOWNLOAD_LIMIT_REACHED`, `SHARE_ACCESS_DENIED`.
 

@@ -30,6 +30,8 @@ import { bindCookieManager } from '../lib/cookies.js';
 import { CookieManager } from '../lib/cookie.manager.js';
 import { BACKUP_QUEUE_NAME, enqueueBackupPayload } from '../workers/backup.worker.js';
 import type { MetricsRecorder } from '../observability/metrics.js';
+import { PREVIEW_QUEUE_NAME, PreviewService } from '../modules/previews/preview.service.js';
+import { enqueuePreviewPayload } from '../workers/preview.worker.js';
 
 export interface AppServices {
   sessions: SessionManager;
@@ -47,6 +49,7 @@ export interface AppServices {
   backups: BackupsService;
   infrastructure: InfrastructureService;
   s3Credentials: S3CredentialService;
+  previews: PreviewService;
 }
 
 /**
@@ -71,6 +74,7 @@ export class AppContainer {
   readonly backups: BackupsService;
   readonly infrastructure: InfrastructureService;
   readonly s3Credentials: S3CredentialService;
+  readonly previews: PreviewService;
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -105,6 +109,26 @@ export class AppContainer {
       authorization: this.authorization,
       metrics,
     });
+    const previewQueue =
+      config.NODE_ENV === 'test'
+        ? null
+        : new Queue(PREVIEW_QUEUE_NAME, {
+            connection: new Redis(config.REDIS_URL, { maxRetriesPerRequest: null, lazyConnect: true }),
+          });
+    this.previews = new PreviewService(
+      prisma,
+      this.storage.objects,
+      async (payload) => {
+        if (config.NODE_ENV === 'test') {
+          await this.previews.process(payload.jobId);
+          return;
+        }
+        if (previewQueue) {
+          await enqueuePreviewPayload(previewQueue, payload);
+        }
+      },
+      logger,
+    );
     this.artifacts = new ArtifactsService(prisma, this.storage);
     this.backups = this.createBackupsService(prisma, config, logger);
     this.infrastructure = InfrastructureService.create(prisma, this.storage, config, logger);
@@ -151,6 +175,7 @@ export function createServices(
     backups: container.backups,
     infrastructure: container.infrastructure,
     s3Credentials: container.s3Credentials,
+    previews: container.previews,
   };
 }
 

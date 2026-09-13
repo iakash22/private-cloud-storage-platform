@@ -1,44 +1,48 @@
-import { NavLink, Outlet } from 'react-router-dom';
-import { cn } from '@vaultstack/ui';
+import { NavLink } from 'react-router-dom';
+import {
+  BookOpen,
+  Database,
+  FileBox,
+  FolderOpen,
+  HardDrive,
+  ScrollText,
+  Share2,
+  Trash2,
+} from 'lucide-react';
+import { SectionShell } from '../../components/section-shell.js';
+import { sectionNavClass } from '../../lib/section-nav.js';
 
 const navItems: {
   to: string;
   label: string;
+  icon: typeof HardDrive;
   end?: boolean;
 }[] = [
-  { to: '/storage', label: 'Overview', end: true },
-  { to: '/storage/files', label: 'Files' },
-  { to: '/storage/buckets', label: 'Buckets' },
-  { to: '/storage/providers', label: 'Providers' },
-  { to: '/storage/shares', label: 'Shares' },
-  { to: '/storage/policies', label: 'Policies' },
-  { to: '/storage/usage', label: 'Usage' },
-  { to: '/storage/trash', label: 'Trash' },
+  { to: '/storage', label: 'Overview', icon: HardDrive, end: true },
+  { to: '/storage/files', label: 'Files', icon: FolderOpen },
+  { to: '/storage/buckets', label: 'Buckets', icon: Database },
+  { to: '/storage/providers', label: 'Providers', icon: FileBox },
+  { to: '/storage/shares', label: 'Shares', icon: Share2 },
+  { to: '/storage/policies', label: 'Policies', icon: ScrollText },
+  { to: '/storage/usage', label: 'Usage', icon: BookOpen },
+  { to: '/storage/trash', label: 'Trash', icon: Trash2 },
 ];
 
 export function StorageLayout() {
   return (
-    <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
-      <aside aria-label="Storage navigation" className="space-y-2">
-        {navItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            className={({ isActive }) =>
-              cn(
-                'flex items-center rounded-md px-3 py-2 text-sm font-medium transition',
-                isActive ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100',
-              )
-            }
-          >
-            {item.label}
-          </NavLink>
-        ))}
-      </aside>
-      <main className="min-w-0">
-        <Outlet />
-      </main>
-    </div>
+    <SectionShell
+      label="Storage navigation"
+      nav={navItems.map((item) => (
+        <NavLink
+          key={item.to}
+          to={item.to}
+          end={item.end}
+          className={({ isActive }) => sectionNavClass(isActive)}
+        >
+          <item.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+          {item.label}
+        </NavLink>
+      ))}
+    />
   );
 }

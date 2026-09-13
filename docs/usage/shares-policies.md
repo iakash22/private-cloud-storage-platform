@@ -17,23 +17,24 @@ Permission: `storage.share`.
 
 ## Routes — share management (authenticated)
 
-| Method | Path |
-| --- | --- |
-| `POST` | `/api/v1/storage/objects/:objectId/shares` |
-| `GET` | `/api/v1/storage/shares` (`?objectId=`) |
-| `GET` | `/api/v1/storage/shares/:shareId` |
-| `PATCH` | `/api/v1/storage/shares/:shareId` |
-| `DELETE` | `/api/v1/storage/shares/:shareId` |
+| Method   | Path                                       |
+| -------- | ------------------------------------------ |
+| `POST`   | `/api/v1/storage/objects/:objectId/shares` |
+| `GET`    | `/api/v1/storage/shares` (`?objectId=`)    |
+| `GET`    | `/api/v1/storage/shares/:shareId`          |
+| `PATCH`  | `/api/v1/storage/shares/:shareId`          |
+| `DELETE` | `/api/v1/storage/shares/:shareId`          |
 
 Create supports visibility `PRIVATE` | `TEAM` | `ORGANIZATION` | `PUBLIC_LINK`, optional password, viewer/download flags, download limit, expiration.
 
 ## Routes — public share consumption
 
-| Method | Path |
-| --- | --- |
-| `GET` | `/api/v1/public/shares/:token` |
-| `POST` | `/api/v1/public/shares/:token/unlock` |
+| Method | Path                                        |
+| ------ | ------------------------------------------- |
+| `GET`  | `/api/v1/public/shares/:token`              |
+| `POST` | `/api/v1/public/shares/:token/unlock`       |
 | `POST` | `/api/v1/public/shares/:token/download-url` |
+| `POST` | `/api/v1/public/shares/:token/preview-url`  |
 
 Password unlock is rate-limited. Download returns a short-lived `GET …/objects/:id/content?token=`.
 
@@ -43,21 +44,27 @@ Error codes: `SHARE_LINK_NOT_FOUND`, `SHARE_LINK_EXPIRED`, `SHARE_LINK_REVOKED`,
 
 Provider-independent rules evaluated by the storage worker.
 
-| Method | Path | Permission |
-| --- | --- | --- |
-| `GET` | `/api/v1/storage/policies` | `storage.read` |
-| `POST` | `/api/v1/storage/policies` | `storage.upload` |
-| `GET` | `/api/v1/storage/policies/:policyId` | `storage.read` |
-| `PATCH` | `/api/v1/storage/policies/:policyId` | `storage.upload` |
+| Method   | Path                                 | Permission       |
+| -------- | ------------------------------------ | ---------------- |
+| `GET`    | `/api/v1/storage/policies`           | `storage.read`   |
+| `POST`   | `/api/v1/storage/policies`           | `storage.upload` |
+| `GET`    | `/api/v1/storage/policies/:policyId` | `storage.read`   |
+| `PATCH`  | `/api/v1/storage/policies/:policyId` | `storage.upload` |
 | `DELETE` | `/api/v1/storage/policies/:policyId` | `storage.delete` |
 
 Policy types: `EXPIRE_CURRENT`, `EXPIRE_NONCURRENT`, `ABORT_INCOMPLETE_MULTIPART`, `EXPIRE_TEMPORARY`.
 
 ## Dashboard
 
-- **Storage → Shares** — manage links  
-- **Storage → Policies** — lifecycle rules  
+- **Storage → Shares** — manage links
+- **Storage → Policies** — lifecycle rules
 - Public consumers open the share URL / token flow without a full dashboard login when `PUBLIC_LINK` is used.
+
+Share inspect, preview, and download-url requests are recorded in the
+organization audit log with share/object identifiers, request id, user-agent,
+and proxy-derived IP address where available. Raw share tokens, passwords,
+signed URLs, and file contents are never recorded. Preview URLs do not consume
+download limits; download URLs do.
 
 ## Test
 

@@ -4,13 +4,16 @@ import {
   DEFAULT_MULTIPART_CONCURRENCY,
   type MultipartUploadController,
 } from '@vaultstack/api-client';
-import type { UploadItem } from '@vaultstack/ui';
+import { useToast, type UploadItem } from '@vaultstack/ui';
 import { apiClient } from '../lib/api.js';
+import {
+  MULTIPART_SESSION_STORAGE_KEY,
+  onSessionCleared,
+} from '../lib/session-events.js';
 import { buildObjectKey } from '../lib/storage-preferences.js';
 
 export const MULTIPART_THRESHOLD_BYTES = 8 * 1024 * 1024;
 export const MAX_CONCURRENT_FILES = 2;
-const SESSION_STORAGE_KEY = 'vaultstack:multipart-sessions';
 
 interface UploadRequest {
   id: string;
@@ -37,7 +40,7 @@ function fileFingerprint(file: Pick<File, 'name' | 'size' | 'lastModified'>): st
 
 function readPersistedSessions(): PersistedMultipartSession[] {
   try {
-    const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+    const raw = localStorage.getItem(MULTIPART_SESSION_STORAGE_KEY);
     return raw ? (JSON.parse(raw) as PersistedMultipartSession[]) : [];
   } catch {
     return [];
@@ -45,16 +48,19 @@ function readPersistedSessions(): PersistedMultipartSession[] {
 }
 
 function writePersistedSessions(sessions: PersistedMultipartSession[]): void {
-  localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessions));
+  localStorage.setItem(MULTIPART_SESSION_STORAGE_KEY, JSON.stringify(sessions));
 }
 
 export function useUploadQueue(options: { onComplete?: () => void } = {}) {
+  const toast = useToast();
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const abortControllers = useRef(new Map<string, AbortController>());
   const multipartControllers = useRef(new Map<string, MultipartUploadController>());
   const pendingRetries = useRef(new Map<string, UploadRequest>());
   const activeFiles = useRef(0);
   const waiting = useRef<UploadRequest[]>([]);
+  const onCompleteRef = useRef(options.onComplete);
+  onCompleteRef.current = options.onComplete;
 
   const updateUpload = useCallback((id: string, patch: Partial<UploadItem>) => {
     setUploads((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
@@ -75,6 +81,7 @@ export function useUploadQueue(options: { onComplete?: () => void } = {}) {
           fileName: session.fileName,
           size: session.fileSize,
           progress: 0,
+          loaded: 0,
           status: 'awaiting-file',
           error: 'Re-select the original file to resume this upload',
         }));
@@ -104,6 +111,23 @@ export function useUploadQueue(options: { onComplete?: () => void } = {}) {
     writePersistedSessions(readPersistedSessions().filter((session) => session.queueId !== queueId));
   }, []);
 
+  const clearQueueState = useCallback(() => {
+    for (const controller of multipartControllers.current.values()) {
+      controller.cancel();
+    }
+    for (const abort of abortControllers.current.values()) {
+      abort.abort();
+    }
+    multipartControllers.current.clear();
+    abortControllers.current.clear();
+    pendingRetries.current.clear();
+    waiting.current = [];
+    activeFiles.current = 0;
+    setUploads([]);
+  }, []);
+
+  useEffect(() => onSessionCleared(clearQueueState), [clearQueueState]);
+
   const uploadFile = useCallback(
     async (request: UploadRequest) => {
       const uploadId = request.id;
@@ -112,7 +136,14 @@ export function useUploadQueue(options: { onComplete?: () => void } = {}) {
       pendingRetries.current.set(uploadId, request);
       activeFiles.current += 1;
 
-      updateUpload(uploadId, { status: 'uploading', progress: 0, error: undefined });
+      updateUpload(uploadId, {
+        status: 'uploading',
+        progress: 0,
+        loaded: 0,
+        error: undefined,
+        completedParts: undefined,
+        totalParts: undefined,
+      });
 
       try {
         const key = buildObjectKey(request.prefix, request.file.name);
@@ -133,7 +164,12 @@ export function useUploadQueue(options: { onComplete?: () => void } = {}) {
             signal: abort.signal,
             controller: controllerHolder,
             onProgress: (event) => {
-              updateUpload(uploadId, { progress: event.percent });
+              updateUpload(uploadId, {
+                progress: event.percent,
+                loaded: event.loaded,
+                completedParts: event.completedParts,
+                totalParts: event.totalParts,
+              });
             },
           });
           if (controllerHolder.current) {
@@ -151,18 +187,38 @@ export function useUploadQueue(options: { onComplete?: () => void } = {}) {
           await apiClient.uploadFileWithProgress(initiated, request.file, {
             signal: abort.signal,
             onProgress: (event) => {
-              updateUpload(uploadId, { progress: event.percent });
+              updateUpload(uploadId, {
+                progress: event.percent,
+                loaded: event.loaded,
+              });
             },
           });
 
-          updateUpload(uploadId, { status: 'completing', progress: 100 });
+          updateUpload(uploadId, {
+            status: 'completing',
+            progress: 100,
+            loaded: request.file.size,
+          });
           await apiClient.completeUpload(initiated.upload.id);
         }
 
         forgetSession(uploadId);
-        updateUpload(uploadId, { status: 'completed', progress: 100 });
-        options.onComplete?.();
+        updateUpload(uploadId, {
+          status: 'completed',
+          progress: 100,
+          loaded: request.file.size,
+        });
+        toast.success(`Uploaded ${request.file.name}`);
+        onCompleteRef.current?.();
       } catch (caught) {
+        if (caught instanceof ApiClientError && caught.status === 401) {
+          updateUpload(uploadId, {
+            status: 'cancelled',
+            error: 'Session expired',
+          });
+          return;
+        }
+
         const message =
           caught instanceof ApiClientError
             ? caught.message
@@ -170,10 +226,14 @@ export function useUploadQueue(options: { onComplete?: () => void } = {}) {
               ? caught.message
               : 'Upload failed';
 
+        const cancelled = message.toLowerCase().includes('cancelled');
         updateUpload(uploadId, {
-          status: message.includes('cancelled') ? 'cancelled' : 'failed',
+          status: cancelled ? 'cancelled' : 'failed',
           error: message,
         });
+        if (!cancelled) {
+          toast.error(`Upload failed: ${request.file.name}`);
+        }
       } finally {
         abortControllers.current.delete(uploadId);
         multipartControllers.current.delete(uploadId);
@@ -184,7 +244,7 @@ export function useUploadQueue(options: { onComplete?: () => void } = {}) {
         }
       }
     },
-    [forgetSession, options.onComplete, persistSession, updateUpload],
+    [forgetSession, persistSession, toast, updateUpload],
   );
 
   const startOrQueue = useCallback(
@@ -221,7 +281,13 @@ export function useUploadQueue(options: { onComplete?: () => void } = {}) {
           setUploads((current) =>
             current.map((item) =>
               item.id === match.queueId
-                ? { ...item, status: 'pending', error: undefined, progress: 0 }
+                ? {
+                    ...item,
+                    status: 'pending',
+                    error: undefined,
+                    progress: 0,
+                    loaded: 0,
+                  }
                 : item,
             ),
           );
@@ -235,6 +301,7 @@ export function useUploadQueue(options: { onComplete?: () => void } = {}) {
           fileName: file.name,
           size: file.size,
           progress: 0,
+          loaded: 0,
           status: 'pending',
         });
         startOrQueue({ id, file, bucketId, prefix });
@@ -249,6 +316,7 @@ export function useUploadQueue(options: { onComplete?: () => void } = {}) {
 
   const cancelUpload = useCallback(
     (uploadId: string) => {
+      waiting.current = waiting.current.filter((request) => request.id !== uploadId);
       multipartControllers.current.get(uploadId)?.cancel();
       abortControllers.current.get(uploadId)?.abort();
       const persisted = readPersistedSessions().find((session) => session.queueId === uploadId);
@@ -256,7 +324,7 @@ export function useUploadQueue(options: { onComplete?: () => void } = {}) {
         void apiClient.abortMultipart(persisted.uploadId).catch(() => undefined);
       }
       forgetSession(uploadId);
-      updateUpload(uploadId, { status: 'cancelled' });
+      updateUpload(uploadId, { status: 'cancelled', error: undefined });
     },
     [forgetSession, updateUpload],
   );

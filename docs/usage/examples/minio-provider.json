@@ -1,0 +1,11 @@
+{
+  "name": "Local MinIO",
+  "dialect": "MINIO",
+  "endpoint": "http://localhost:9000",
+  "region": "us-east-1",
+  "bucket": "vaultstack",
+  "forcePathStyle": true,
+  "tls": false,
+  "accessKeyId": "vaultstack_minio",
+  "secretAccessKey": "replace-with-MINIO_ROOT_PASSWORD"
+}

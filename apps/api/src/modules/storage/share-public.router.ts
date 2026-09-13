@@ -43,5 +43,13 @@ export function createSharePublicRouter(
     controller.createDownloadUrl,
   );
 
+  router.post(
+    '/shares/:token/preview-url',
+    validateParams(shareTokenParamsSchema),
+    passwordRateLimit,
+    validateBody(shareDownloadBodySchema),
+    controller.createPreviewUrl,
+  );
+
   return router;
 }

@@ -17,9 +17,13 @@
     "@vaultstack/types": "workspace:*",
     "@vaultstack/ui": "workspace:*",
     "@vaultstack/validation": "workspace:*",
+    "highlight.js": "^11.11.1",
+    "lucide-react": "^0.469.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^7.1.1"
+    "react-helmet-async": "^2.0.5",
+    "react-router-dom": "^7.1.1",
+    "recharts": "^2.15.4"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",

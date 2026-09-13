@@ -7,8 +7,10 @@ import {
   CardTitle,
   EmptyState,
   formatBytes,
+  PageHeader,
   StorageUsage,
 } from '@vaultstack/ui';
+import { BookOpen } from 'lucide-react';
 import type { PublicStorageMonitorMetrics } from '@vaultstack/types';
 import { apiClient } from '../../lib/api.js';
 import { computeUsageSummary, useBuckets } from '../../hooks/use-storage.js';
@@ -59,12 +61,11 @@ export function UsagePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold text-slate-900">Storage usage</h2>
-        <p className="text-sm text-slate-500">
-          Organization capacity from the storage collector, with object listing as a fallback.
-        </p>
-      </div>
+      <PageHeader
+        title="Storage usage"
+        description="Organization capacity from the storage collector, with object listing as a fallback."
+        icon={<BookOpen className="h-5 w-5" aria-hidden="true" />}
+      />
 
       {error ? <EmptyState title="Unable to load usage" description={error} /> : null}
 

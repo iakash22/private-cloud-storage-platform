@@ -21,6 +21,15 @@ when the host layout changes.
 **Do not** put VaultStack on Opsiva’s Redis (`6379`) or Postgres. **Do not** bind
 VaultStack HTTP to `127.0.0.1:80` (Opsiva nginx owns that).
 
+### Pending work on the server
+
+Open checklist of what is still incomplete on THANOS (permissions repair, git
+upgrade, Tunnel ports, Safe Browsing, backups, smoke tests):
+
+→ **[`thanos-pending.md`](./thanos-pending.md)**
+
+Update that file as you complete items on the host.
+
 ---
 
 ## Disk and directory layout
@@ -94,6 +103,7 @@ the dev name `vaultstack-postgres`.
 | `s3-gateway` | nginx reverse proxy to API S3 routes | healthy |
 | `backup-worker` | BullMQ backup jobs | healthy |
 | `artifact-worker` | BullMQ artifact / lifecycle jobs | healthy |
+| `preview-worker` | BullMQ archive listing and LibreOffice conversion jobs | healthy |
 | `postgres` | Metadata DB | `pg_isready` |
 | `redis` | BullMQ + cache | `PING` (auth) |
 | `caddy` | Public TLS reverse proxy (optional on THANOS) | `/healthz` |
@@ -356,9 +366,13 @@ API URL requires a dashboard rebuild.
 
 ### Rebuild only API / workers (no dashboard)
 
+Preview jobs are durable in PostgreSQL and execute in `preview-worker`. Its
+image includes LibreOffice for Office-to-PDF conversion; ZIP/TAR inspection is
+bounded and never extracts archive members into the public storage namespace.
+
 ```bash
 vs build api
-vs up -d --no-deps api backup-worker artifact-worker
+vs up -d --no-deps api backup-worker artifact-worker preview-worker
 # migrate runs as a dependency of api on full `up`; for schema-only:
 vs run --rm migrate
 ```

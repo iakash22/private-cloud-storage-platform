@@ -14,8 +14,15 @@ import {
   FieldError,
   Input,
   Label,
+  PageHeader,
+  Select,
 } from '@vaultstack/ui';
-import { createStorageProviderBodySchema, parseForm, updateStorageProviderBodySchema } from '@vaultstack/validation';
+import { CloudCog } from 'lucide-react';
+import {
+  createStorageProviderBodySchema,
+  parseForm,
+  updateStorageProviderBodySchema,
+} from '@vaultstack/validation';
 import { useAuth } from '../../context/auth-context.js';
 import { useStorageProviders } from '../../hooks/use-storage.js';
 import { apiClient } from '../../lib/api.js';
@@ -52,6 +59,8 @@ export function ProvidersPage() {
   const [forcePathStyle, setForcePathStyle] = useState(true);
   const [isDefault, setIsDefault] = useState(false);
   const [status, setStatus] = useState<'ACTIVE' | 'DEGRADED' | 'DISABLED'>('ACTIVE');
+  const editingLocalProvider =
+    providers.find((provider) => provider.id === editProviderId)?.type === 'LOCAL_FILESYSTEM';
 
   const resetForm = () => {
     setName('');
@@ -109,9 +118,11 @@ export function ProvidersPage() {
       return;
     }
     try {
-      await apiClient.createStorageProvider(body);
+      const created = await apiClient.createStorageProvider(body);
       setCreateOpen(false);
       resetForm();
+      const health = await apiClient.testStorageProvider(created.id);
+      setTestMessage(health.message);
       await refresh();
     } catch (caught) {
       catchError(caught);
@@ -166,27 +177,73 @@ export function ProvidersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold text-slate-900">Storage providers</h2>
-          <p className="text-sm text-slate-500">
-            Connect S3-compatible endpoints. Secret keys are stored encrypted and never shown again.
-          </p>
-        </div>
-        {canUploadStorage(permissions) ? (
-          <Button
-            type="button"
-            onClick={() => {
-              setCreateOpen(true);
-            }}
-          >
-            Add provider
-          </Button>
-        ) : null}
-      </div>
+      <PageHeader
+        title="Storage providers"
+        description="Connect S3-compatible endpoints. Local storage uses STORAGE_LOCAL_ROOT."
+        icon={<CloudCog className="h-5 w-5" aria-hidden="true" />}
+        actions={
+          canUploadStorage(permissions) ? (
+            <Button type="button" onClick={() => setCreateOpen(true)}>
+              Add provider
+            </Button>
+          ) : null
+        }
+      />
+      <p className="-mt-4 text-sm text-slate-500">
+        <a
+          className="text-slate-900 underline"
+          href="/docs/usage/frontend.md"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Read the usage guide
+        </a>
+      </p>
 
       {testMessage ? <p className="text-sm text-slate-600">{testMessage}</p> : null}
       {error ? <EmptyState title="Unable to load providers" description={error} /> : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Provider setup guide</CardTitle>
+          <CardDescription>
+            Provider credentials stay server-side. The browser only receives short-lived upload and
+            download URLs.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 text-sm text-slate-600 lg:grid-cols-3">
+          <div>
+            <p className="font-medium text-slate-900">Local filesystem</p>
+            <p className="mt-1">
+              Keep endpoint and keys empty. Configure <code>STORAGE_DRIVER=local</code> and{' '}
+              <code>STORAGE_LOCAL_ROOT</code> on the API host.
+            </p>
+          </div>
+          <div>
+            <p className="font-medium text-slate-900">MinIO</p>
+            <p className="mt-1">
+              Start the development profile, then use dialect <code>MINIO</code>, endpoint{' '}
+              <code>http://localhost:9000</code>, path-style addressing, and the server-side MinIO
+              credentials.
+            </p>
+          </div>
+          <div>
+            <p className="font-medium text-slate-900">API usage</p>
+            <p className="mt-1">
+              Create a bucket after saving the provider. Use the SDK for REST uploads or the
+              optional S3 gateway for AWS-compatible bucket clients.
+            </p>
+            <a
+              className="mt-2 inline-block font-medium text-slate-900 underline"
+              href="/docs/usage/storage.md"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open provider API instructions
+            </a>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -195,7 +252,7 @@ export function ProvidersPage() {
             {loading ? 'Loading providers…' : `${providers.length} providers`}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-2">
+        <CardContent className="max-h-[min(60vh,34rem)] space-y-2 overflow-y-auto overscroll-contain">
           {providers.map((provider) => (
             <div
               key={provider.id}
@@ -277,6 +334,20 @@ export function ProvidersPage() {
         }
       >
         <div className="grid gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setDialect(S3_DIALECTS.MINIO);
+              setEndpoint('http://localhost:9000');
+              setRegion('us-east-1');
+              setBucket('vaultstack');
+              setTls(false);
+              setForcePathStyle(true);
+            }}
+          >
+            Use local MinIO defaults
+          </Button>
           <div className="space-y-2">
             <Label htmlFor="provider-name">Name</Label>
             <Input
@@ -291,20 +362,18 @@ export function ProvidersPage() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="provider-dialect">Provider</Label>
-            <select
+            <Select
               id="provider-dialect"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              aria-label="Provider"
               value={dialect}
-              onChange={(event) => {
-                setDialect(event.target.value as S3DialectName);
+              onChange={(value) => {
+                setDialect(value as S3DialectName);
               }}
-            >
-              {(Object.keys(DIALECT_LABELS) as S3DialectName[]).map((value) => (
-                <option key={value} value={value}>
-                  {DIALECT_LABELS[value]}
-                </option>
-              ))}
-            </select>
+              options={(Object.keys(DIALECT_LABELS) as S3DialectName[]).map((value) => ({
+                value,
+                label: DIALECT_LABELS[value],
+              }))}
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="provider-endpoint">Endpoint</Label>
@@ -439,6 +508,7 @@ export function ProvidersPage() {
             <Input
               id="edit-provider-endpoint"
               value={endpoint}
+              disabled={editingLocalProvider}
               aria-invalid={Boolean(fieldErrors.endpoint)}
               onChange={(event) => setEndpoint(event.target.value)}
             />
@@ -449,6 +519,7 @@ export function ProvidersPage() {
             <Input
               id="edit-provider-region"
               value={region}
+              disabled={editingLocalProvider}
               onChange={(event) => setRegion(event.target.value)}
             />
           </div>
@@ -457,6 +528,7 @@ export function ProvidersPage() {
             <Input
               id="edit-provider-bucket"
               value={bucket}
+              disabled={editingLocalProvider}
               onChange={(event) => setBucket(event.target.value)}
             />
           </div>
@@ -465,6 +537,7 @@ export function ProvidersPage() {
             <Input
               id="edit-provider-access-key"
               value={accessKeyId}
+              disabled={editingLocalProvider}
               aria-invalid={Boolean(fieldErrors.accessKeyId)}
               onChange={(event) => setAccessKeyId(event.target.value)}
             />
@@ -477,6 +550,7 @@ export function ProvidersPage() {
               type="password"
               autoComplete="new-password"
               value={secretAccessKey}
+              disabled={editingLocalProvider}
               aria-invalid={Boolean(fieldErrors.secretAccessKey)}
               onChange={(event) => setSecretAccessKey(event.target.value)}
             />
@@ -484,21 +558,24 @@ export function ProvidersPage() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="edit-provider-status">Status</Label>
-            <select
+            <Select
               id="edit-provider-status"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              aria-label="Status"
               value={status}
-              onChange={(event) =>
-                setStatus(event.target.value as 'ACTIVE' | 'DEGRADED' | 'DISABLED')
-              }
-            >
-              <option value="ACTIVE">Active</option>
-              <option value="DEGRADED">Degraded</option>
-              <option value="DISABLED">Disabled</option>
-            </select>
+              onChange={(value) => setStatus(value as 'ACTIVE' | 'DEGRADED' | 'DISABLED')}
+              options={[
+                { value: 'ACTIVE', label: 'Active' },
+                { value: 'DEGRADED', label: 'Degraded' },
+                { value: 'DISABLED', label: 'Disabled' },
+              ]}
+            />
           </div>
           <label className="flex items-center gap-2 text-sm text-slate-700">
-            <input type="checkbox" checked={tls} onChange={(event) => setTls(event.target.checked)} />
+            <input
+              type="checkbox"
+              checked={tls}
+              onChange={(event) => setTls(event.target.checked)}
+            />
             Require TLS
           </label>
           <label className="flex items-center gap-2 text-sm text-slate-700">

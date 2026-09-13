@@ -9,7 +9,7 @@ import { FileUploader } from './file-uploader.js';
 import { StorageToolbar, type ViewMode } from './storage-toolbar.js';
 import type { ExplorerEntry } from './types.js';
 import { UploadProgressPanel, type UploadItem } from './upload-progress.js';
-import { Skeleton } from '../skeleton.js';
+import { FileListSkeleton } from '../skeletons.js';
 
 export interface FileExplorerProps {
   prefix: string;
@@ -159,13 +159,7 @@ export function FileExplorer({
         onResume={onResumeUpload}
       />
 
-      {loading ? (
-        <div className="space-y-2">
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-10 w-full" />
-        </div>
-      ) : null}
+      {loading ? <FileListSkeleton rows={6} /> : null}
 
       {!loading && error ? (
         <ErrorState title="Unable to load files" description={error} onRetry={onRetry} />

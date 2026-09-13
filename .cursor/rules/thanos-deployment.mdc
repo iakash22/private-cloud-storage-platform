@@ -19,6 +19,8 @@ Production host for VaultStack is **THANOS** (`thanos@thanos`), domains
 - Secrets: `/srv/vaultstack/config/secrets/`
 
 Full runbook: `docs/deployment/thanos.md`.
+Open host checklist: `docs/deployment/thanos-pending.md` (permissions repair,
+git upgrade, Tunnel, Safe Browsing, backups, smoke tests).
 
 ## Hard constraints
 

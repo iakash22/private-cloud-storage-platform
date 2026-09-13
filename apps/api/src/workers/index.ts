@@ -23,12 +23,14 @@ import {
   createBackupWorker,
   scheduleBackupMaintenance,
 } from './backup.worker.js';
+import { createPreviewQueue, createPreviewWorker } from './preview.worker.js';
 
 const config = loadEnv();
 const logger = createLogger({ name: 'api-worker', level: config.LOG_LEVEL });
 const prisma = createPrismaClient(config.DATABASE_URL);
 const container = createAppContainer(prisma, config, logger);
-const runStorageWorkers = config.WORKER_ROLE !== 'backup';
+const runStorageWorkers = config.WORKER_ROLE !== 'backup' && config.WORKER_ROLE !== 'preview';
+const runPreviewWorkers = config.WORKER_ROLE === 'all' || config.WORKER_ROLE === 'preview';
 const runBackupWorkers = config.WORKER_ROLE === 'all' || config.WORKER_ROLE === 'backup';
 
 // BullMQ requires maxRetriesPerRequest to be null on the shared connection.
@@ -41,6 +43,18 @@ const closeWorkers: (() => Promise<void>)[] = [];
 const closeQueues: (() => Promise<void>)[] = [];
 const queueNames: string[] = [];
 const schedules: (() => Promise<void>)[] = [];
+
+if (runPreviewWorkers) {
+  const previewQueue = createPreviewQueue(connection);
+  const previewWorker = createPreviewWorker({
+    connection,
+    previews: container.previews,
+    logger,
+  });
+  closeWorkers.push(() => previewWorker.close());
+  closeQueues.push(() => previewQueue.close());
+  queueNames.push(previewQueue.name);
+}
 
 if (runStorageWorkers) {
   const queue = createMultipartCleanupQueue(connection);

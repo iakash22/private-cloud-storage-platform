@@ -5,6 +5,7 @@ import { Input } from '../input.js';
 import { Label } from '../label.js';
 import { Button } from '../button.js';
 import { FieldError } from '../field-error.js';
+import { Select } from '../select.js';
 
 export interface ShareDialogCreateInput {
   visibility: ShareVisibilityName;
@@ -72,6 +73,15 @@ export function ShareDialog({
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
+      dirty={
+        Boolean(createdUrl) ||
+        visibility !== 'PUBLIC_LINK' ||
+        Boolean(teamId) ||
+        Boolean(password.trim()) ||
+        !allowView ||
+        !allowDownload ||
+        Boolean(maxDownloads.trim())
+      }
       title="Share object"
       description="Create a time-limited share without exposing storage credentials or file paths."
       footer={
@@ -141,40 +151,37 @@ export function ShareDialog({
           <>
             <div className="space-y-2">
               <Label htmlFor="share-visibility">Visibility</Label>
-              <select
+              <Select
                 id="share-visibility"
-                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                aria-label="Visibility"
                 value={visibility}
-                onChange={(event) => {
-                  setVisibility(event.target.value as ShareVisibilityName);
+                onChange={(value) => {
+                  setVisibility(value as ShareVisibilityName);
                 }}
-              >
-                <option value="PRIVATE">Private (only you)</option>
-                <option value="TEAM">Team</option>
-                <option value="ORGANIZATION">Organization</option>
-                <option value="PUBLIC_LINK">Public link</option>
-              </select>
+                options={[
+                  { value: 'PRIVATE', label: 'Private (only you)' },
+                  { value: 'TEAM', label: 'Team' },
+                  { value: 'ORGANIZATION', label: 'Organization' },
+                  { value: 'PUBLIC_LINK', label: 'Public link' },
+                ]}
+              />
             </div>
 
             {visibility === 'TEAM' ? (
               <div className="space-y-2">
                 <Label htmlFor="share-team">Team</Label>
-                <select
+                <Select
                   id="share-team"
-                  className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                  aria-label="Team"
                   value={teamId}
                   aria-invalid={Boolean(fieldErrors.teamId)}
-                  onChange={(event) => {
-                    setTeamId(event.target.value);
-                  }}
-                >
-                  <option value="">Select a team</option>
-                  {teams.map((team) => (
-                    <option key={team.id} value={team.id}>
-                      {team.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setTeamId}
+                  placeholder="Select a team"
+                  options={[
+                    { value: '', label: 'Select a team' },
+                    ...teams.map((team) => ({ value: team.id, label: team.name })),
+                  ]}
+                />
                 <FieldError message={fieldErrors.teamId} />
               </div>
             ) : null}

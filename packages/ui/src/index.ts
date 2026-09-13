@@ -1,11 +1,23 @@
 export { Button, buttonVariants, type ButtonProps } from './components/button.js';
 export { Card, CardContent, CardDescription, CardHeader, CardTitle } from './components/card.js';
+export { PageHeader, type PageHeaderProps } from './components/page-header.js';
+export { PageLoader } from './components/page-loader.js';
+export { CalendarRange, type CalendarRangeProps } from './components/calendar-range.js';
+export { DateField, type DateFieldProps } from './components/date-field.js';
+export { Select, type SelectOption, type SelectProps } from './components/select.js';
 export { Input } from './components/input.js';
 export { Label } from './components/label.js';
-export { FieldError } from './components/field-error.js';
+export { FieldError, FormField } from './components/field-error.js';
 export { Badge } from './components/badge.js';
-export { Progress } from './components/progress.js';
+export { Progress, type ProgressProps } from './components/progress.js';
 export { Skeleton } from './components/skeleton.js';
+export {
+  MetricCardsSkeleton,
+  FileListSkeleton,
+  CardSkeleton,
+  PageSkeleton,
+} from './components/skeletons.js';
+export { useSmoothNumber } from './hooks/use-smooth-number.js';
 export { Dialog, DialogActions, type DialogProps } from './components/dialog.js';
 export { ToastProvider, useToast, type ToastApi, type ToastTone } from './components/toast.js';
 export { cn } from './lib/utils.js';

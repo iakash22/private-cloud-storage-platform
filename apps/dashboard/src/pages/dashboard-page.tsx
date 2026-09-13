@@ -10,8 +10,12 @@ import {
   CardHeader,
   CardTitle,
   EmptyState,
+  MetricCardsSkeleton,
+  CardSkeleton,
+  PageHeader,
   formatBytes,
 } from '@vaultstack/ui';
+import { LayoutDashboard } from 'lucide-react';
 import type {
   PublicAuditLog,
   PublicBackupSummary,
@@ -118,22 +122,37 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Dashboard</h1>
-          <p className="text-sm text-slate-500">
-            A permission-aware view of your organization&apos;s cloud resources.
-          </p>
-        </div>
-        <Button type="button" variant="outline" onClick={() => void refresh()} disabled={loading}>
-          {loading ? 'Refreshing…' : 'Refresh'}
-        </Button>
-      </div>
+      <PageHeader
+        title="Dashboard"
+        description="A permission-aware view of your organization's cloud resources."
+        icon={<LayoutDashboard className="h-5 w-5" aria-hidden="true" />}
+        actions={
+          <Button
+            type="button"
+            variant="outline"
+            loading={loading}
+            loadingLabel="Refreshing…"
+            onClick={() => refresh()}
+          >
+            Refresh
+          </Button>
+        }
+      />
 
       {errors.length > 0 ? (
         <EmptyState title="Some dashboard data is unavailable" description={errors.join(' · ')} />
       ) : null}
 
+      {loading && Object.keys(data).length === 0 ? (
+        <div className="space-y-6">
+          <MetricCardsSkeleton count={4} className="xl:grid-cols-4" />
+          <div className="grid gap-4 lg:grid-cols-2">
+            <CardSkeleton />
+            <CardSkeleton />
+          </div>
+        </div>
+      ) : (
+      <>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {canReadStorage(permissions) ? (
           <>
@@ -313,6 +332,8 @@ export function DashboardPage() {
           </CardContent>
         </Card>
       ) : null}
+      </>
+      )}
     </div>
   );
 }

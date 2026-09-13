@@ -198,4 +198,44 @@ describe('ShareService', () => {
     expect(download.url).not.toContain('AKIA');
     expect(download.url).not.toContain('/docs/secret.txt');
   });
+
+  it('issues a preview URL for view-only shares without consuming downloads', async () => {
+    const tokens = createStorageTokenService('share-test-secret-value-32chars!!');
+    const prisma = {
+      shareLink: {
+        findUnique: vi.fn(async () => shareRow({ allowDownload: false })),
+      },
+      $executeRaw: vi.fn(),
+    };
+    const service = new ShareService(prisma as never, tokens, 'test');
+
+    const preview = await service.createPreviewUrl(
+      'view-only-token',
+      undefined,
+      {},
+      'http://127.0.0.1:3000',
+    );
+
+    expect(preview.url).toContain('/api/v1/storage/objects/obj-1/content?token=');
+    expect(prisma.$executeRaw).not.toHaveBeenCalled();
+  });
+
+  it('rejects previews when viewing is disabled', async () => {
+    const prisma = {
+      shareLink: {
+        findUnique: vi.fn(async () => shareRow({ allowView: false })),
+      },
+    };
+    const service = new ShareService(
+      prisma as never,
+      createStorageTokenService('share-test-secret-value-32chars!!'),
+      'test',
+    );
+
+    expect(
+      await codeOf(() =>
+        service.createPreviewUrl('download-only-token', undefined, {}, 'http://127.0.0.1:3000'),
+      ),
+    ).toBe('SHARE_ACCESS_DENIED');
+  });
 });

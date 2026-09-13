@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -17,6 +18,7 @@ import type {
   PublicUser,
 } from '@vaultstack/types';
 import { apiClient } from '../lib/api.js';
+import { clearMultipartSessions, emitSessionCleared } from '../lib/session-events.js';
 
 interface AuthContextValue {
   user: PublicUser | null;
@@ -35,7 +37,13 @@ interface AuthContextValue {
     organizationName: string;
   }) => Promise<void>;
   logout: () => Promise<void>;
-  refresh: () => Promise<void>;
+  /** Clear local session + client state without calling logout (used for 401). Returns true if a user was signed in. */
+  handleUnauthorized: () => boolean;
+  /**
+   * Reload session from `/me`.
+   * Silent by default when a session already exists (no full-app loading flash).
+   */
+  refresh: (options?: { silent?: boolean }) => Promise<void>;
   selectOrganization: (organizationId: string) => Promise<void>;
 }
 
@@ -60,20 +68,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<AuthSessionPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const sessionRef = useRef<AuthSessionPayload | null>(null);
 
   const applySession = useCallback((payload: AuthSessionPayload | null) => {
+    sessionRef.current = payload;
     setSession(payload);
-    if (payload?.activeOrganizationId) {
+    if (!payload) {
+      apiClient.clearSession();
+      return;
+    }
+    if (payload.activeOrganizationId) {
       apiClient.setOrganizationId(payload.activeOrganizationId);
-    } else if (payload?.organization?.id) {
+    } else if (payload.organization?.id) {
       apiClient.setOrganizationId(payload.organization.id);
-    } else if (payload?.organizations[0]?.id) {
+    } else if (payload.organizations[0]?.id) {
       apiClient.setOrganizationId(payload.organizations[0].id);
     }
   }, []);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
+  const clearLocalAuthState = useCallback(() => {
+    applySession(null);
+    setError(null);
+    clearMultipartSessions();
+    emitSessionCleared();
+  }, [applySession]);
+
+  const refresh = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? sessionRef.current !== null;
+    if (!silent) {
+      setLoading(true);
+    }
     setError(null);
 
     try {
@@ -85,7 +109,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setError(caught instanceof Error ? caught.message : 'Unable to load session');
       }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [applySession]);
 
@@ -122,14 +148,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(async () => {
-    await apiClient.logout();
-    applySession(null);
-  }, [applySession]);
+    try {
+      await apiClient.logout();
+    } catch {
+      // Still clear local state if the network/logout call fails.
+    } finally {
+      clearLocalAuthState();
+    }
+  }, [clearLocalAuthState]);
+
+  const handleUnauthorized = useCallback((): boolean => {
+    const hadSession = sessionRef.current !== null;
+    clearLocalAuthState();
+    return hadSession;
+  }, [clearLocalAuthState]);
 
   const selectOrganization = useCallback(
     async (organizationId: string) => {
       await apiClient.selectOrganization(organizationId);
-      await refresh();
+      await refresh({ silent: true });
     },
     [refresh],
   );
@@ -155,10 +192,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       verifyTotp,
       register,
       logout,
+      handleUnauthorized,
       refresh,
       selectOrganization,
     };
-  }, [session, loading, error, login, verifyTotp, register, logout, refresh, selectOrganization]);
+  }, [
+    session,
+    loading,
+    error,
+    login,
+    verifyTotp,
+    register,
+    logout,
+    handleUnauthorized,
+    refresh,
+    selectOrganization,
+  ]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

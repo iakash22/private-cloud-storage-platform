@@ -5,6 +5,7 @@ import {
   completeUploadBodySchema,
   confirmMultipartPartBodySchema,
   createBucketBodySchema,
+  createPreviewBodySchema,
   createLifecyclePolicyBodySchema,
   createShareBodySchema,
   createStorageProviderBodySchema,
@@ -20,6 +21,7 @@ import {
   objectDestinationBodySchema,
   objectIdParamsSchema,
   objectVersionParamsSchema,
+  previewJobIdParamsSchema,
   shareIdParamsSchema,
   storagePolicyIdParamsSchema,
   storageProviderIdParamsSchema,
@@ -37,6 +39,7 @@ import { validateBody, validateParams, validateQuery } from '../../middleware/va
 import { ShareController } from './controllers/share.controller.js';
 import { ProviderController } from './controllers/provider.controller.js';
 import { StorageController } from './controllers/storage.controller.js';
+import { PreviewController } from '../previews/preview.controller.js';
 
 /**
  * Storage REST API.
@@ -50,6 +53,7 @@ export function createStorageRouter(container: AppContainer): Router {
   const controller = new StorageController(container);
   const shares = new ShareController(container);
   const providers = new ProviderController(container);
+  const previews = new PreviewController(container);
 
   router.use(requireOrganizationContext);
 
@@ -133,6 +137,19 @@ export function createStorageRouter(container: AppContainer): Router {
     validateBody(downloadUrlBodySchema),
     controller.allow(PERMISSIONS.STORAGE_READ),
     controller.createDownloadUrl,
+  );
+  router.post(
+    '/objects/:objectId/previews',
+    validateParams(objectIdParamsSchema),
+    validateBody(createPreviewBodySchema),
+    controller.allow(PERMISSIONS.STORAGE_READ),
+    previews.create,
+  );
+  router.get(
+    '/previews/:jobId',
+    validateParams(previewJobIdParamsSchema),
+    controller.allow(PERMISSIONS.STORAGE_READ),
+    previews.get,
   );
   router.delete(
     '/objects/:objectId',

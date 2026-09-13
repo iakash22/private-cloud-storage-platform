@@ -4,6 +4,33 @@ import { VaultStackApiClient } from './client.js';
 import type { HttpRequestInit } from './http.js';
 
 describe('VaultStackApiClient storage + auth', () => {
+  it('uses bearer API-key auth without cookies or CSRF', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ buckets: [] }),
+    });
+    const client = new VaultStackApiClient({
+      baseUrl: 'http://localhost:3000',
+      apiKey: 'vs_ak_test',
+      fetchImpl,
+    });
+    client.setCsrfToken('should-not-be-sent');
+
+    await client.listBuckets();
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://localhost:3000/api/v1/storage/buckets',
+      expect.objectContaining({
+        credentials: 'omit',
+        headers: {
+          Accept: 'application/json',
+          Authorization: 'Bearer vs_ak_test',
+        },
+      }),
+    );
+  });
+
   it('sends credentials, CSRF, and organization headers on storage requests', async () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,
@@ -30,6 +57,67 @@ describe('VaultStackApiClient storage + auth', () => {
       body: undefined,
       credentials: 'include',
     });
+  });
+
+  it('invokes onUnauthorized for authenticated 401 responses', async () => {
+    const onUnauthorized = vi.fn();
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      json: () =>
+        Promise.resolve({
+          error: { code: 'UNAUTHORIZED', message: 'Session expired' },
+          requestId: 'req-1',
+        }),
+    });
+
+    const client = new VaultStackApiClient({
+      baseUrl: 'http://localhost:3000',
+      fetchImpl,
+      onUnauthorized,
+    });
+    client.setOrganizationId('org-1');
+
+    await expect(client.listBuckets()).rejects.toMatchObject({
+      status: 401,
+      code: 'UNAUTHORIZED',
+    });
+    expect(onUnauthorized).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not invoke onUnauthorized for login 401 responses', async () => {
+    const onUnauthorized = vi.fn();
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      json: () =>
+        Promise.resolve({
+          error: { code: 'UNAUTHORIZED', message: 'Invalid credentials' },
+          requestId: 'req-2',
+        }),
+    });
+
+    const client = new VaultStackApiClient({
+      baseUrl: 'http://localhost:3000',
+      fetchImpl,
+      onUnauthorized,
+    });
+
+    await expect(client.login({ email: 'a@b.com', password: 'bad' })).rejects.toMatchObject({
+      status: 401,
+    });
+    expect(onUnauthorized).not.toHaveBeenCalled();
+  });
+
+  it('clearSession drops CSRF and organization state', () => {
+    const client = new VaultStackApiClient({ baseUrl: 'http://localhost:3000' });
+    client.setCsrfToken('csrf');
+    client.setOrganizationId('org-1');
+    client.clearSession();
+    expect(client.getCsrfToken()).toBeUndefined();
+    expect(client.getOrganizationId()).toBeUndefined();
   });
 
   it('stores CSRF token from login response', async () => {
@@ -132,6 +220,94 @@ describe('VaultStackApiClient storage + auth', () => {
     expect(completeUploadCall).toBeDefined();
     const requestInit = completeUploadCall?.[1] as HttpRequestInit | undefined;
     expect(requestInit?.headers?.[CSRF_HEADER_NAME]).toBe('csrf-token');
+  });
+
+  it('puts an object with one initiate, transfer, and complete flow', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        json: () =>
+          Promise.resolve({
+            upload: { id: 'upload-1' },
+            uploadUrl: 'http://localhost:3000/upload/upload-1',
+            method: 'PUT',
+            expiresAt: new Date().toISOString(),
+          }),
+      })
+      .mockResolvedValueOnce({ ok: true, status: 201 })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        json: () => Promise.resolve({ object: { id: 'obj-1' } }),
+      });
+    const client = new VaultStackApiClient({
+      baseUrl: 'http://localhost:3000',
+      apiKey: 'vs_ak_test',
+      fetchImpl,
+    });
+
+    const object = await client.putObject({
+      bucketId: 'bucket-1',
+      key: 'file.txt',
+      body: new Uint8Array([1, 2, 3]),
+      contentType: 'text/plain',
+    });
+
+    expect(object.id).toBe('obj-1');
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      'http://localhost:3000/upload/upload-1',
+      expect.objectContaining({
+        method: 'PUT',
+        body: expect.any(Uint8Array),
+        credentials: 'omit',
+      }),
+    );
+  });
+
+  it('uploads an artifact with the high-level helper', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        json: () =>
+          Promise.resolve({
+            artifact: { id: 'artifact-1' },
+            version: { id: 'version-1' },
+            upload: { id: 'upload-1' },
+            uploadUrl: 'http://localhost:3000/upload/upload-1',
+            method: 'PUT',
+            expiresAt: new Date().toISOString(),
+          }),
+      })
+      .mockResolvedValueOnce({ ok: true, status: 201 })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        json: () => Promise.resolve({ version: { id: 'version-1', status: 'AVAILABLE' } }),
+      });
+    const client = new VaultStackApiClient({
+      baseUrl: 'http://localhost:3000',
+      apiKey: 'vs_ak_test',
+      fetchImpl,
+    });
+
+    const version = await client.uploadArtifact({
+      projectId: 'project-1',
+      buildId: 'build-1',
+      name: 'app',
+      body: new Uint8Array([1, 2]),
+    });
+
+    expect(version).toMatchObject({ id: 'version-1', status: 'AVAILABLE' });
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      1,
+      'http://localhost:3000/api/v1/artifacts/projects/project-1/builds/build-1/artifacts',
+      expect.objectContaining({ method: 'POST' }),
+    );
   });
 
   it('initiates a multipart session with the declared size', async () => {

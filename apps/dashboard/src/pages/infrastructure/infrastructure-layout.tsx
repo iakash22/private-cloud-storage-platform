@@ -1,5 +1,6 @@
-import { NavLink, Outlet } from 'react-router-dom';
-import { cn } from '@vaultstack/ui';
+import { NavLink } from 'react-router-dom';
+import { SectionShell } from '../../components/section-shell.js';
+import { sectionNavClass } from '../../lib/section-nav.js';
 import { useAuth } from '../../context/auth-context.js';
 import { canReadInfrastructure } from '../../lib/infrastructure-permissions.js';
 
@@ -16,8 +17,8 @@ export function InfrastructureLayout() {
 
   if (!canReadInfrastructure(permissions)) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-3xl items-center px-6 py-12">
-        <p className="text-sm text-slate-600">
+      <main className="mx-auto flex min-h-[40vh] max-w-3xl items-center px-6 py-12">
+        <p className="text-sm text-vs-shade-600">
           Your account does not have infrastructure.read permission.
         </p>
       </main>
@@ -25,27 +26,18 @@ export function InfrastructureLayout() {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
-      <aside aria-label="Infrastructure navigation" className="space-y-2">
-        {navItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            className={({ isActive }) =>
-              cn(
-                'flex items-center rounded-md px-3 py-2 text-sm font-medium transition',
-                isActive ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100',
-              )
-            }
-          >
-            {item.label}
-          </NavLink>
-        ))}
-      </aside>
-      <main className="min-w-0">
-        <Outlet />
-      </main>
-    </div>
+    <SectionShell
+      label="Infrastructure navigation"
+      nav={navItems.map((item) => (
+        <NavLink
+          key={item.to}
+          to={item.to}
+          end={item.end}
+          className={({ isActive }) => sectionNavClass(isActive)}
+        >
+          {item.label}
+        </NavLink>
+      ))}
+    />
   );
 }

@@ -1,0 +1,77 @@
+---
+description: Keep dashboard, API, database schema, storage, contracts, tests, and docs synchronized
+alwaysApply: true
+---
+
+# Full-stack integration rule
+
+Treat every cross-cutting feature as one connected change. Do not implement a
+dashboard-only mock or an API-only feature when the request requires a real
+workflow.
+
+## Required connection
+
+Trace each user action through the complete path:
+
+```text
+Dashboard component
+→ dashboard hook/state
+→ @vaultstack/api-client
+→ Express route and Zod validation
+→ controller
+→ class-based service
+→ authorization and organization scope
+→ Prisma metadata
+→ StorageProvider / BullMQ worker
+→ response contract
+→ UI loading, error, empty, and success states
+```
+
+## Contract and schema rules
+
+- Update `packages/openapi/spec/openapi.yaml` for every API shape or route change.
+- Update `docs/api/README.md` and relevant `docs/usage/` guides.
+- Update the API client and exported TypeScript types in the same change.
+- For Prisma model, field, or relation changes, add a migration and update
+  `docs/architecture/database-schema.md`.
+- PostgreSQL stores metadata only; file bytes belong in a StorageProvider.
+- Every organization-owned query and mutation must enforce `organizationId`.
+- Validate all request params, query strings, and bodies with Zod.
+- Check authorization on the server; UI permission checks are only presentation.
+
+## Dashboard rules
+
+- Use the real API client and real response types; do not hardcode success data.
+- Add loading, disabled, retry, error, empty, and success states.
+- Reflect asynchronous operations with a durable job status when work can be
+  slow, recursive, retryable, or destructive.
+- Keep URL state, selected bucket, folder prefix, pagination, and refresh state
+  synchronized.
+- Preserve responsive behavior for desktop and mobile.
+- Add user-visible confirmation for destructive operations.
+
+## Backend and worker rules
+
+- Follow the class-based controller/service and `AppContainer` wiring pattern.
+- Use BullMQ for long-running operations; never perform unbounded recursive
+  storage work in an HTTP request.
+- Make retries idempotent and record important actions in audit logs.
+- Never log secrets or expose provider credentials to browser code.
+- Keep storage-provider behavior behind the StorageProvider abstraction.
+
+## Verification checklist
+
+Before completing a feature, verify:
+
+- dashboard build/typecheck;
+- API typecheck and tests;
+- API client build/tests;
+- schema generation and migration validation;
+- OpenAPI route/contract tests;
+- changed-file lint;
+- mobile and error-state behavior;
+- documentation and examples;
+- `git diff --check`.
+
+If a layer is intentionally out of scope, state that explicitly in the final
+handoff instead of presenting a partial integration as complete.

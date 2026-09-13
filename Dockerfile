@@ -60,6 +60,14 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=5 \
   CMD node -e "fetch('http://127.0.0.1:3000/ready').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 CMD ["node", "dist/index.js"]
 
+FROM api-runtime AS preview-worker
+USER root
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends libreoffice-core libreoffice-writer libreoffice-calc libreoffice-impress \
+  && rm -rf /var/lib/apt/lists/*
+USER node
+CMD ["node", "dist/workers/index.js"]
+
 FROM workspace AS dashboard-build
 ARG VITE_API_URL=/
 ENV VITE_API_URL=$VITE_API_URL

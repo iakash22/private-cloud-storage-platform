@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, formatBytes } from '@vaultstack/ui';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, formatBytes, PageHeader } from '@vaultstack/ui';
+import { Database } from 'lucide-react';
 import type { PublicStorageMonitorMetrics } from '@vaultstack/types';
 import { apiClient } from '../../lib/api.js';
 
@@ -22,17 +23,16 @@ export function InfrastructureStoragePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold text-slate-900">Storage</h2>
-          <p className="text-sm text-slate-500">
-            Bucket usage, object counts, upload activity, and provider health.
-          </p>
-        </div>
-        <Button type="button" variant="outline" onClick={() => void refresh()}>
-          Refresh
-        </Button>
-      </div>
+      <PageHeader
+        title="Storage"
+        description="Bucket usage, object counts, upload activity, and provider health."
+        icon={<Database className="h-5 w-5" aria-hidden="true" />}
+        actions={
+          <Button type="button" variant="outline" loadingLabel="Refreshing…" onClick={() => refresh()}>
+            Refresh
+          </Button>
+        }
+      />
       {error ? <EmptyState title="Unable to load storage" description={error} /> : null}
 
       <div className="grid gap-4 md:grid-cols-3">

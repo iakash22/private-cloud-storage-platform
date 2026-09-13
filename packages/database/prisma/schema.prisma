@@ -84,6 +84,7 @@ model Organization {
   backupSnapshots    BackupSnapshot[]
   backupJobLogs      BackupJobLog[]
   backupRestoreJobs  BackupRestoreJob[]
+  previewJobs        PreviewJob[]
 }
 
 model Team {
@@ -391,12 +392,35 @@ model StorageObject {
   shareLinks       ShareLink[]
   artifactVersions ArtifactVersion[]
   backupSnapshots  BackupSnapshot[]
+  previewJobs      PreviewJob[]
 
   @@unique([bucketId, key])
   @@index([organizationId])
   @@index([bucketId, key])
   @@index([organizationId, createdAt])
   @@index([bucketId, isDeleted, key])
+}
+
+model PreviewJob {
+  id             String   @id @default(cuid())
+  organizationId String
+  objectId       String
+  kind           String
+  status         String   @default("QUEUED")
+  result         Json?
+  outputObjectId String?
+  error          String?
+  converter      String?
+  createdAt      DateTime @default(now())
+  startedAt      DateTime?
+  completedAt    DateTime?
+  updatedAt      DateTime @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  object       StorageObject @relation(fields: [objectId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([objectId, kind, status])
 }
 
 model ObjectVersion {

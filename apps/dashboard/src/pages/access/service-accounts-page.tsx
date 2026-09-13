@@ -12,7 +12,9 @@ import {
   formatDate,
   Input,
   Label,
+  PageHeader,
 } from '@vaultstack/ui';
+import { Bot } from 'lucide-react';
 import { createS3CredentialBodySchema, parseForm, updateS3CredentialBodySchema } from '@vaultstack/validation';
 import { useAuth } from '../../context/auth-context.js';
 import { apiClient } from '../../lib/api.js';
@@ -185,17 +187,16 @@ export function ServiceAccountsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold text-slate-900">Service accounts</h2>
-          <p className="text-sm text-slate-500">
-            SigV4 credentials for the S3 gateway. Secret keys are shown once.
-          </p>
-        </div>
-        <Button type="button" onClick={() => setCreateOpen(true)}>
-          Create credential
-        </Button>
-      </div>
+      <PageHeader
+        title="Service accounts"
+        description="SigV4 credentials for the S3 gateway. Secret keys are shown once."
+        icon={<Bot className="h-5 w-5" aria-hidden="true" />}
+        actions={
+          <Button type="button" onClick={() => setCreateOpen(true)}>
+            Create credential
+          </Button>
+        }
+      />
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
 

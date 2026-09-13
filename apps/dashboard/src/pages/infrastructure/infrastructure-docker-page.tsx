@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState } from '@vaultstack/ui';
+import { Badge, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, PageHeader } from '@vaultstack/ui';
+import { Container } from 'lucide-react';
 import type { PublicDockerMetrics } from '@vaultstack/types';
 import { apiClient } from '../../lib/api.js';
 
@@ -22,17 +23,16 @@ export function InfrastructureDockerPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold text-slate-900">Docker</h2>
-          <p className="text-sm text-slate-500">
-            Read-only Docker Engine API over the configured socket. No command execution.
-          </p>
-        </div>
-        <Button type="button" variant="outline" onClick={() => void refresh()}>
-          Refresh
-        </Button>
-      </div>
+      <PageHeader
+        title="Docker"
+        description="Read-only Docker Engine API over the configured socket. No command execution."
+        icon={<Container className="h-5 w-5" aria-hidden="true" />}
+        actions={
+          <Button type="button" variant="outline" loadingLabel="Refreshing…" onClick={() => refresh()}>
+            Refresh
+          </Button>
+        }
+      />
       {error ? <EmptyState title="Unable to load Docker" description={error} /> : null}
 
       <Card>

@@ -1,5 +1,5 @@
 import { Navigate, Outlet } from 'react-router-dom';
-import { Skeleton } from '@vaultstack/ui';
+import { PageSkeleton } from '@vaultstack/ui';
 import { useAuth } from '../context/auth-context.js';
 
 export function ProtectedRoute() {
@@ -7,8 +7,8 @@ export function ProtectedRoute() {
 
   if (loading) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-3xl items-center px-6 py-12">
-        <Skeleton className="h-40 w-full" />
+      <main className="mx-auto flex min-h-screen w-full max-w-6xl items-start px-4 py-8 sm:px-6">
+        <PageSkeleton className="w-full" />
       </main>
     );
   }

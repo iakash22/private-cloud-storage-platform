@@ -228,12 +228,25 @@ export class ShareService {
     token: string,
     auth: AuthContext | undefined,
     accessToken?: string,
+    meta?: RequestMeta,
   ): Promise<PublicShareInspect> {
     const share = await this.loadUsableShare(token);
     await this.assertVisibility(share, auth);
 
     if (share.passwordHash && !(await this.hasShareAccess(share, undefined, accessToken))) {
       return { passwordRequired: true, share: null };
+    }
+
+    if (meta) {
+      await writeAuditLog(this.prisma, {
+        ...meta,
+        organizationId: share.organizationId,
+        userId: auth?.user.id ?? null,
+        action: 'storage.share.viewed',
+        resourceType: 'share',
+        resourceId: share.id,
+        metadata: { shareId: share.id, objectId: share.objectId, accessMethod: 'inspect' },
+      });
     }
 
     return { passwordRequired: false, share: serializeShareAccess(this.toRecord(share)) };
@@ -273,6 +286,7 @@ export class ShareService {
     auth: AuthContext | undefined,
     secrets: { password?: string; accessToken?: string },
     baseUrl: string,
+    meta?: RequestMeta,
   ): Promise<PublicPresignedUrl> {
     const share = await this.loadUsableShare(token);
     await this.assertVisibility(share, auth);
@@ -317,13 +331,61 @@ export class ShareService {
     );
 
     await writeAuditLog(this.prisma, {
+      ...meta,
       organizationId: share.organizationId,
       userId: auth?.user.id ?? null,
       action: 'storage.object.downloaded',
       resourceType: 'object',
       resourceId: share.objectId,
-      metadata: { shareId: share.id, key: share.object.key },
+      metadata: { shareId: share.id, objectId: share.objectId, accessMethod: 'download-url' },
     });
+
+    return {
+      url: `${baseUrl}/api/v1/storage/objects/${share.objectId}/content?token=${issued.token}`,
+      method: 'GET',
+      expiresAt: issued.expiresAt.toISOString(),
+    };
+  }
+
+  async createPreviewUrl(
+    token: string,
+    auth: AuthContext | undefined,
+    secrets: { password?: string; accessToken?: string },
+    baseUrl: string,
+    meta?: RequestMeta,
+  ): Promise<PublicPresignedUrl> {
+    const share = await this.loadUsableShare(token);
+    await this.assertVisibility(share, auth);
+
+    if (!share.allowView) {
+      throw shareAccessDenied('This share does not allow previews');
+    }
+    if (
+      share.passwordHash &&
+      !(await this.hasShareAccess(share, secrets.password, secrets.accessToken))
+    ) {
+      if (!secrets.password && !secrets.accessToken) {
+        throw sharePasswordRequired();
+      }
+      throw sharePasswordInvalid();
+    }
+
+    const issued = this.storageTokens.issue(
+      { purpose: 'download', organizationId: share.organizationId, subjectId: share.objectId },
+      SHARE_DOWNLOAD_TTL_SECONDS,
+    );
+
+    if (meta) {
+      await writeAuditLog(this.prisma, {
+        ...meta,
+        organizationId: share.organizationId,
+        userId: auth?.user.id ?? null,
+        action: 'storage.share.previewed',
+        resourceType: 'share',
+        resourceId: share.id,
+        metadata: { shareId: share.id, objectId: share.objectId, accessMethod: 'preview-url' },
+      });
+    }
 
     return {
       url: `${baseUrl}/api/v1/storage/objects/${share.objectId}/content?token=${issued.token}`,

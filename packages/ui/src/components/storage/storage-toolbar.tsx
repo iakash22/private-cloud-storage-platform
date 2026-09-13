@@ -3,6 +3,7 @@ import type { SortDirection, SortField } from '../../lib/storage-utils.js';
 import { cn } from '../../lib/utils.js';
 import { Button } from '../button.js';
 import { Input } from '../input.js';
+import { Select } from '../select.js';
 
 export type ViewMode = 'list' | 'grid';
 
@@ -52,19 +53,20 @@ export function StorageToolbar({
         <label className="sr-only" htmlFor="sort-field">
           Sort by
         </label>
-        <select
+        <Select
           id="sort-field"
           aria-label="Sort by"
+          className="w-40"
           value={sortField}
-          onChange={(event) => {
-            onSortFieldChange(event.target.value as SortField);
+          onChange={(value) => {
+            onSortFieldChange(value as SortField);
           }}
-          className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
-        >
-          <option value="name">Name</option>
-          <option value="size">Size</option>
-          <option value="updatedAt">Modified</option>
-        </select>
+          options={[
+            { value: 'name', label: 'Name' },
+            { value: 'size', label: 'Size' },
+            { value: 'updatedAt', label: 'Modified' },
+          ]}
+        />
 
         <Button
           type="button"

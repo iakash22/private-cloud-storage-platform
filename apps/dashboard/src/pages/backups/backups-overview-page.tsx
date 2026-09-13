@@ -8,7 +8,9 @@ import {
   CardHeader,
   CardTitle,
   EmptyState,
+  PageHeader,
 } from '@vaultstack/ui';
+import { Archive } from 'lucide-react';
 import type { PublicBackupSummary } from '@vaultstack/types';
 import { apiClient } from '../../lib/api.js';
 import { useAuth } from '../../context/auth-context.js';
@@ -51,24 +53,23 @@ export function BackupsOverviewPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold text-slate-900">Backup overview</h2>
-          <p className="text-sm text-slate-500">
-            Job status, snapshots, and retention at a glance.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button type="button" variant="outline" onClick={() => void refresh()}>
-            Refresh
-          </Button>
-          {canCreateBackups(permissions) ? (
-            <Button type="button" onClick={() => void createBackup()} disabled={creating}>
-              Create backup
+      <PageHeader
+        title="Backup overview"
+        description="Job status, snapshots, and retention at a glance."
+        icon={<Archive className="h-5 w-5" aria-hidden="true" />}
+        actions={
+          <>
+            <Button type="button" variant="outline" loadingLabel="Refreshing…" onClick={() => refresh()}>
+              Refresh
             </Button>
-          ) : null}
-        </div>
-      </div>
+            {canCreateBackups(permissions) ? (
+              <Button type="button" onClick={() => void createBackup()} disabled={creating}>
+                Create backup
+              </Button>
+            ) : null}
+          </>
+        }
+      />
 
       {error ? <EmptyState title="Unable to load backups" description={error} /> : null}
 

@@ -11,7 +11,10 @@ import {
   FieldError,
   Input,
   Label,
+  PageHeader,
+  Select,
 } from '@vaultstack/ui';
+import { Users } from 'lucide-react';
 import { createUserBodySchema, parseForm } from '@vaultstack/validation';
 import { useAuth } from '../../context/auth-context.js';
 import { apiClient } from '../../lib/api.js';
@@ -129,17 +132,18 @@ export function UsersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold text-slate-900">Users</h2>
-          <p className="text-sm text-slate-500">Organization members and their account status.</p>
-        </div>
-        {manage ? (
-          <Button type="button" onClick={() => setCreateOpen(true)}>
-            Invite user
-          </Button>
-        ) : null}
-      </div>
+      <PageHeader
+        title="Users"
+        description="Organization members and their account status."
+        icon={<Users className="h-5 w-5" aria-hidden="true" />}
+        actions={
+          manage ? (
+            <Button type="button" onClick={() => setCreateOpen(true)}>
+              Invite user
+            </Button>
+          ) : null
+        }
+      />
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
@@ -265,19 +269,14 @@ export function UsersPage() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="user-role">Role</Label>
-            <select
+            <Select
               id="user-role"
-              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+              aria-label="Role"
               value={roleId}
+              onChange={setRoleId}
               aria-invalid={Boolean(fieldErrors.roleId)}
-              onChange={(event) => setRoleId(event.target.value)}
-            >
-              {roles.map((role) => (
-                <option key={role.id} value={role.id}>
-                  {role.name}
-                </option>
-              ))}
-            </select>
+              options={roles.map((role) => ({ value: role.id, label: role.name }))}
+            />
             <FieldError message={fieldErrors.roleId} />
           </div>
         </div>
@@ -303,18 +302,13 @@ export function UsersPage() {
       >
         <div>
           <Label htmlFor="assign-role">Role</Label>
-          <select
+          <Select
             id="assign-role"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+            aria-label="Role"
             value={assignRoleId}
-            onChange={(event) => setAssignRoleId(event.target.value)}
-          >
-            {roles.map((role) => (
-              <option key={role.id} value={role.id}>
-                {role.name}
-              </option>
-            ))}
-          </select>
+            onChange={setAssignRoleId}
+            options={roles.map((role) => ({ value: role.id, label: role.name }))}
+          />
         </div>
       </Dialog>
 
@@ -338,18 +332,13 @@ export function UsersPage() {
       >
         <div>
           <Label htmlFor="remove-role">Role</Label>
-          <select
+          <Select
             id="remove-role"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+            aria-label="Role"
             value={assignRoleId}
-            onChange={(event) => setAssignRoleId(event.target.value)}
-          >
-            {roles.map((role) => (
-              <option key={role.id} value={role.id}>
-                {role.name}
-              </option>
-            ))}
-          </select>
+            onChange={setAssignRoleId}
+            options={roles.map((role) => ({ value: role.id, label: role.name }))}
+          />
         </div>
       </Dialog>
     </div>

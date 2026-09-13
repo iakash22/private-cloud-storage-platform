@@ -53,5 +53,30 @@ describe('TwoFactorSettings', () => {
       expect(screen.getByLabelText('Manual setup key')).toHaveValue('JBSWY3DPEHPK3PXP');
     });
     expect(screen.getByAltText('Authenticator QR code')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open in authenticator app' })).toHaveAttribute(
+      'href',
+      'otpauth://totp/VaultStack:owner@example.com?secret=JBSWY3DPEHPK3PXP',
+    );
+  });
+
+  it('shows device-linked success after verifying the authenticator code', async () => {
+    authState.refresh.mockResolvedValue(undefined);
+    render(<TwoFactorSettings />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Enable two-factor authentication' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to verify' }));
+    await waitFor(() => {
+      expect(screen.getByLabelText('One-time password')).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText('One-time password'), {
+      target: { value: '123456' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm & enable' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Authenticator linked successfully')).toBeInTheDocument();
+    });
+    expect(screen.getByText('AAAAA-BBBBB')).toBeInTheDocument();
   });
 });

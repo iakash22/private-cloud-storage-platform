@@ -6,6 +6,7 @@ import { createCorsMiddleware } from './middleware/cors.js';
 import { createErrorHandler, createNotFoundHandler } from './middleware/error-handler.js';
 import { createRequestLogger } from './middleware/request-logger.js';
 import { requestIdMiddleware } from './middleware/request-id.js';
+import { securityHeadersMiddleware } from './middleware/security-headers.js';
 import { createRedisClient, type DependencyClients } from './lib/dependencies.js';
 import type { AppContainer } from './container/app-container.js';
 import {
@@ -52,6 +53,7 @@ export function createApp(options: CreateAppOptions): Express {
 
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
+  app.use(securityHeadersMiddleware);
   app.use(requestIdMiddleware);
   app.use(createHttpMetricsMiddleware(metrics));
   app.use(createCorsMiddleware(options.config));

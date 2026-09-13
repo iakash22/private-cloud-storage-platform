@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Button, EmptyState, formatBytes, formatDate } from '@vaultstack/ui';
+import { Button, EmptyState, formatBytes, formatDate, PageHeader } from '@vaultstack/ui';
+import { Trash2 } from 'lucide-react';
 import { apiClient } from '../../lib/api.js';
 import { canUploadStorage, getTrashItems, removeTrashItem, type TrashRecord } from '../../lib/storage-preferences.js';
 import { useAuth } from '../../context/auth-context.js';
@@ -34,13 +35,11 @@ export function TrashPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold text-slate-900">Trash</h2>
-        <p className="text-sm text-slate-500">
-          Recently deleted objects from this browser. Versioned buckets can restore a previous
-          version; unversioned deletes cannot be recovered.
-        </p>
-      </div>
+      <PageHeader
+        title="Trash"
+        description="Recently deleted objects from this browser. Versioned buckets can restore a previous version; unversioned deletes cannot be recovered."
+        icon={<Trash2 className="h-5 w-5" aria-hidden="true" />}
+      />
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
 

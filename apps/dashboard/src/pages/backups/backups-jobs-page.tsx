@@ -8,8 +8,10 @@ import {
   CardHeader,
   CardTitle,
   EmptyState,
+  PageHeader,
   Progress,
 } from '@vaultstack/ui';
+import { ListTodo } from 'lucide-react';
 import type { PublicBackupJob, PublicBackupJobLog } from '@vaultstack/types';
 import { apiClient } from '../../lib/api.js';
 import { useAuth } from '../../context/auth-context.js';
@@ -71,15 +73,16 @@ export function BackupsJobsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold text-slate-900">Backup jobs</h2>
-          <p className="text-sm text-slate-500">Progress, logs, retry, and cancel.</p>
-        </div>
-        <Button type="button" variant="outline" onClick={() => void refresh()}>
-          Refresh
-        </Button>
-      </div>
+      <PageHeader
+        title="Backup jobs"
+        description="Progress, logs, retry, and cancel."
+        icon={<ListTodo className="h-5 w-5" aria-hidden="true" />}
+        actions={
+          <Button type="button" variant="outline" loadingLabel="Refreshing…" onClick={() => refresh()}>
+            Refresh
+          </Button>
+        }
+      />
       {error ? <EmptyState title="Unable to load jobs" description={error} /> : null}
 
       <div className="grid gap-4 lg:grid-cols-[1fr_360px]">

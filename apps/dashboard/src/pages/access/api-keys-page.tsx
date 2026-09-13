@@ -12,7 +12,9 @@ import {
   formatDate,
   Input,
   Label,
+  PageHeader,
 } from '@vaultstack/ui';
+import { KeyRound } from 'lucide-react';
 import { createApiKeyBodySchema, parseForm } from '@vaultstack/validation';
 import { useAuth } from '../../context/auth-context.js';
 import { apiClient } from '../../lib/api.js';
@@ -29,6 +31,7 @@ export function ApiKeysPage() {
   const [name, setName] = useState('');
   const [expiresAt, setExpiresAt] = useState('');
   const [plaintext, setPlaintext] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!activeOrganizationId) {
@@ -91,25 +94,54 @@ export function ApiKeysPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold text-slate-900">API keys</h2>
-          <p className="text-sm text-slate-500">
-            Bearer tokens for programmatic access. The secret is shown once at creation.
-          </p>
-        </div>
-        <Button type="button" onClick={() => setCreateOpen(true)}>
-          Create API key
-        </Button>
-      </div>
+      <PageHeader
+        title="API keys"
+        description="Bearer tokens for programmatic access. The secret is shown once at creation."
+        icon={<KeyRound className="h-5 w-5" aria-hidden="true" />}
+        actions={
+          <Button type="button" onClick={() => setCreateOpen(true)}>
+            Create API key
+          </Button>
+        }
+      />
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
       {plaintext ? (
         <Card>
           <CardContent className="space-y-2 p-4">
-            <p className="text-sm font-medium text-slate-900">Copy this token now. It will not be shown again.</p>
-            <code className="block break-all rounded-md bg-slate-100 px-3 py-2 text-sm">{plaintext}</code>
+            <p className="text-sm font-medium text-slate-900">
+              Copy this token now. It will not be shown again.
+            </p>
+            <code className="block break-all rounded-md bg-slate-100 px-3 py-2 text-sm">
+              {plaintext}
+            </code>
+            <pre className="overflow-x-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100">{`Authorization: Bearer ${plaintext}
+
+const client = new VaultStackApiClient({
+  baseUrl: process.env.VS_API,
+  apiKey: process.env.VS_KEY,
+});
+await client.uploadArtifact({ projectId, buildId, name: 'app.zip', body: bytes });`}</pre>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                void navigator.clipboard.writeText(`Authorization: Bearer ${plaintext}`);
+                setCopied(true);
+              }}
+            >
+              {copied ? 'Copied' : 'Copy authorization header'}
+            </Button>
+            <a
+              className="text-sm text-slate-700 underline"
+              href="/docs/usage/sdk-client.md"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Read the SDK usage guide
+            </a>
             <Button type="button" size="sm" variant="outline" onClick={() => setPlaintext(null)}>
               Dismiss
             </Button>
@@ -118,7 +150,10 @@ export function ApiKeysPage() {
       ) : null}
 
       {keys.length === 0 ? (
-        <EmptyState title="No API keys" description="Create a key to authenticate scripts and CI jobs." />
+        <EmptyState
+          title="No API keys"
+          description="Create a key to authenticate scripts and CI jobs."
+        />
       ) : (
         <Card>
           <CardContent className="overflow-x-auto p-0">

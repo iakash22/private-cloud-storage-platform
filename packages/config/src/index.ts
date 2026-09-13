@@ -91,7 +91,7 @@ const envSchema = z.object({
   // Used by Playwright and local smoke tests so a separate worker is optional.
   BACKUP_PROCESS_INLINE: booleanFromString.default('false'),
   // Production Compose uses one API image with role-specific worker commands.
-  WORKER_ROLE: z.enum(['all', 'backup', 'artifact']).default('all'),
+  WORKER_ROLE: z.enum(['all', 'backup', 'artifact', 'preview']).default('all'),
 
   // Docker Engine socket used by the infrastructure collector (HTTP over the
   // socket — never a shell). Missing or unreadable sockets surface as unavailable.

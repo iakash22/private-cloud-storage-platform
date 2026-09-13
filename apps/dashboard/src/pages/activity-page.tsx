@@ -1,6 +1,19 @@
 import { useEffect, useState } from 'react';
 import type { PublicAuditLog } from '@vaultstack/types';
-import { Button, Card, CardContent, CardHeader, CardTitle, Input, Label } from '@vaultstack/ui';
+import {
+  Button,
+  CalendarRange,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+  PageHeader,
+  PageLoader,
+  Select,
+} from '@vaultstack/ui';
+import { Activity as ActivityIcon } from 'lucide-react';
 import { useAuth } from '../context/auth-context.js';
 import { apiClient } from '../lib/api.js';
 
@@ -71,19 +84,24 @@ export function ActivityPage() {
 
   return (
     <div className="space-y-6">
+      <PageHeader
+        title="Activity"
+        description="Review organization actions and filter audit events by date."
+        icon={<ActivityIcon className="h-5 w-5" aria-hidden="true" />}
+      />
       <Card>
         <CardHeader>
           <CardTitle>Audit filters</CardTitle>
         </CardHeader>
         <CardContent>
           <form
-            className="grid gap-4 md:grid-cols-2 lg:grid-cols-3"
+            className="grid gap-5 md:grid-cols-2 lg:grid-cols-3"
             onSubmit={(event) => {
               event.preventDefault();
               void loadLogs();
             }}
           >
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="activity-user">User ID</Label>
               <Input
                 id="activity-user"
@@ -93,25 +111,20 @@ export function ActivityPage() {
                 }}
               />
             </div>
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="activity-action">Action</Label>
-              <select
+              <Select
                 id="activity-action"
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
                 value={action}
-                onChange={(event) => {
-                  setAction(event.target.value);
-                }}
-              >
-                <option value="">All actions</option>
-                {ACTIONS.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
-              </select>
+                onChange={setAction}
+                placeholder="All actions"
+                options={[
+                  { value: '', label: 'All actions' },
+                  ...ACTIONS.map((item) => ({ value: item, label: item })),
+                ]}
+              />
             </div>
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="activity-resource">Resource type</Label>
               <Input
                 id="activity-resource"
@@ -122,45 +135,35 @@ export function ActivityPage() {
                 }}
               />
             </div>
-            <div>
-              <Label htmlFor="activity-from">From</Label>
-              <Input
-                id="activity-from"
-                type="date"
-                value={dateFrom}
-                onChange={(event) => {
-                  setDateFrom(event.target.value);
+            <div className="md:col-span-2 lg:col-span-3">
+              <CalendarRange
+                from={dateFrom}
+                to={dateTo}
+                onFromChange={setDateFrom}
+                onToChange={setDateTo}
+                onClear={() => {
+                  setDateFrom('');
+                  setDateTo('');
                 }}
               />
             </div>
-            <div>
-              <Label htmlFor="activity-to">To</Label>
-              <Input
-                id="activity-to"
-                type="date"
-                value={dateTo}
-                onChange={(event) => {
-                  setDateTo(event.target.value);
-                }}
-              />
-            </div>
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="activity-result">Result</Label>
-              <select
+              <Select
                 id="activity-result"
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
                 value={result}
-                onChange={(event) => {
-                  setResult(event.target.value as '' | 'success' | 'failure');
+                onChange={(next) => {
+                  setResult(next as '' | 'success' | 'failure');
                 }}
-              >
-                <option value="">All results</option>
-                <option value="success">Success</option>
-                <option value="failure">Failure</option>
-              </select>
+                options={[
+                  { value: '', label: 'All results' },
+                  { value: 'success', label: 'Success' },
+                  { value: 'failure', label: 'Failure' },
+                ]}
+              />
             </div>
             <div className="flex items-end">
-              <Button type="submit" disabled={loading}>
+              <Button type="submit" loading={loading} loadingLabel="Applying…">
                 Apply filters
               </Button>
             </div>
@@ -174,7 +177,7 @@ export function ActivityPage() {
         </CardHeader>
         <CardContent>
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
-          {loading ? <p className="text-sm text-slate-500">Loading activity…</p> : null}
+          {loading ? <PageLoader label="Loading activity" /> : null}
           {!loading && !error && logs.length === 0 ? (
             <p className="text-sm text-slate-500">No activity matches these filters.</p>
           ) : null}

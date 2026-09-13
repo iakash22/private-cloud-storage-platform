@@ -163,6 +163,16 @@ export const objectIdParamsSchema = z.object({
   objectId: z.string().min(1),
 });
 
+export const previewJobIdParamsSchema = z.object({
+  jobId: z.string().min(1),
+});
+
+export const createPreviewBodySchema = z
+  .object({
+    kind: z.enum(['ARCHIVE', 'OFFICE']),
+  })
+  .strict();
+
 export const uploadIdParamsSchema = z.object({
   uploadId: z.string().min(1),
 });

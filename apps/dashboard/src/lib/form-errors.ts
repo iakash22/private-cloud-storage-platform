@@ -12,14 +12,17 @@ export function parseRequestError(error: unknown): {
 } {
   if (error instanceof ApiClientError) {
     return {
-      message: error.message,
+      message: error.message?.trim() || 'Request failed',
       code: error.code,
       fields: error.fields ?? {},
     };
   }
 
-  if (error instanceof Error && error.message?.trim().length > 0) {
-    return { message: error.message, fields: {} };
+  if (error instanceof Error) {
+    const message = error.message?.trim();
+    if (message) {
+      return { message, fields: {} };
+    }
   }
 
   return { message: 'Request failed', fields: {} };
@@ -34,14 +37,14 @@ export function useFormSubmit() {
   }, []);
 
   const applyFields = useCallback((fields: FieldErrorMap): undefined => {
-    setFieldErrors(fields);
+    setFieldErrors(fields ?? {});
     return undefined;
   }, []);
 
   const validate = useCallback(
     <T>(parsed: { ok: true; data: T } | { ok: false; fields: FieldErrorMap }): T | undefined => {
-      if (!parsed.ok) {
-        return applyFields(parsed.fields);
+      if (!parsed?.ok) {
+        return applyFields(parsed?.fields ?? {});
       }
 
       setFieldErrors({});
@@ -52,6 +55,12 @@ export function useFormSubmit() {
 
   const catchError = useCallback(
     (caught: unknown): void => {
+      // Global SessionGuard owns toast + logout for expired sessions.
+      if (caught instanceof ApiClientError && caught.status === 401) {
+        setFieldErrors({});
+        return;
+      }
+
       const parsed = parseRequestError(caught);
       const fields = parsed.fields ?? {};
       if (Object.keys(fields).length > 0) {
@@ -60,7 +69,7 @@ export function useFormSubmit() {
       }
 
       setFieldErrors({});
-      toast.error(parsed.message);
+      toast.error(parsed.message ?? 'Request failed');
     },
     [toast],
   );
@@ -72,5 +81,6 @@ export function useFormSubmit() {
     validate,
     catchError,
     toastSuccess: toast.success,
+    hasFieldError: (name: string) => Boolean(fieldErrors?.[name]?.trim()),
   };
 }

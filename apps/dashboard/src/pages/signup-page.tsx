@@ -115,8 +115,8 @@ export function SignupPage() {
             At least 10 characters, including a letter and a number.
           </p>
         </div>
-        <Button type="submit" className="w-full" disabled={submitting}>
-          {submitting ? 'Please wait…' : 'Create account'}
+        <Button type="submit" className="w-full" loading={submitting} loadingLabel="Please wait…">
+          Create account
         </Button>
       </form>
     </AuthLayout>

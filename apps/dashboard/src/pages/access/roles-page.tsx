@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { PublicPermission, PublicRole } from '@vaultstack/types';
-import { Badge, Button, Card, CardContent, Dialog, DialogActions, EmptyState, FieldError, Input, Label } from '@vaultstack/ui';
+import { Badge, Button, Card, CardContent, Dialog, DialogActions, EmptyState, FieldError, Input, Label, PageHeader } from '@vaultstack/ui';
+import { Shield } from 'lucide-react';
 import { createRoleBodySchema, parseForm } from '@vaultstack/validation';
 import { useAuth } from '../../context/auth-context.js';
 import { apiClient } from '../../lib/api.js';
@@ -74,25 +75,24 @@ export function RolesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold text-slate-900">Roles</h2>
-          <p className="text-sm text-slate-500">
-            System roles are built in. Custom roles can only grant permissions you already have.
-          </p>
-        </div>
-        {manage ? (
-          <Button
-            type="button"
-            onClick={() => {
-              setCreateOpen(true);
-              setSelected([]);
-            }}
-          >
-            Create role
-          </Button>
-        ) : null}
-      </div>
+      <PageHeader
+        title="Roles"
+        description="System roles are built in. Custom roles can only grant permissions you already have."
+        icon={<Shield className="h-5 w-5" aria-hidden="true" />}
+        actions={
+          manage ? (
+            <Button
+              type="button"
+              onClick={() => {
+                setCreateOpen(true);
+                setSelected([]);
+              }}
+            >
+              Create role
+            </Button>
+          ) : null
+        }
+      />
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
 

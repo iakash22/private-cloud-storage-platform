@@ -10,7 +10,10 @@ import {
   FieldError,
   Input,
   Label,
+  PageHeader,
+  Select,
 } from '@vaultstack/ui';
+import { UsersRound } from 'lucide-react';
 import { createTeamBodySchema, parseForm, updateTeamBodySchema } from '@vaultstack/validation';
 import { useAuth } from '../../context/auth-context.js';
 import { apiClient } from '../../lib/api.js';
@@ -148,17 +151,18 @@ export function TeamsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold text-slate-900">Teams</h2>
-          <p className="text-sm text-slate-500">Group members for private file shares.</p>
-        </div>
-        {manage ? (
-          <Button type="button" onClick={() => setCreateOpen(true)}>
-            Create team
-          </Button>
-        ) : null}
-      </div>
+      <PageHeader
+        title="Teams"
+        description="Group members for private file shares."
+        icon={<UsersRound className="h-5 w-5" aria-hidden="true" />}
+        actions={
+          manage ? (
+            <Button type="button" onClick={() => setCreateOpen(true)}>
+              Create team
+            </Button>
+          ) : null
+        }
+      />
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
@@ -210,18 +214,16 @@ export function TeamsPage() {
                   <div className="flex flex-wrap items-end gap-2">
                     <div className="min-w-[12rem] flex-1">
                       <Label htmlFor="team-member">Add member</Label>
-                      <select
+                      <Select
                         id="team-member"
-                        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                        aria-label="Add member"
                         value={memberUserId}
-                        onChange={(event) => setMemberUserId(event.target.value)}
-                      >
-                        {users.map((user) => (
-                          <option key={user.id} value={user.id}>
-                            {user.name} ({user.email})
-                          </option>
-                        ))}
-                      </select>
+                        onChange={setMemberUserId}
+                        options={users.map((user) => ({
+                          value: user.id,
+                          label: `${user.name} (${user.email})`,
+                        }))}
+                      />
                     </div>
                     <Button type="button" onClick={() => void handleAddMember()}>
                       Add

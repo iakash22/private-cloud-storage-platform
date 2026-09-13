@@ -11,7 +11,9 @@ import {
   EmptyState,
   formatBytes,
   formatDate,
+  PageHeader,
 } from '@vaultstack/ui';
+import { Camera } from 'lucide-react';
 import type { PublicBackupSnapshot } from '@vaultstack/types';
 import { apiClient } from '../../lib/api.js';
 import { useAuth } from '../../context/auth-context.js';
@@ -43,15 +45,16 @@ export function BackupsSnapshotsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold text-slate-900">Snapshots</h2>
-          <p className="text-sm text-slate-500">Verified archives stored through StorageService.</p>
-        </div>
-        <Button type="button" variant="outline" onClick={() => void refresh()}>
-          Refresh
-        </Button>
-      </div>
+      <PageHeader
+        title="Snapshots"
+        description="Verified archives stored through StorageService."
+        icon={<Camera className="h-5 w-5" aria-hidden="true" />}
+        actions={
+          <Button type="button" variant="outline" loadingLabel="Refreshing…" onClick={() => refresh()}>
+            Refresh
+          </Button>
+        }
+      />
       {error ? <EmptyState title="Unable to load snapshots" description={error} /> : null}
       {message ? <p className="text-sm text-slate-600">{message}</p> : null}
 

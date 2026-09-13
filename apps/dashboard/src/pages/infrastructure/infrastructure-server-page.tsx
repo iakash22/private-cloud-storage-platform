@@ -1,15 +1,48 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Button, Card, CardContent, CardHeader, CardTitle, EmptyState, formatBytes } from '@vaultstack/ui';
+import {
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  EmptyState,
+  formatBytes,
+  PageHeader,
+} from '@vaultstack/ui';
+import { Cpu } from 'lucide-react';
 import type { PublicServerMetrics } from '@vaultstack/types';
+import {
+  Line,
+  LineChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { apiClient } from '../../lib/api.js';
 
 export function InfrastructureServerPage() {
   const [server, setServer] = useState<PublicServerMetrics | null>(null);
+  const [history, setHistory] = useState<ServerPoint[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      setServer(await apiClient.getInfrastructureServer());
+      const next = await apiClient.getInfrastructureServer();
+      setServer(next);
+      setHistory((current) =>
+        current
+          .concat({
+            time: new Date(next.collectedAt).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            }),
+            load: next.cpu.load1,
+            memory: next.memory.usedPercent,
+          })
+          .slice(-30),
+      );
       setError(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to load server metrics');
@@ -22,15 +55,21 @@ export function InfrastructureServerPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold text-slate-900">Server</h2>
-          <p className="text-sm text-slate-500">CPU, RAM, load, and network from the Node collector.</p>
-        </div>
-        <Button type="button" variant="outline" onClick={() => void refresh()}>
-          Refresh
-        </Button>
-      </div>
+      <PageHeader
+        title="Server"
+        description="CPU, RAM, load, and network from the Node collector."
+        icon={<Cpu className="h-5 w-5" aria-hidden="true" />}
+        actions={
+          <Button
+            type="button"
+            variant="outline"
+            loadingLabel="Refreshing…"
+            onClick={() => refresh()}
+          >
+            Refresh
+          </Button>
+        }
+      />
       {error ? <EmptyState title="Unable to load server" description={error} /> : null}
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
@@ -41,7 +80,10 @@ export function InfrastructureServerPage() {
             <p>Cores: {server?.cpu.cores ?? '…'}</p>
             <p>Model: {server?.cpu.model ?? '…'}</p>
             <p>
-              Load: {server ? `${server.cpu.load1.toFixed(2)} / ${server.cpu.load5.toFixed(2)} / ${server.cpu.load15.toFixed(2)}` : '…'}
+              Load:{' '}
+              {server
+                ? `${server.cpu.load1.toFixed(2)} / ${server.cpu.load5.toFixed(2)} / ${server.cpu.load15.toFixed(2)}`
+                : '…'}
             </p>
           </CardContent>
         </Card>
@@ -81,6 +123,47 @@ export function InfrastructureServerPage() {
           ))}
         </CardContent>
       </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Server trend</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {history.length < 2 ? (
+            <p className="text-sm text-slate-500">Collecting monitoring samples…</p>
+          ) : (
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={history}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="time" minTickGap={32} />
+                  <YAxis width={42} />
+                  <Tooltip />
+                  <Line
+                    type="monotone"
+                    dataKey="load"
+                    name="Load 1m"
+                    stroke="#2563eb"
+                    dot={false}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="memory"
+                    name="Memory %"
+                    stroke="#16a34a"
+                    dot={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
+}
+
+interface ServerPoint {
+  time: string;
+  load: number;
+  memory: number;
 }

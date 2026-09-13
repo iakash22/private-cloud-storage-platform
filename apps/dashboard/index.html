@@ -3,10 +3,157 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>VaultStack</title>
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="color-scheme" content="light" />
+    <meta name="application-name" content="VaultStack" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; connect-src 'self' http://localhost:3000 https://api.ivaultstack.com; img-src 'self' data: blob:; media-src 'self' https: blob:; frame-src 'self' http://localhost:3000 https://api.ivaultstack.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com;"
+    />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="apple-touch-icon" href="/brand-mark.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap"
+    />
+    <title>VaultStack · Private cloud control plane</title>
+    <style>
+      /* Critical first paint — avoids blank white while JS boots */
+      :root {
+        color-scheme: light;
+        --vs-ink: #0f172a;
+        --vs-paper: #f8fafc;
+        --vs-sky: #38bdf8;
+        --vs-blue: #2563eb;
+        --vs-font-display: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+        --vs-font-sans: 'Source Sans 3', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: var(--vs-paper);
+        color: var(--vs-ink);
+        font-family: var(--vs-font-sans);
+      }
+      #root {
+        min-height: 100dvh;
+      }
+      .vs-boot {
+        display: grid;
+        place-items: center;
+        min-height: 100dvh;
+        background:
+          radial-gradient(circle at 20% 20%, rgb(56 189 248 / 0.12), transparent 40%),
+          radial-gradient(circle at 80% 80%, rgb(37 99 235 / 0.1), transparent 42%), var(--vs-paper);
+      }
+      .vs-boot__card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+        padding: 1.5rem;
+      }
+      .vs-boot__mark {
+        width: 3.5rem;
+        height: 3.5rem;
+        border-radius: 0.9rem;
+        background: var(--vs-ink);
+        display: grid;
+        place-items: center;
+        box-shadow: 0 10px 30px rgb(15 23 42 / 0.18);
+        animation: vs-boot-pulse 1.4s ease-in-out infinite;
+      }
+      .vs-boot__mark svg {
+        width: 2.1rem;
+        height: 2.1rem;
+      }
+      .vs-boot__title {
+        margin: 0;
+        font-family: var(--vs-font-display);
+        font-size: 1.125rem;
+        font-weight: 650;
+        letter-spacing: -0.02em;
+      }
+      .vs-boot__sub {
+        margin: 0;
+        font-size: 0.875rem;
+        color: #64748b;
+      }
+      .vs-boot__bar {
+        width: 8rem;
+        height: 0.25rem;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #e2e8f0;
+      }
+      .vs-boot__bar > span {
+        display: block;
+        height: 100%;
+        width: 40%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, var(--vs-sky), var(--vs-blue));
+        animation: vs-boot-slide 1s ease-in-out infinite;
+      }
+      @keyframes vs-boot-pulse {
+        0%,
+        100% {
+          transform: translateY(0) scale(1);
+        }
+        50% {
+          transform: translateY(-3px) scale(1.03);
+        }
+      }
+      @keyframes vs-boot-slide {
+        0% {
+          transform: translateX(-120%);
+        }
+        100% {
+          transform: translateX(280%);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .vs-boot__mark,
+        .vs-boot__bar > span {
+          animation: none !important;
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="vs-boot" role="status" aria-live="polite" aria-label="Loading VaultStack">
+        <div class="vs-boot__card">
+          <div class="vs-boot__mark" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+              <defs>
+                <linearGradient id="vsBootGrad" x1="8" y1="8" x2="56" y2="56">
+                  <stop stop-color="#38bdf8" />
+                  <stop offset="1" stop-color="#2563eb" />
+                </linearGradient>
+              </defs>
+              <path
+                d="M18 20.5 32 14l14 6.5v9.2c0 9.3-5.6 16.3-14 20.3-8.4-4-14-11-14-20.3v-9.2Z"
+                fill="url(#vsBootGrad)"
+              />
+              <path
+                d="m24 31 5.2 5.2L40.5 25"
+                stroke="#fff"
+                stroke-width="4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </div>
+          <p class="vs-boot__title">VaultStack</p>
+          <p class="vs-boot__sub">Starting control plane…</p>
+          <div class="vs-boot__bar" aria-hidden="true"><span></span></div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

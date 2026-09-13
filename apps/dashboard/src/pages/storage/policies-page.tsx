@@ -19,7 +19,10 @@ import {
   FieldError,
   Input,
   Label,
+  PageHeader,
+  Select,
 } from '@vaultstack/ui';
+import { ScrollText } from 'lucide-react';
 import { createLifecyclePolicyBodySchema, parseForm } from '@vaultstack/validation';
 import { useAuth } from '../../context/auth-context.js';
 import { useBuckets } from '../../hooks/use-storage.js';
@@ -132,25 +135,24 @@ export function PoliciesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold text-slate-900">Lifecycle policies</h2>
-          <p className="text-sm text-slate-500">
-            Expire objects, prune noncurrent versions, and abort stalled multipart uploads.
-          </p>
-        </div>
-        {canUploadStorage(permissions) ? (
-          <Button
-            type="button"
-            onClick={() => {
-              resetForm();
-              setCreateOpen(true);
-            }}
-          >
-            Create policy
-          </Button>
-        ) : null}
-      </div>
+      <PageHeader
+        title="Lifecycle policies"
+        description="Expire objects, prune noncurrent versions, and abort stalled multipart uploads."
+        icon={<ScrollText className="h-5 w-5" aria-hidden="true" />}
+        actions={
+          canUploadStorage(permissions) ? (
+            <Button
+              type="button"
+              onClick={() => {
+                resetForm();
+                setCreateOpen(true);
+              }}
+            >
+              Create policy
+            </Button>
+          ) : null
+        }
+      />
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
@@ -351,19 +353,17 @@ function PolicyForm({
       {showBucket ? (
         <div>
           <Label htmlFor="policy-bucket">Bucket</Label>
-          <select
+          <Select
             id="policy-bucket"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+            aria-label="Bucket"
             value={bucketId}
-            onChange={(event) => onBucketId(event.target.value)}
-          >
-            <option value="">All buckets</option>
-            {buckets.map((bucket) => (
-              <option key={bucket.id} value={bucket.id}>
-                {bucket.name}
-              </option>
-            ))}
-          </select>
+            onChange={onBucketId}
+            placeholder="All buckets"
+            options={[
+              { value: '', label: 'All buckets' },
+              ...buckets.map((bucket) => ({ value: bucket.id, label: bucket.name })),
+            ]}
+          />
           <FieldError message={fieldErrors.bucketId} />
         </div>
       ) : null}
@@ -382,18 +382,16 @@ function PolicyForm({
       </div>
       <div>
         <Label htmlFor="policy-action">Action</Label>
-        <select
+        <Select
           id="policy-action"
-          className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+          aria-label="Action"
           value={lifecycleAction}
-          onChange={(event) => onAction(event.target.value as StorageLifecycleActionName)}
-        >
-          {(Object.keys(LIFECYCLE_LABELS) as StorageLifecycleActionName[]).map((action) => (
-            <option key={action} value={action}>
-              {LIFECYCLE_LABELS[action]}
-            </option>
-          ))}
-        </select>
+          onChange={(value) => onAction(value as StorageLifecycleActionName)}
+          options={(Object.keys(LIFECYCLE_LABELS) as StorageLifecycleActionName[]).map((action) => ({
+            value: action,
+            label: LIFECYCLE_LABELS[action],
+          }))}
+        />
       </div>
       <label className="flex items-center gap-2 text-sm text-slate-700">
         <input type="checkbox" checked={enabled} onChange={(event) => onEnabled(event.target.checked)} />

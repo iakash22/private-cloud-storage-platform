@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { PublicShareLink } from '@vaultstack/types';
-import { Badge, Button, EmptyState, formatDate } from '@vaultstack/ui';
+import { Badge, Button, EmptyState, formatDate, PageHeader } from '@vaultstack/ui';
+import { Share2 } from 'lucide-react';
 import { apiClient } from '../../lib/api.js';
 import { canShareStorage } from '../../lib/storage-preferences.js';
 import { useAuth } from '../../context/auth-context.js';
@@ -44,13 +45,11 @@ export function SharesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold text-slate-900">Shares</h2>
-        <p className="text-sm text-slate-500">
-          Revoke links, adjust expiration, and review download permissions. Tokens are never shown
-          again after creation.
-        </p>
-      </div>
+      <PageHeader
+        title="Shares"
+        description="Revoke links, adjust expiration, and review download permissions. Tokens are never shown again after creation."
+        icon={<Share2 className="h-5 w-5" aria-hidden="true" />}
+      />
 
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       {loading ? <p className="text-sm text-slate-500">Loading shares…</p> : null}

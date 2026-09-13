@@ -66,12 +66,22 @@ import {
 import { ApiClientError } from './errors.js';
 import { defaultHttpFetch, type HttpFetch, type HttpRequestInit } from './http.js';
 import { uploadMultipartFile, type UploadMultipartFileOptions } from './multipart-upload.js';
-import { uploadBlobWithProgress, type UploadWithProgressOptions } from './upload-with-progress.js';
+import {
+  uploadBlobWithProgress,
+  uploadBytes,
+  type UploadBody,
+  type UploadWithProgressOptions,
+} from './upload-with-progress.js';
+
+export type UnauthorizedHandler = (error: ApiClientError) => void;
 
 export interface ApiClientOptions {
   baseUrl: string;
   fetchImpl?: HttpFetch;
   credentials?: HttpRequestInit['credentials'];
+  apiKey?: string;
+  /** Fired once per 401 from authenticated API routes (not login/register/me). */
+  onUnauthorized?: UnauthorizedHandler;
 }
 
 export interface RequestOptions {
@@ -100,17 +110,41 @@ function isLoginTotpChallenge(payload: AuthLoginResult): payload is AuthTotpChal
   return 'totpRequired' in payload && payload.totpRequired;
 }
 
+const AUTH_PATHS_WITHOUT_SESSION_EXPIRY = new Set([
+  '/api/v1/auth/login',
+  '/api/v1/auth/login/totp',
+  '/api/v1/auth/register',
+  '/api/v1/auth/logout',
+  '/api/v1/auth/me',
+]);
+
+function shouldEmitUnauthorized(path: string): boolean {
+  const pathname = path.split('?')[0] ?? path;
+  return !AUTH_PATHS_WITHOUT_SESSION_EXPIRY.has(pathname);
+}
+
 export class VaultStackApiClient {
   private readonly baseUrl: string;
   private readonly fetchImpl: HttpFetch;
   private readonly credentials: NonNullable<HttpRequestInit['credentials']>;
+  private readonly apiKey?: string;
+  private readonly inFlightRequests = new Map<string, Promise<unknown>>();
+  private readonly recentRequests = new Map<
+    string,
+    { promise: Promise<unknown>; expiresAt: number }
+  >();
+  private activeRequestCount = 0;
+  private static readonly duplicateRequestWindowMs = 350;
   private csrfToken?: string;
   private organizationId?: string;
+  private onUnauthorized?: UnauthorizedHandler;
 
   constructor(options: ApiClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, '');
     this.fetchImpl = options.fetchImpl ?? defaultHttpFetch;
-    this.credentials = options.credentials ?? 'include';
+    this.apiKey = options.apiKey;
+    this.credentials = options.credentials ?? (options.apiKey ? 'omit' : 'include');
+    this.onUnauthorized = options.onUnauthorized;
   }
 
   setCsrfToken(token: string | undefined): void {
@@ -119,6 +153,16 @@ export class VaultStackApiClient {
 
   setOrganizationId(organizationId: string | undefined): void {
     this.organizationId = organizationId;
+  }
+
+  setOnUnauthorized(handler: UnauthorizedHandler | undefined): void {
+    this.onUnauthorized = handler;
+  }
+
+  /** Drop local CSRF/org headers without calling the logout endpoint. */
+  clearSession(): void {
+    this.csrfToken = undefined;
+    this.organizationId = undefined;
   }
 
   getCsrfToken(): string | undefined {
@@ -184,9 +228,11 @@ export class VaultStackApiClient {
   }
 
   async logout(): Promise<void> {
-    await this.request<undefined>('POST', '/api/v1/auth/logout');
-    this.csrfToken = undefined;
-    this.organizationId = undefined;
+    try {
+      await this.request<undefined>('POST', '/api/v1/auth/logout');
+    } finally {
+      this.clearSession();
+    }
   }
 
   async me(): Promise<AuthSessionPayload> {
@@ -355,6 +401,13 @@ export class VaultStackApiClient {
       { body: input },
     );
     return result.download;
+  }
+
+  async getObjectDownloadUrl(
+    objectId: string,
+    input: { versionId?: string } = {},
+  ): Promise<PublicPresignedUrl> {
+    return this.createDownloadUrl(objectId, input);
   }
 
   async deleteObject(objectId: string, versionId?: string): Promise<void> {
@@ -535,6 +588,18 @@ export class VaultStackApiClient {
       { body: input },
     );
     return result.download;
+  }
+
+  async createPublicSharePreviewUrl(
+    token: string,
+    input: { password?: string; accessToken?: string } = {},
+  ): Promise<PublicPresignedUrl> {
+    const result = await this.request<{ preview: PublicPresignedUrl }>(
+      'POST',
+      `/api/v1/public/shares/${encodeURIComponent(token)}/preview-url`,
+      { body: input },
+    );
+    return result.preview;
   }
 
   async listTeams(organizationId: string): Promise<PublicTeam[]> {
@@ -808,6 +873,34 @@ export class VaultStackApiClient {
     return uploadBlobWithProgress(initiated, file, options).then(() => undefined);
   }
 
+  uploadBytes(
+    initiated: InitiatedUpload,
+    body: UploadBody,
+    options: UploadWithProgressOptions = {},
+  ): Promise<void> {
+    return uploadBytes(initiated, body, { ...options, fetchImpl: this.fetchImpl }).then(
+      () => undefined,
+    );
+  }
+
+  async putObject(input: {
+    bucketId: string;
+    key: string;
+    body: UploadBody;
+    contentType?: string;
+  }): Promise<PublicStorageObject> {
+    const initiated = await this.initiateUpload({
+      bucketId: input.bucketId,
+      key: input.key,
+      contentType: input.contentType,
+      size: getBodySize(input.body),
+    });
+    await this.uploadBytes(initiated, input.body, {
+      headers: input.contentType ? { 'Content-Type': input.contentType } : undefined,
+    });
+    return this.completeUpload(initiated.upload.id);
+  }
+
   async initiateMultipart(input: {
     bucketId: string;
     key: string;
@@ -1069,6 +1162,38 @@ export class VaultStackApiClient {
       { body: input },
     );
     return result.version;
+  }
+
+  async uploadArtifact(input: {
+    projectId: string;
+    buildId: string;
+    name: string;
+    body: UploadBody;
+    fileName?: string;
+    contentType?: string;
+    kind?: ArtifactKindName;
+    versionLabel?: string;
+  }): Promise<PublicArtifactVersion> {
+    const initiated = await this.initiateArtifactUpload(input.projectId, input.buildId, {
+      name: input.name,
+      fileName: input.fileName,
+      contentType: input.contentType,
+      size: getBodySize(input.body),
+      kind: input.kind,
+      versionLabel: input.versionLabel,
+    });
+    await this.uploadBytes(
+      {
+        upload: initiated.upload,
+        uploadUrl: initiated.uploadUrl,
+        method: initiated.method,
+        expiresAt: initiated.expiresAt,
+        headers: initiated.headers,
+      },
+      input.body,
+      { headers: input.contentType ? { 'Content-Type': input.contentType } : undefined },
+    );
+    return this.completeArtifactUpload(initiated.version.id);
   }
 
   async createArtifactDownloadUrl(versionId: string): Promise<PublicPresignedUrl> {
@@ -1444,14 +1569,64 @@ export class VaultStackApiClient {
     path: string,
     options: Omit<RequestOptions, 'method'> = {},
   ): Promise<T> {
+    const requestKey = `${method}:${path}:${JSON.stringify(options.body ?? null)}`;
+    const existing = this.inFlightRequests.get(requestKey);
+    if (existing) {
+      return existing as Promise<T>;
+    }
+    const recent = this.recentRequests.get(requestKey);
+    if (recent && recent.expiresAt > Date.now()) {
+      return recent.promise as Promise<T>;
+    }
+
+    const request = this.performRequest<T>(method, path, options);
+    this.inFlightRequests.set(requestKey, request);
+    this.recentRequests.set(requestKey, {
+      promise: request,
+      expiresAt: Date.now() + VaultStackApiClient.duplicateRequestWindowMs,
+    });
+    setTimeout(() => {
+      const current = this.recentRequests.get(requestKey);
+      if (current?.promise === request) {
+        this.recentRequests.delete(requestKey);
+      }
+    }, VaultStackApiClient.duplicateRequestWindowMs);
+    this.setRequestActivity(true);
+    try {
+      return await request;
+    } finally {
+      this.inFlightRequests.delete(requestKey);
+      this.setRequestActivity(false);
+    }
+  }
+
+  private setRequestActivity(active: boolean): void {
+    this.activeRequestCount += active ? 1 : -1;
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent('vaultstack:request-activity', {
+          detail: { active: this.activeRequestCount > 0 },
+        }),
+      );
+    }
+  }
+
+  private async performRequest<T>(
+    method: RequestOptions['method'],
+    path: string,
+    options: Omit<RequestOptions, 'method'> = {},
+  ): Promise<T> {
     const headers: Record<string, string> = {
       Accept: 'application/json',
       ...options.headers,
     };
 
     const csrfToken = options.csrfToken ?? this.csrfToken;
-    if (csrfToken && method !== 'GET') {
+    if (!this.apiKey && csrfToken && method !== 'GET') {
       headers[CSRF_HEADER_NAME] = csrfToken;
+    }
+    if (this.apiKey) {
+      headers.Authorization = `Bearer ${this.apiKey}`;
     }
 
     const organizationId = options.organizationId ?? this.organizationId;
@@ -1477,13 +1652,33 @@ export class VaultStackApiClient {
     }
 
     if (!response.ok) {
-      throw await ApiClientError.fromResponse(response);
+      const error = await ApiClientError.fromResponse(response);
+      if (error.status === 401 && shouldEmitUnauthorized(path) && this.onUnauthorized) {
+        this.onUnauthorized(error);
+      }
+      throw error;
     }
 
     return (await response.json()) as T;
   }
 }
 
-export function createApiClient(baseUrl: string): VaultStackApiClient {
-  return new VaultStackApiClient({ baseUrl });
+export function createApiClient(
+  baseUrl: string,
+  options: Omit<ApiClientOptions, 'baseUrl'> = {},
+): VaultStackApiClient {
+  return new VaultStackApiClient({ baseUrl, ...options });
+}
+
+function getBodySize(body: UploadBody): number | undefined {
+  if (typeof body === 'string') {
+    return new TextEncoder().encode(body).byteLength;
+  }
+  if (body instanceof Uint8Array) {
+    return body.byteLength;
+  }
+  if (typeof Blob !== 'undefined' && body instanceof Blob) {
+    return body.size;
+  }
+  return undefined;
 }

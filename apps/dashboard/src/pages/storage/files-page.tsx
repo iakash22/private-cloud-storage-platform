@@ -17,6 +17,7 @@ import {
   Input,
   Label,
   ObjectDetails,
+  PageHeader,
   ShareDialog,
   type ExplorerEntry,
   type ShareDialogCreateInput,
@@ -24,6 +25,7 @@ import {
   type SortField,
   type ViewMode,
 } from '@vaultstack/ui';
+import { FolderOpen } from 'lucide-react';
 import type { PublicObjectVersion, PublicTeam } from '@vaultstack/types';
 import { createShareBodySchema, parseForm } from '@vaultstack/validation';
 import { useAuth } from '../../context/auth-context.js';
@@ -268,24 +270,23 @@ export function FilesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-semibold text-slate-900">Files</h2>
-          <p className="text-sm text-slate-500">
-            Browse, upload, and manage objects by bucket and prefix.
-          </p>
-        </div>
-        <div className="w-full max-w-xs">
-          <BucketSelector
-            buckets={buckets}
-            value={bucketId}
-            disabled={bucketsLoading}
-            onChange={setBucketId}
-          />
-        </div>
-      </div>
+      <PageHeader
+        title="Files"
+        description="Browse, upload, and manage objects by bucket and prefix."
+        icon={<FolderOpen className="h-5 w-5" aria-hidden="true" />}
+        actions={
+          <div className="w-full min-w-[14rem] sm:w-64">
+            <BucketSelector
+              buckets={buckets}
+              value={bucketId}
+              disabled={bucketsLoading}
+              onChange={setBucketId}
+            />
+          </div>
+        }
+      />
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-4">
           <FileExplorer
             prefix={prefix}

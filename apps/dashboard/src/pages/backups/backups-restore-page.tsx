@@ -11,7 +11,10 @@ import {
   DialogActions,
   EmptyState,
   FieldError,
+  PageHeader,
+  Select,
 } from '@vaultstack/ui';
+import { RotateCcw } from 'lucide-react';
 import type { PublicBackupRestoreJob, PublicBackupSnapshot } from '@vaultstack/types';
 import { createBackupRestoreBodySchema, parseForm } from '@vaultstack/validation';
 import { apiClient } from '../../lib/api.js';
@@ -67,31 +70,30 @@ export function BackupsRestorePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-semibold text-slate-900">Restore</h2>
-          <p className="text-sm text-slate-500">
-            Elevated restore planning. Live database restore is deferred to disaster recovery.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button type="button" variant="outline" onClick={() => void refresh()}>
-            Refresh
-          </Button>
-          {canRestoreBackups(permissions) ? (
-            <Button
-              type="button"
-              onClick={() => {
-                setOpen(true);
-              }}
-            >
-              Start restore
+      <PageHeader
+        title="Restore"
+        description="Elevated restore planning. Live database restore is deferred to disaster recovery."
+        icon={<RotateCcw className="h-5 w-5" aria-hidden="true" />}
+        actions={
+          <>
+            <Button type="button" variant="outline" loadingLabel="Refreshing…" onClick={() => refresh()}>
+              Refresh
             </Button>
-          ) : (
-            <p className="text-sm text-slate-500">backup.restore permission is required.</p>
-          )}
-        </div>
-      </div>
+            {canRestoreBackups(permissions) ? (
+              <Button
+                type="button"
+                onClick={() => {
+                  setOpen(true);
+                }}
+              >
+                Start restore
+              </Button>
+            ) : (
+              <p className="text-sm text-slate-500">backup.restore permission is required.</p>
+            )}
+          </>
+        }
+      />
       {error ? <EmptyState title="Unable to load restore jobs" description={error} /> : null}
 
       <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
@@ -181,22 +183,17 @@ export function BackupsRestorePage() {
       >
         <label className="space-y-2 text-sm">
           Snapshot
-          <select
+          <Select
             aria-label="Snapshot"
-            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
             value={snapshotId}
+            onChange={setSnapshotId}
+            placeholder="Select a snapshot"
             aria-invalid={Boolean(fieldErrors.snapshotId)}
-            onChange={(event) => {
-              setSnapshotId(event.target.value);
-            }}
-          >
-            <option value="">Select a snapshot</option>
-            {snapshots.map((snapshot) => (
-              <option key={snapshot.id} value={snapshot.id}>
-                {snapshot.id}
-              </option>
-            ))}
-          </select>
+            options={[
+              { value: '', label: 'Select a snapshot' },
+              ...snapshots.map((snapshot) => ({ value: snapshot.id, label: snapshot.id })),
+            ]}
+          />
           <FieldError message={fieldErrors.snapshotId} />
         </label>
       </Dialog>

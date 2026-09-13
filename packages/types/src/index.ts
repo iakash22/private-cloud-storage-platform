@@ -561,6 +561,24 @@ export interface PublicPresignedUrl {
   headers?: Record<string, string>;
 }
 
+export type PreviewJobStatus = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+
+export interface PublicPreviewJob {
+  id: string;
+  organizationId: string;
+  objectId: string;
+  kind: 'ARCHIVE' | 'OFFICE';
+  status: PreviewJobStatus;
+  result: unknown;
+  outputObjectId: string | null;
+  error: string | null;
+  converter: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  updatedAt: string;
+}
+
 export interface InitiatedUpload {
   upload: PublicUpload;
   uploadUrl: string;
