@@ -17,6 +17,7 @@ import {
   initiateArtifactBodySchema,
   initiateMultipartBodySchema,
   listMultipartSessionsQuerySchema,
+  listObjectsQuerySchema,
   multipartPartParamsSchema,
   parseForm,
   multipartPartQuerySchema,
@@ -178,6 +179,25 @@ describe('@vaultstack/validation', () => {
       cursor: 'session-25',
     });
     expect(listMultipartSessionsQuerySchema.safeParse({ status: 'FAILED' }).success).toBe(false);
+  });
+
+  it('validates advanced object filters and rejects inverted ranges', () => {
+    expect(
+      listObjectsQuerySchema.safeParse({
+        minSize: '10',
+        maxSize: '100',
+        externallyShared: 'true',
+        modifiedFrom: '2026-01-01T00:00:00.000Z',
+        modifiedTo: '2026-01-02T00:00:00.000Z',
+      }).success,
+    ).toBe(true);
+    expect(listObjectsQuerySchema.parse({ externallyShared: 'false' }).externallyShared).toBe(false);
+    expect(
+      listObjectsQuerySchema.safeParse({
+        minSize: 100,
+        maxSize: 10,
+      }).success,
+    ).toBe(false);
   });
 
   it('validates lifecycle policy creation and bucket versioning updates', () => {

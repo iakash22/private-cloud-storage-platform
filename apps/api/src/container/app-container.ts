@@ -44,6 +44,14 @@ import {
   enqueueFolderOperation,
   FOLDER_OPERATION_QUEUE,
 } from '../workers/folder-operation.worker.js';
+import { createEmailQueue, enqueueEmail } from '../workers/email.worker.js';
+import { NotificationService } from '../modules/notifications/notification.service.js';
+import {
+  NoopRealtimePublisher,
+  RedisRealtimePublisher,
+  type RealtimePublisher,
+} from '../modules/realtime/services/redis-realtime.publisher.js';
+import { RealtimeHubService } from '../modules/realtime/services/realtime-hub.service.js';
 
 export interface AppServices {
   sessions: SessionManager;
@@ -64,6 +72,9 @@ export interface AppServices {
   previews: PreviewService;
   folderOperations: FolderOperationService;
   folderAccess: FolderAccessService;
+  notifications: NotificationService;
+  realtimePublisher: RealtimePublisher;
+  realtimeHub: RealtimeHubService | null;
 }
 
 /**
@@ -91,6 +102,9 @@ export class AppContainer {
   readonly previews: PreviewService;
   readonly folderOperations: FolderOperationService;
   readonly folderAccess: FolderAccessService;
+  readonly notifications: NotificationService;
+  readonly realtimePublisher: RealtimePublisher;
+  readonly realtimeHub: RealtimeHubService | null;
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -110,10 +124,26 @@ export class AppContainer {
       config.JWT_SECRET,
     );
     this.authorization = createAuthorizationService(createPrismaPermissionResolver(prisma));
-    this.auth = new AuthService(prisma, this.sessions, config.NODE_ENV, config.JWT_SECRET);
+    this.notifications = this.createNotificationService(prisma, config, logger);
+    const { publisher, hub, redis: realtimeRedis } = this.createRealtimeServices(config, logger);
+    this.realtimePublisher = publisher;
+    this.realtimeHub = hub;
+    this.auth = new AuthService(
+      prisma,
+      this.sessions,
+      config.NODE_ENV,
+      config.JWT_SECRET,
+      this.notifications,
+      this.realtimePublisher,
+    );
     this.organizations = new OrganizationsService(prisma);
-    this.users = new UsersService(prisma, config.NODE_ENV);
-    this.teams = new TeamsService(prisma);
+    this.users = new UsersService(
+      prisma,
+      config.NODE_ENV,
+      this.notifications,
+      this.realtimePublisher,
+    );
+    this.teams = new TeamsService(prisma, this.notifications);
     this.roles = new RolesService(prisma);
     this.permissions = new PermissionsService(prisma);
     this.apiKeys = new ApiKeysService(prisma);
@@ -169,31 +199,88 @@ export class AppContainer {
         },
       },
       logger,
+      folderAuthorization: this.storage.folderAuthorization,
+      notifications: this.notifications,
+      realtimePublisher: this.realtimePublisher,
     });
     this.folderAccess = createFolderAccessService({
       prisma,
       storage: this.storage.storage,
       logger,
+      folderAuthorization: this.storage.folderAuthorization,
     });
     this.artifacts = new ArtifactsService(prisma, this.storage);
-    this.backups = this.createBackupsService(prisma, config, logger);
+    this.backups = this.createBackupsService(prisma, config, logger, this.notifications, this.realtimePublisher);
+    void realtimeRedis?.connect().catch((error: unknown) => {
+      logger.warn({ event: 'realtime.redis_connect_failed', err: error }, 'Realtime Redis unavailable');
+    });
     this.infrastructure = InfrastructureService.create(prisma, this.storage, config, logger);
     this.s3Credentials = createS3CredentialService(prisma, config.JWT_SECRET);
+  }
+
+  private createNotificationService(
+    prisma: PrismaClient,
+    config: EnvConfig,
+    logger: Logger,
+  ): NotificationService {
+    if (config.NODE_ENV === 'test') {
+      const notifications = new NotificationService(prisma, config, logger, async (message) => {
+        await notifications.sendNow(message);
+      });
+      return notifications;
+    }
+
+    const redis = new Redis(config.REDIS_URL, { maxRetriesPerRequest: null, lazyConnect: true });
+    const queue = createEmailQueue(redis);
+    void redis.connect().catch((error: unknown) => {
+      logger.warn({ event: 'email.redis_connect_failed', err: error }, 'Email queue unavailable');
+    });
+
+    return new NotificationService(prisma, config, logger, async (message) => {
+      await enqueueEmail(queue, message);
+    });
+  }
+
+  private createRealtimeServices(
+    config: EnvConfig,
+    logger: Logger,
+  ): {
+    publisher: RealtimePublisher;
+    hub: RealtimeHubService | null;
+    redis: Redis | null;
+  } {
+    if (config.NODE_ENV === 'test' || !config.REALTIME_ENABLED) {
+      return { publisher: new NoopRealtimePublisher(), hub: null, redis: null };
+    }
+
+    const redis = new Redis(config.REDIS_URL, { maxRetriesPerRequest: null, lazyConnect: true });
+    const publisher = new RedisRealtimePublisher(redis, config, logger);
+    const hub = new RealtimeHubService(redis, config, logger);
+    return { publisher, hub, redis };
   }
 
   private createBackupsService(
     prisma: PrismaClient,
     config: EnvConfig,
     logger: Logger,
+    notifications: NotificationService,
+    realtimePublisher: RealtimePublisher,
   ): BackupsService {
+    const engineDeps = { notifications, realtimePublisher };
     if (config.NODE_ENV === 'test' || config.BACKUP_PROCESS_INLINE) {
-      return new BackupsService(prisma, this.storage, config, logger);
+      return new BackupsService(prisma, this.storage, config, logger, undefined, null, engineDeps);
     }
 
     const redis = new Redis(config.REDIS_URL, { maxRetriesPerRequest: null, lazyConnect: true });
     const queue = new Queue(BACKUP_QUEUE_NAME, { connection: redis });
-    return new BackupsService(prisma, this.storage, config, logger, undefined, (payload) =>
-      enqueueBackupPayload(queue, payload),
+    return new BackupsService(
+      prisma,
+      this.storage,
+      config,
+      logger,
+      undefined,
+      (payload) => enqueueBackupPayload(queue, payload),
+      engineDeps,
     );
   }
 }
@@ -224,6 +311,9 @@ export function createServices(
     previews: container.previews,
     folderOperations: container.folderOperations,
     folderAccess: container.folderAccess,
+    notifications: container.notifications,
+    realtimePublisher: container.realtimePublisher,
+    realtimeHub: container.realtimeHub,
   };
 }
 

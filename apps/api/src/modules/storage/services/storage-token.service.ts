@@ -17,6 +17,8 @@ export interface StorageTokenClaims {
   partNumber?: number;
   /** Present only on version-scoped download tokens. */
   versionId?: string;
+  /** Present on user-issued download tokens so ACLs are rechecked on use. */
+  actorId?: string;
   expiresAt: Date;
 }
 
@@ -28,6 +30,7 @@ interface EncodedClaims {
   n: string;
   pn?: number;
   v?: string;
+  a?: string;
 }
 
 function base64UrlEncode(value: Buffer | string): string {
@@ -51,6 +54,7 @@ export class StorageTokenManager {
       n: randomBytes(8).toString('hex'),
       ...(claims.partNumber === undefined ? {} : { pn: claims.partNumber }),
       ...(claims.versionId === undefined ? {} : { v: claims.versionId }),
+      ...(claims.actorId === undefined ? {} : { a: claims.actorId }),
     };
 
     const payload = base64UrlEncode(JSON.stringify(encoded));
@@ -96,6 +100,7 @@ export class StorageTokenManager {
       subjectId: claims.s,
       ...(claims.pn === undefined ? {} : { partNumber: claims.pn }),
       ...(claims.v === undefined ? {} : { versionId: claims.v }),
+      ...(claims.a === undefined ? {} : { actorId: claims.a }),
       expiresAt,
     };
   }

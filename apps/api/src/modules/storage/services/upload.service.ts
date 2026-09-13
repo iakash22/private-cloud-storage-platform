@@ -47,6 +47,7 @@ import { reclaimSupersededVersions } from './reclaim-versions.js';
 import type { StorageMetrics } from './storage.metrics.js';
 import type { StorageService } from './storage.service.js';
 import type { StorageTokenService } from './storage-token.service.js';
+import type { FolderAuthorizationService } from './folder-authorization.service.js';
 
 export interface InitiateUploadInput {
   organizationId: string;
@@ -189,9 +190,27 @@ export function createUploadService(deps: {
   tokens: StorageTokenService;
   metrics: StorageMetrics;
   logger: Logger;
+  folderAuthorization?: FolderAuthorizationService;
 }): UploadService {
-  const { prisma, uploads, objects, storage, tokens, metrics, logger } = deps;
+  const { prisma, uploads, objects, storage, tokens, metrics, logger, folderAuthorization } = deps;
   const limits = storage.limits;
+
+  async function assertFolderWrite(
+    organizationId: string,
+    bucketId: string,
+    key: string,
+    userId: string,
+  ): Promise<void> {
+    if (folderAuthorization) {
+      await folderAuthorization.assert({
+        organizationId,
+        bucketId,
+        key,
+        userId,
+        action: 'WRITE',
+      });
+    }
+  }
 
   return {
     /**
@@ -204,6 +223,7 @@ export function createUploadService(deps: {
      */
     async initiate(input) {
       const key = assertValidObjectKey(input.key, limits.maxKeyLength);
+      await assertFolderWrite(input.organizationId, input.bucketId, key, input.userId);
 
       if (input.size !== undefined && input.size > limits.maxObjectSizeBytes) {
         throw storageObjectTooLarge(limits.maxObjectSizeBytes);
@@ -407,6 +427,7 @@ export function createUploadService(deps: {
       }
 
       const resolved = await storage.resolveBucket(row.organizationId, row.bucketId);
+      await assertFolderWrite(row.organizationId, row.bucketId, row.key, input.userId);
       const location = storage.locationFor(resolved.bucket, row.stagingKey);
 
       await uploads.setStatus(row.id, UploadStatus.COMPLETING);
@@ -545,6 +566,7 @@ export function createUploadService(deps: {
 
     async initiateMultipart(input) {
       const key = assertValidObjectKey(input.key, limits.maxKeyLength);
+      await assertFolderWrite(input.organizationId, input.bucketId, key, input.userId);
       if (input.declaredSize !== undefined && input.declaredSize > limits.maxObjectSizeBytes) {
         throw storageObjectTooLarge(limits.maxObjectSizeBytes);
       }

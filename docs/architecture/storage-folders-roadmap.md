@@ -41,6 +41,8 @@ The current model does not yet provide:
 - folder usage summaries;
 - a complete bucket control center.
 
+
+
 ## Storage model decision
 
 Folders should remain virtual prefix views by default.
@@ -72,6 +74,8 @@ References:
 - [Google Drive files resource](https://developers.google.com/workspace/drive/api/reference/rest/v3/files)
 - [Google Drive permissions](https://developers.google.com/workspace/drive/api/reference/rest/v3/permissions)
 - [Dropbox team files and namespaces](https://developers.dropbox.com/dbx-team-files-guide)
+
+
 
 ## Target listing contract
 
@@ -106,7 +110,11 @@ Listing requirements:
 7. Keep response ordering deterministic.
 8. Make object and folder sorting explicit rather than implicit.
 
+
+
 ## Proposed API surface
+
+
 
 ### Create an empty folder
 
@@ -197,7 +205,11 @@ Delete should support two modes:
 - move to VaultStack trash when recovery is possible;
 - permanent deletion for explicitly authorized destructive operations.
 
+
+
 ## Folder permissions
+
+
 
 ### Initial phase
 
@@ -310,7 +322,11 @@ Folder work must include:
 - rate limits for recursive operations;
 - no recursive operation performed inside an HTTP request.
 
+
+
 ## Delivery phases
+
+
 
 ### Phase 1: virtual folders
 
@@ -322,6 +338,8 @@ Folder work must include:
 - URL and browser-history navigation;
 - tests for prefix normalization and organization isolation.
 
+
+
 ### Phase 2: recursive operations
 
 - durable folder operation model;
@@ -329,6 +347,8 @@ Folder work must include:
 - move, copy, rename, and delete;
 - progress, retry, cancellation, and audit events;
 - failure recovery.
+
+
 
 ### Phase 3: bucket control center
 
@@ -341,58 +361,90 @@ Folder work must include:
 - backups;
 - health indicators.
 
+
+
 ### Phase 4: search and metadata
 
 - filename search (implemented as a case-insensitive server-side object-list
-  query);
+query);
 - favorites and recent items (implemented in the dashboard preferences layer);
 - tags and descriptions are implemented using the existing PostgreSQL object
-  metadata column;
-- advanced filters remain the next metadata extension.
+metadata column;
+- advanced object-list filters (content type, size range, modified date, folder
+  prefix, share/version/processing flags) are implemented; trigram or full-text
+  indexes remain optional follow-up when search volume grows.
+
+
 
 ### Phase 5: collaboration
 
 - folder ACLs and team-folder access rules (implemented);
 - folder collaboration dashboard and server-side rule management (implemented);
 - audit events for grants and revocations (implemented);
-- folder-share enforcement and external collaboration controls remain
-  deployment follow-up work before enabling cross-organization sharing.
+- folder ACL enforcement across HTTP storage, recursive jobs, S3 gateway, and
+  sharing is implemented; external collaboration controls (invitations, expiry,
+  domain restrictions, cross-organization policy) remain follow-up work.
+
+
 
 ## Pending work
 
+
+
 ### Phase 4 — advanced search and metadata
 
-- [ ] Add advanced object filters for content type, size range, modified date,
+- [x] Add advanced object filters for content type, size range, modified date,
   bucket, and folder prefix.
-- [ ] Add filters for externally shared, versioned, and processing-state
+- [x] Add filters for externally shared, versioned, and processing-state
   objects.
 - [ ] Add PostgreSQL trigram or full-text indexes before search volume requires
   a separate search service.
 - [ ] Add dashboard tests for debounced search and metadata editing.
 
+
+
 ### Phase 5 — collaboration enforcement
 
-- [ ] Enforce folder ACLs during object listing, upload, download, sharing,
+- [x] Enforce folder ACLs during object listing, upload, download, sharing,
   restore, and recursive folder operations.
-- [ ] Resolve effective permissions from direct user rules and team
+- [x] Resolve effective permissions from direct user rules and team
   membership, with the most-specific folder prefix taking precedence.
 - [ ] Add folder-level share links with read-only and download controls.
-- [ ] Add shared-folder activity filtering and dashboard history.
+- [x] Add shared-folder activity filtering and dashboard history.
 - [ ] Add external collaboration controls: invitations, expiry, domain
   restrictions, revocation, and cross-organization policy checks.
-- [ ] Add authorization, organization-isolation, and team-membership tests for
-  every collaboration route.
+- [x] Add authorization, organization-isolation, and team-membership tests for
+  folder ACL and advanced-filter boundaries.
+
+
+
+### Notifications and realtime (code complete; THANOS rollout pending)
+
+- [x] Resend transactional email for auth, security, invitations, folder jobs,
+  and backup jobs (`docs/usage/notifications.md`).
+- [x] SSE realtime stream for session revoke, folder-operation progress, and
+  backup job progress (`GET /api/v1/realtime/events`).
+- [ ] Configure `RESEND_API_KEY`, `EMAIL_FROM`, and `DASHBOARD_PUBLIC_URL` on
+  THANOS; verify worker processes the `email-delivery` queue.
+- [ ] Smoke-test login-detected email, remote session revoke push, and job
+  progress events in the production dashboard.
+
+
 
 ### Production rollout
 
-- [ ] Apply the `FolderAccessRule` database migration on THANOS.
+- [ ] Apply storage migrations on THANOS, including advanced filter indexes
+  (`20260913200000_advanced_storage_filters`) and folder-access integrity
+  (`20260913201000_folder_access_integrity`).
 - [ ] Rebuild and redeploy API, dashboard, and worker services.
 - [ ] Verify role permissions, navigation, folder ACLs, team shares, and audit
   events in the deployed environment.
-- [ ] Run upload, download, folder-operation, S3, backup, and readiness smoke
-  tests.
+- [ ] Run upload, download, folder-operation, S3, backup, readiness, email, and
+  realtime smoke tests.
 - [ ] Complete the remaining operator checklist in
   `docs/deployment/thanos-pending.md`.
+
+
 
 ## Acceptance criteria for Phase 1
 
@@ -406,3 +458,4 @@ Folder work must include:
 - Invalid and traversal prefixes are rejected.
 - The browser URL can be copied and reopened at the same folder.
 - API, OpenAPI, SDK, UI, and tests are updated together.
+

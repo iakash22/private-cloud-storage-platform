@@ -56,6 +56,8 @@ tags:
     description: Backup jobs, schedules, snapshots, and restore plans (bytes via StorageService)
   - name: Infrastructure
     description: Host, disk, Docker, and storage collectors. No command-execution endpoints.
+  - name: Realtime
+    description: Server-Sent Events for session revoke and job progress (session cookie only)
 
 paths:
   /health:
@@ -330,8 +332,57 @@ paths:
       responses:
         '200':
           description: Authenticated user profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSessionPayload'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
+
+  /api/v1/realtime/events:
+    get:
+      tags: [Realtime]
+      summary: Stream organization-scoped realtime events (SSE)
+      description: |
+        Opens a long-lived **Server-Sent Events** stream for the authenticated user.
+        Requires a **browser session cookie**; API keys are rejected with `403`.
+
+        The active organization is resolved from the `vs_org` cookie or
+        `x-vaultstack-organization` header (same as other org-scoped routes).
+
+        Each event is a JSON object serialized in the SSE `data` field. Event names
+        match the `type` property (`session.revoked`, `folder_operation.progress`, …).
+
+        Connection count per user is capped by `REALTIME_MAX_CONNECTIONS_PER_USER`
+        (default 3). This route is excluded from the general REST rate limiter.
+      operationId: streamRealtimeEvents
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Event stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: SSE frames; each `data` line is a RealtimeEvent JSON object
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '503':
+          description: Realtime hub disabled or Redis unavailable
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [code, message]
+                properties:
+                  code:
+                    type: string
+                    enum: [REALTIME_UNAVAILABLE]
+                  message:
+                    type: string
 
   /api/v1/auth/organization:
     post:
@@ -1071,7 +1122,8 @@ paths:
         - bearerApiKey: []
       responses:
         '200':
-          description: Folder ACL rules
+          description: Folder ACL rules. The deepest matching prefix wins; active
+            team membership and direct user rules are evaluated server-side.
           content:
             application/json:
               schema:
@@ -1087,6 +1139,8 @@ paths:
     post:
       tags: [Storage]
       summary: Grant team or user access to a folder
+      description: VIEWER can read, EDITOR can read and write, and MANAGER can
+        also delete, share, and manage folder access rules.
       operationId: createFolderAccessRule
       security:
         - sessionCookie: []
@@ -1144,6 +1198,50 @@ paths:
           schema:
             type: string
             maxLength: 255
+        - name: contentType
+          in: query
+          schema:
+            type: string
+        - name: minSize
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+        - name: maxSize
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+        - name: modifiedFrom
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: modifiedTo
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: folderPrefix
+          in: query
+          schema:
+            type: string
+        - name: tag
+          in: query
+          schema:
+            type: string
+        - name: externallyShared
+          in: query
+          schema:
+            type: boolean
+        - name: versioned
+          in: query
+          schema:
+            type: boolean
+        - name: processingState
+          in: query
+          schema:
+            type: string
         - name: limit
           in: query
           schema:
@@ -3073,6 +3171,61 @@ components:
       properties:
         organizationId:
           type: string
+
+    AuthSessionPayload:
+      type: object
+      required: [user, organizations, memberships, csrfToken]
+      properties:
+        user:
+          $ref: '#/components/schemas/PublicUser'
+        organizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicOrganization'
+        memberships:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicMembership'
+        csrfToken:
+          type: string
+        organization:
+          $ref: '#/components/schemas/PublicOrganization'
+        activeOrganizationId:
+          type: string
+          nullable: true
+        currentSessionId:
+          type: string
+          nullable: true
+          description: Present for cookie sessions; used by the dashboard to match session.revoked events
+
+    RealtimeEvent:
+      type: object
+      required: [id, type, organizationId, userId, createdAt, payload]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum:
+            - ping
+            - session.revoked
+            - session.revoked_all
+            - folder_operation.progress
+            - folder_operation.completed
+            - folder_operation.failed
+            - backup_job.progress
+            - backup_job.completed
+            - backup_job.failed
+        organizationId:
+          type: string
+        userId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        payload:
+          type: object
+          description: Event-specific payload; never includes secrets or storage credentials
 
     PublicAuthSession:
       type: object

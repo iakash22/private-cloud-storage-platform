@@ -70,6 +70,7 @@ packages/validation/src/
 ├── artifact.schemas.ts
 ├── backup.schemas.ts
 ├── infrastructure.schemas.ts
+├── realtime.schemas.ts
 ├── s3-credentials.schemas.ts
 └── index.ts              # re-exports all
 ```
@@ -84,6 +85,8 @@ packages/validation/src/
 | Session persistence         | `SessionManager`                       |
 | Cookie read/write           | `CookieManager`                        |
 | Request authentication      | `AuthenticationService`                |
+| Transactional email         | `NotificationService` + `@vaultstack/email` |
+| Realtime SSE                | `RealtimeHubService` + `RedisRealtimePublisher` |
 | Storage presigned URLs      | `StorageTokenManager`                  |
 
 ## Migration status
@@ -101,6 +104,8 @@ packages/validation/src/
 | artifacts     | ✅     | ✅         | ✅              | ✅         |
 | backups       | ✅     | ✅         | ✅              | ✅         |
 | infrastructure| ✅     | ✅         | ✅              | collectors |
+| notifications | —      | —          | ✅ (service)    | —          |
+| realtime      | ✅     | ✅         | ✅ hub + publisher | —     |
 | s3-gateway    | ✅     | ✅         | ✅              | —          |
 
 Nested organization routes:

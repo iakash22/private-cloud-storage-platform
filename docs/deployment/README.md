@@ -6,7 +6,8 @@ Phase 17 provides a production-oriented Compose topology in
 **THANOS / ivaultstack.com home server:** see the full operator runbook
 [`thanos.md`](./thanos.md) (disks, Tunnel edge, Compose override, Postgres/Redis
 access, partial rebuilds, upgrades, troubleshooting). Open work on the host is
-tracked in [`thanos-pending.md`](./thanos-pending.md). Cursor agents also load
+tracked in [`thanos-pending.md`](./thanos-pending.md) (includes Resend email and
+realtime SSE rollout). Cursor agents also load
 `.cursor/rules/thanos-deployment.mdc`.
 
 ## Topology

@@ -7,6 +7,9 @@ import { serializeUser } from '../mappers/user.mapper.js';
 import { createPrismaPermissionResolver } from '../../auth/services/authorization.service.js';
 import { countSuperAdmins, isOrganizationSuperAdmin } from '../../auth/organization-roles.js';
 import { canAssignSystemRole, canGrantPermissions } from '../../auth/rbac.js';
+import type { NotificationService } from '../../notifications/notification.service.js';
+import type { RealtimePublisher } from '../../realtime/services/redis-realtime.publisher.js';
+import { publishSessionRevokedAll } from '../../realtime/realtime-events.js';
 
 async function getRolePermissionKeys(prisma: PrismaClient, roleId: string): Promise<string[]> {
   const role = await prisma.role.findUnique({
@@ -20,6 +23,8 @@ export class UsersService {
   constructor(
     private readonly prisma: PrismaClient,
     private readonly nodeEnv: string,
+    private readonly notifications: NotificationService,
+    private readonly realtimePublisher: RealtimePublisher,
   ) {}
 
   async list(organizationId: string) {
@@ -118,6 +123,20 @@ export class UsersService {
       userAgent: meta.userAgent,
     });
 
+    const organization = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { name: true },
+    });
+    if (organization) {
+      this.notifications.notifyUserInvited({
+        to: user.email,
+        recipientName: user.name,
+        organizationName: organization.name,
+        roleName: role.name,
+        actorUserId,
+      });
+    }
+
     return serializeUser(user);
   }
 
@@ -174,6 +193,26 @@ export class UsersService {
         where: { userId, revokedAt: null },
         data: { revokedAt: new Date() },
       });
+
+      const organization = await this.prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: { name: true },
+      });
+      if (organization) {
+        this.notifications.notifyAccountDisabled({
+          to: user.email,
+          recipientName: user.name,
+          organizationName: organization.name,
+          meta: {
+            ipAddress: meta.ipAddress ?? null,
+            userAgent: meta.userAgent ?? null,
+          },
+        });
+      }
+      await publishSessionRevokedAll(this.realtimePublisher, {
+        organizationId,
+        userId,
+      });
     }
 
     await writeAuditLog(this.prisma, {
@@ -190,6 +229,11 @@ export class UsersService {
   }
 }
 
-export function createUsersService(prisma: PrismaClient, nodeEnv: string): UsersService {
-  return new UsersService(prisma, nodeEnv);
+export function createUsersService(
+  prisma: PrismaClient,
+  nodeEnv: string,
+  notifications: NotificationService,
+  realtimePublisher: RealtimePublisher,
+): UsersService {
+  return new UsersService(prisma, nodeEnv, notifications, realtimePublisher);
 }

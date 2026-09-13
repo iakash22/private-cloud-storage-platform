@@ -17,6 +17,9 @@ import { createDefaultOrganizationRoles, getUserOrganizationIds } from '../organ
 import { lookupIpGeoMany } from './ip-geo.service.js';
 import type { SessionManager, SessionTokens } from './session.manager.js';
 import { parseUserAgent } from './user-agent.js';
+import type { NotificationService } from '../../notifications/notification.service.js';
+import type { RealtimePublisher } from '../../realtime/services/redis-realtime.publisher.js';
+import { publishSessionRevoked } from '../../realtime/realtime-events.js';
 
 export interface RegisterInput {
   email: string;
@@ -108,6 +111,8 @@ export class AuthService {
     private readonly sessions: SessionManager,
     nodeEnv: string,
     jwtSecret: string,
+    private readonly notifications: NotificationService,
+    private readonly realtimePublisher: RealtimePublisher,
   ) {
     this.passwords = new PasswordService(nodeEnv);
     this.tokens = new TokenService(jwtSecret);
@@ -167,6 +172,12 @@ export class AuthService {
 
     const session = await this.sessions.create(result.user.id, meta);
     const memberships = await loadMemberships(this.prisma, result.user.id);
+
+    this.notifications.notifyWelcome({
+      to: result.user.email,
+      recipientName: result.user.name,
+      organizationName: result.organization.name,
+    });
 
     return {
       user: serializeUser(result.user),
@@ -294,6 +305,12 @@ export class AuthService {
 
     await this.recordSecurityAudit(user.id, 'auth.2fa.enable', meta);
 
+    this.notifications.notifyTwoFactorEnabled({
+      to: user.email,
+      recipientName: user.name,
+      meta,
+    });
+
     return {
       backupCodes,
       user: serializeUser(updated),
@@ -326,6 +343,12 @@ export class AuthService {
 
     await this.recordSecurityAudit(user.id, 'auth.2fa.disable', meta);
 
+    this.notifications.notifyTwoFactorDisabled({
+      to: user.email,
+      recipientName: user.name,
+      meta,
+    });
+
     return { user: serializeUser(updated) };
   }
 
@@ -346,6 +369,23 @@ export class AuthService {
         ipAddress: meta.ipAddress,
         userAgent: meta.userAgent,
       });
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, name: true },
+    });
+    if (user) {
+      this.notifications.notifySessionRevoked({
+        to: user.email,
+        recipientName: user.name,
+        meta,
+        revokedBySelf: true,
+      });
+    }
+
+    if (sessionId) {
+      await this.publishSessionRevokedEvent(userId, sessionId, true);
     }
   }
 
@@ -398,6 +438,21 @@ export class AuthService {
       revokedCurrent: currentSessionId === sessionId,
     });
 
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, name: true },
+    });
+    if (user) {
+      this.notifications.notifySessionRevoked({
+        to: user.email,
+        recipientName: user.name,
+        meta,
+        revokedBySelf: currentSessionId === sessionId,
+      });
+    }
+
+    await this.publishSessionRevokedEvent(userId, sessionId, currentSessionId === sessionId);
+
     return { revokedCurrent: Boolean(currentSessionId && currentSessionId === sessionId) };
   }
 
@@ -410,11 +465,31 @@ export class AuthService {
       throw unauthorized('Invalid session');
     }
 
-    const revokedCount = await this.sessions.revokeOthers(userId, currentSessionId);
+    const { count: revokedCount, revokedSessionIds } = await this.sessions.revokeOthers(
+      userId,
+      currentSessionId,
+    );
     await this.recordSecurityAudit(userId, 'auth.session.revoke_others', meta, {
       revokedCount,
       keptSessionId: currentSessionId,
     });
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, name: true },
+    });
+    if (user && revokedCount > 0) {
+      this.notifications.notifySessionRevokedOthers({
+        to: user.email,
+        recipientName: user.name,
+        meta,
+        revokedCount,
+      });
+    }
+
+    for (const revokedSessionId of revokedSessionIds) {
+      await this.publishSessionRevokedEvent(userId, revokedSessionId, false);
+    }
 
     return { revokedCount };
   }
@@ -438,8 +513,16 @@ export class AuthService {
 
   private async issueLoginSession(userId: string, meta: SessionMeta): Promise<LoginSessionResult> {
     const user = await this.requireActiveUser(userId);
+    const isNewDevice = await this.notifications.isNewDeviceLogin(user.id, meta);
     const session = await this.sessions.create(user.id, meta, meta.previousSessionToken);
     const memberships = await loadMemberships(this.prisma, user.id);
+
+    this.notifications.notifyLoginDetected({
+      to: user.email,
+      recipientName: user.name,
+      meta,
+      isNewDevice,
+    });
 
     const primaryOrganizationId = memberships.organizations[0]?.id;
     if (primaryOrganizationId) {
@@ -533,6 +616,23 @@ export class AuthService {
     });
   }
 
+  private async publishSessionRevokedEvent(
+    userId: string,
+    sessionId: string,
+    revokedBySelf: boolean,
+  ): Promise<void> {
+    const organizationId = (await getUserOrganizationIds(this.prisma, userId))[0];
+    if (!organizationId) {
+      return;
+    }
+
+    await publishSessionRevoked(this.realtimePublisher, {
+      organizationId,
+      userId,
+      payload: { sessionId, revokedBySelf },
+    });
+  }
+
   private async recordLoginFailure(
     userId: string,
     reason: string,
@@ -554,6 +654,27 @@ export class AuthService {
       userAgent: meta.userAgent,
       requestId: meta.requestId,
     });
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, name: true },
+    });
+    if (user) {
+      const reasonLabel =
+        reason === 'invalid_credentials'
+          ? 'Invalid email or password'
+          : reason === 'account_disabled'
+            ? 'Account disabled'
+            : reason === 'totp_invalid'
+              ? 'Invalid authenticator code'
+              : reason;
+      this.notifications.notifyLoginFailed({
+        to: user.email,
+        recipientName: user.name,
+        reason: reasonLabel,
+        meta,
+      });
+    }
   }
 }
 
@@ -562,8 +683,10 @@ export function createAuthService(
   sessions: SessionManager,
   nodeEnv: string,
   jwtSecret: string,
+  notifications: NotificationService,
+  realtimePublisher: RealtimePublisher,
 ): AuthService {
-  return new AuthService(prisma, sessions, nodeEnv, jwtSecret);
+  return new AuthService(prisma, sessions, nodeEnv, jwtSecret, notifications, realtimePublisher);
 }
 
 export type IssuedSession = SessionTokens;

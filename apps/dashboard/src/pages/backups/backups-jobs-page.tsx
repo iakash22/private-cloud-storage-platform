@@ -14,6 +14,7 @@ import {
 import { ListTodo } from 'lucide-react';
 import type { PublicBackupJob, PublicBackupJobLog } from '@vaultstack/types';
 import { apiClient } from '../../lib/api.js';
+import { useRealtimeSubscription } from '../../hooks/use-realtime-subscription.js';
 import { useAuth } from '../../context/auth-context.js';
 import { canCreateBackups } from '../../lib/backup-permissions.js';
 
@@ -42,19 +43,36 @@ export function BackupsJobsPage() {
 
   const selected = jobs.find((job) => job.id === selectedId) ?? jobs[0];
 
+  const refreshSelectedJob = useCallback(async () => {
+    if (!selected) {
+      return;
+    }
+    const job = await apiClient.getBackupJob(selected.id);
+    setJobs((current) => current.map((row) => (row.id === job.id ? job : row)));
+  }, [selected]);
+
+  useRealtimeSubscription(
+    ['backup_job.progress', 'backup_job.completed', 'backup_job.failed'],
+    (event) => {
+      const payload = event.payload as { jobId?: string };
+      if (!selected || payload.jobId !== selected.id) {
+        return;
+      }
+      void refreshSelectedJob().catch(() => undefined);
+    },
+  );
+
   useEffect(() => {
     if (!selected || !ACTIVE.has(selected.status)) {
       return;
     }
     const timer = window.setInterval(() => {
-      void apiClient.getBackupJob(selected.id).then((job) => {
-        setJobs((current) => current.map((row) => (row.id === job.id ? job : row)));
-      });
-    }, 2000);
+      void refreshSelectedJob().catch(() => undefined);
+    }, 15_000);
     return () => {
       window.clearInterval(timer);
     };
-  }, [selected]);
+  }, [refreshSelectedJob, selected]);
 
   useEffect(() => {
     if (!selected) {

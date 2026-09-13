@@ -52,9 +52,9 @@ campaign/index.html       → marketing/brand/campaign/index.html
 campaign/assets/app.js    → marketing/brand/campaign/assets/app.js
 ```
 
-## Planned folder actions
+## Folder actions and access control
 
-The folder roadmap includes:
+VaultStack supports:
 
 - create empty folder;
 - upload a complete directory;
@@ -62,13 +62,20 @@ The folder roadmap includes:
 - move folder;
 - copy folder;
 - delete or restore folder;
-- share folder read-only;
+- grant folder access to users or teams with `VIEWER`, `EDITOR`, or `MANAGER` roles;
 - bulk download;
 - bulk move and delete;
 - favorites and tags;
 - folder usage;
 - folder activity;
-- folder-level search.
+- folder-level search and structured object filters.
+
+Folder rules are enforced server-side on listing, upload, download URL issuance,
+metadata changes, sharing, restore, and recursive operations. The deepest
+matching prefix wins; direct user and active team memberships are evaluated at
+that prefix. A `VIEWER` can read, an `EDITOR` can read and write, and a
+`MANAGER` can also delete, share, and manage rules. Without a rule matching a
+prefix, the existing organization-level storage permission applies.
 
 Recursive actions will run as background jobs so large folders do not cause
 HTTP timeouts. The dashboard will show progress, retry failures, and allow
@@ -180,9 +187,13 @@ Content-Type: application/json
 ```
 
 Poll the returned job with
-`GET /api/v1/storage/folder-operations/:jobId`. Jobs expose processed object
-counts, total counts, failure counts, the last cursor, and an error message.
-Failed jobs can be retried and running jobs can be cancelled.
+`GET /api/v1/storage/folder-operations/:jobId`, or rely on the dashboard SSE
+stream (`folder_operation.progress`, `folder_operation.completed`,
+`folder_operation.failed`) documented in [notifications.md](./notifications.md).
+Jobs expose processed object counts, total counts, failure counts, the last
+cursor, and an error message. Failed jobs can be retried and running jobs can
+be cancelled. Completion and failure can also trigger a transactional email when
+Resend is configured.
 
 The worker processes bounded pages and persists its cursor after each object.
 Retries therefore resume from the last successful key instead of restarting

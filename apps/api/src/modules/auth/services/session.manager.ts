@@ -124,8 +124,23 @@ export class SessionManager {
   }
 
   /** Revoke every active session for the user except the current one. */
-  async revokeOthers(userId: string, exceptSessionId: string): Promise<number> {
-    const result = await this.prisma.session.updateMany({
+  async revokeOthers(
+    userId: string,
+    exceptSessionId: string,
+  ): Promise<{ count: number; revokedSessionIds: string[] }> {
+    const sessions = await this.prisma.session.findMany({
+      where: {
+        userId,
+        id: { not: exceptSessionId },
+        revokedAt: null,
+      },
+      select: { id: true },
+    });
+    if (sessions.length === 0) {
+      return { count: 0, revokedSessionIds: [] };
+    }
+
+    await this.prisma.session.updateMany({
       where: {
         userId,
         id: { not: exceptSessionId },
@@ -133,7 +148,7 @@ export class SessionManager {
       },
       data: { revokedAt: new Date() },
     });
-    return result.count;
+    return { count: sessions.length, revokedSessionIds: sessions.map((row) => row.id) };
   }
 
   async revokeByToken(sessionToken: string): Promise<void> {

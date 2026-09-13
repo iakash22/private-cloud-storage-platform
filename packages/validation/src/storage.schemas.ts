@@ -215,12 +215,46 @@ export const multipartPartParamsSchema = z
   })
   .strict();
 
+const queryBooleanSchema = z.preprocess(
+  (value) => (value === 'true' ? true : value === 'false' ? false : value),
+  z.boolean(),
+);
+
 export const listObjectsQuerySchema = z.object({
   prefix: z.string().max(1024).optional(),
   search: z.string().trim().max(255).optional(),
   delimiter: z.string().max(8).optional(),
+  contentType: z.string().trim().max(255).optional(),
+  minSize: z.coerce.number().int().nonnegative().optional(),
+  maxSize: z.coerce.number().int().nonnegative().optional(),
+  modifiedFrom: z.string().datetime().optional(),
+  modifiedTo: z.string().datetime().optional(),
+  folderPrefix: z.string().max(1024).optional(),
+  tag: z.string().trim().max(64).optional(),
+  externallyShared: queryBooleanSchema.optional(),
+  versioned: queryBooleanSchema.optional(),
+  processingState: z.string().trim().max(32).optional(),
   limit: z.coerce.number().int().min(1).max(1000).optional(),
   cursor: z.string().max(1024).optional(),
+}).strict().superRefine((value, context) => {
+  if (value.minSize !== undefined && value.maxSize !== undefined && value.minSize > value.maxSize) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['maxSize'],
+      message: 'maxSize must be greater than or equal to minSize',
+    });
+  }
+  if (
+    value.modifiedFrom !== undefined &&
+    value.modifiedTo !== undefined &&
+    new Date(value.modifiedFrom) > new Date(value.modifiedTo)
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['modifiedTo'],
+      message: 'modifiedTo must be greater than or equal to modifiedFrom',
+    });
+  }
 });
 
 export const initiateUploadBodySchema = z.object({
@@ -272,6 +306,12 @@ export const folderAccessRuleBodySchema = z
 export const folderAccessRuleParamsSchema = z.object({
   ruleId: z.string().min(1),
 });
+
+export const listFolderAccessQuerySchema = z
+  .object({
+    prefix: z.string().max(1024).optional(),
+  })
+  .strict();
 
 export const initiateMultipartBodySchema = z.object({
   bucketId: z.string().min(1),

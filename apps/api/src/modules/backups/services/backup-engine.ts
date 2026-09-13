@@ -27,6 +27,14 @@ import {
   type BackupManifest,
   verifyArchiveFile,
 } from './backup-verifier.js';
+import type { NotificationService } from '../../notifications/notification.service.js';
+import type { RealtimePublisher } from '../../realtime/services/redis-realtime.publisher.js';
+import { publishBackupJobEvent } from '../../realtime/realtime-events.js';
+
+export interface BackupEngineSideEffects {
+  notifications?: NotificationService;
+  realtimePublisher?: RealtimePublisher;
+}
 
 export class BackupEngine {
   constructor(
@@ -38,6 +46,7 @@ export class BackupEngine {
       BackupTargetName,
       BackupTargetAdapter
     > = createDefaultTargetRegistry(),
+    private readonly sideEffects: BackupEngineSideEffects = {},
   ) {}
 
   async runJob(jobId: string): Promise<void> {
@@ -55,7 +64,7 @@ export class BackupEngine {
       return;
     }
 
-    await this.prisma.backupJob.update({
+    const running = await this.prisma.backupJob.update({
       where: { id: job.id },
       data: {
         status: BackupJobStatus.RUNNING,
@@ -65,6 +74,7 @@ export class BackupEngine {
         errorMessage: null,
       },
     });
+    await this.emitBackupJobUpdate(running, 'backup_job.progress');
     await this.appendLog(job.organizationId, job.id, BackupLogLevel.INFO, 'Backup started');
 
     const root = this.config.BACKUP_TEMP_DIR ?? join(tmpdir(), 'vaultstack-backups');
@@ -199,7 +209,7 @@ export class BackupEngine {
         },
       });
 
-      await this.prisma.backupJob.update({
+      const completed = await this.prisma.backupJob.update({
         where: { id: job.id },
         data: {
           status: BackupJobStatus.COMPLETED,
@@ -208,6 +218,7 @@ export class BackupEngine {
           finishedAt: new Date(),
         },
       });
+      await this.emitBackupJobUpdate(completed, 'backup_job.completed');
       await this.appendLog(job.organizationId, job.id, BackupLogLevel.INFO, 'Backup completed');
     } catch (error) {
       if (error instanceof BackupCancelledError) {
@@ -217,7 +228,7 @@ export class BackupEngine {
       const message = error instanceof Error ? error.message : 'Backup failed';
       this.logger.error({ err: error, jobId: job.id }, 'Backup job failed');
       await this.appendLog(job.organizationId, job.id, BackupLogLevel.ERROR, message);
-      await this.prisma.backupJob.update({
+      const failed = await this.prisma.backupJob.update({
         where: { id: job.id },
         data: {
           status: BackupJobStatus.FAILED,
@@ -226,6 +237,7 @@ export class BackupEngine {
           currentStep: 'failed',
         },
       });
+      await this.emitBackupJobUpdate(failed, 'backup_job.failed');
     } finally {
       await rm(workDir, { recursive: true, force: true }).catch(() => undefined);
     }
@@ -415,6 +427,73 @@ export class BackupEngine {
     await this.prisma.backupJobLog.create({
       data: { organizationId, jobId, level, message },
     });
+  }
+
+  private async emitBackupJobUpdate(
+    job: {
+      id: string;
+      organizationId: string;
+      createdByUserId: string | null;
+      status: BackupJobStatus;
+      progressPercent: number;
+      currentStep: string | null;
+      errorMessage: string | null;
+    },
+    type: 'backup_job.progress' | 'backup_job.completed' | 'backup_job.failed',
+  ): Promise<void> {
+    const userId = job.createdByUserId;
+    if (!userId) {
+      return;
+    }
+
+    const payload = {
+      jobId: job.id,
+      status: job.status as 'QUEUED' | 'RUNNING' | 'VERIFYING' | 'COMPLETED' | 'FAILED' | 'CANCELLED',
+      progressPercent: job.progressPercent,
+      currentStep: job.currentStep,
+      errorMessage: job.errorMessage,
+    };
+
+    if (this.sideEffects.realtimePublisher) {
+      await publishBackupJobEvent(this.sideEffects.realtimePublisher, {
+        organizationId: job.organizationId,
+        userId,
+        type,
+        payload,
+      });
+    }
+
+    if (!this.sideEffects.notifications) {
+      return;
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, name: true },
+    });
+    if (!user) {
+      return;
+    }
+
+    const jobLabel = job.currentStep ? `Backup (${job.currentStep})` : `Backup ${job.id.slice(0, 8)}`;
+
+    if (type === 'backup_job.completed') {
+      this.sideEffects.notifications.notifyBackupJobCompleted({
+        to: user.email,
+        recipientName: user.name,
+        jobName: jobLabel,
+      });
+      return;
+    }
+
+    if (type === 'backup_job.failed') {
+      this.sideEffects.notifications.notifyBackupJobFailed({
+        to: user.email,
+        recipientName: user.name,
+        jobName: jobLabel,
+        error: job.errorMessage ?? 'Backup failed',
+      });
+    }
   }
 
   private async requireSnapshot(organizationId: string, snapshotId: string) {

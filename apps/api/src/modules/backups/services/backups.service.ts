@@ -40,7 +40,7 @@ import {
   serializeBackupSchedule,
   serializeBackupSnapshot,
 } from '../mappers/backups.mapper.js';
-import { BackupEngine } from './backup-engine.js';
+import { BackupEngine, type BackupEngineSideEffects } from './backup-engine.js';
 
 const jobSnapshotInclude = { snapshot: { select: { id: true } } } as const;
 
@@ -60,8 +60,9 @@ export class BackupsService {
     private readonly logger: Logger,
     engine?: BackupEngine,
     private readonly enqueue: BackupEnqueue | null = null,
+    sideEffects?: BackupEngineSideEffects,
   ) {
-    this.engine = engine ?? new BackupEngine(prisma, storage, config, logger);
+    this.engine = engine ?? new BackupEngine(prisma, storage, config, logger, undefined, sideEffects);
   }
 
   async summary(organizationId: string): Promise<PublicBackupSummary> {

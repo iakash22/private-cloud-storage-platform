@@ -23,9 +23,11 @@ export class FolderOperationController extends StorageScopedController {
   });
 
   get: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response) => {
+    const auth = this.requireAuth(req);
     const job = await this.container.folderOperations.get(
       this.organizationId(req),
       routeParam(req, 'jobId'),
+      auth.user.id,
     );
     if (!job) {
       res.status(404).json({
@@ -48,9 +50,11 @@ export class FolderOperationController extends StorageScopedController {
   });
 
   retry: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response) => {
+    const auth = this.requireAuth(req);
     const job = await this.container.folderOperations.retry(
       this.organizationId(req),
       routeParam(req, 'jobId'),
+      auth.user.id,
     );
     this.ok(res, { job });
   });

@@ -510,6 +510,19 @@ export interface PublicStorageObject {
   updatedAt: string;
 }
 
+export interface PublicObjectListFilters {
+  contentType?: string;
+  minSize?: number;
+  maxSize?: number;
+  modifiedFrom?: string;
+  modifiedTo?: string;
+  folderPrefix?: string;
+  tag?: string;
+  externallyShared?: boolean;
+  versioned?: boolean;
+  processingState?: string;
+}
+
 export interface PublicObjectVersion {
   versionId: string;
   size: number;
@@ -709,6 +722,8 @@ export interface AuthSessionPayload {
   csrfToken: string;
   organization?: PublicOrganization;
   activeOrganizationId?: string | null;
+  /** Present for cookie sessions; used by the dashboard to match session.revoked events. */
+  currentSessionId?: string | null;
 }
 
 export interface AuthTotpChallengePayload {
@@ -1096,5 +1111,59 @@ export interface InitiatedArtifactUpload {
   expiresAt: string;
   headers?: Record<string, string>;
 }
+
+export type RealtimeEventType =
+  | 'ping'
+  | 'session.revoked'
+  | 'session.revoked_all'
+  | 'folder_operation.progress'
+  | 'folder_operation.completed'
+  | 'folder_operation.failed'
+  | 'backup_job.progress'
+  | 'backup_job.completed'
+  | 'backup_job.failed';
+
+export interface RealtimeEventBase {
+  id: string;
+  type: RealtimeEventType;
+  organizationId: string;
+  userId: string;
+  createdAt: string;
+}
+
+export interface RealtimeSessionRevokedPayload {
+  sessionId: string;
+  revokedBySelf: boolean;
+}
+
+export interface RealtimeFolderOperationPayload {
+  jobId: string;
+  status: PublicFolderOperationJob['status'];
+  operation: PublicFolderOperationJob['operation'];
+  processedObjects: number;
+  totalObjects: number | null;
+  failedObjects: number;
+  error?: string | null;
+}
+
+export interface RealtimeBackupJobPayload {
+  jobId: string;
+  status: BackupJobStatusName;
+  progressPercent: number;
+  currentStep: string | null;
+  errorMessage?: string | null;
+}
+
+export type RealtimeEventPayload =
+  | Record<string, never>
+  | RealtimeSessionRevokedPayload
+  | RealtimeFolderOperationPayload
+  | RealtimeBackupJobPayload;
+
+export interface RealtimeEvent extends RealtimeEventBase {
+  payload: RealtimeEventPayload;
+}
+
+export const REALTIME_EVENT_NAME = 'vaultstack:realtime';
 
 export type { ApiResult, HttpStatus, RequestCookies, RequestHeaders, RequestMeta } from './http.js';

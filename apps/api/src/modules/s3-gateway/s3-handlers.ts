@@ -183,6 +183,7 @@ export class S3GatewayHandlers {
       delimiter: '/',
       limit: 1000,
       includeFolderMarkers: true,
+      userId: principal.principalId,
       cursor:
         typeof req.query['continuation-token'] === 'string'
           ? req.query['continuation-token']
@@ -232,8 +233,15 @@ export class S3GatewayHandlers {
     res: Response,
   ): Promise<void> {
     const bucket = await this.storage.buckets.getByName(principal.organizationId, bucketName);
-    const object = await this.storage.objects.findByKey(principal.organizationId, bucket.id, key);
-    const download = await this.storage.objects.openDownload(principal.organizationId, object.id);
+    const object = await this.storage.objects.findByKey(
+      principal.organizationId,
+      bucket.id,
+      key,
+      principal.principalId,
+    );
+    const download = await this.storage.objects.openDownload(principal.organizationId, object.id, {
+      userId: principal.principalId,
+    });
 
     res.status(200);
     res.setHeader('Content-Type', download.object.contentType);
@@ -250,7 +258,12 @@ export class S3GatewayHandlers {
     res: Response,
   ): Promise<void> {
     const bucket = await this.storage.buckets.getByName(principal.organizationId, bucketName);
-    const object = await this.storage.objects.findByKey(principal.organizationId, bucket.id, key);
+    const object = await this.storage.objects.findByKey(
+      principal.organizationId,
+      bucket.id,
+      key,
+      principal.principalId,
+    );
     res.status(200);
     res.setHeader('Content-Type', object.contentType);
     res.setHeader('Content-Length', String(object.size));
@@ -292,6 +305,7 @@ export class S3GatewayHandlers {
       principal.organizationId,
       sourceBucket.id,
       source.key,
+      principal.principalId,
     );
     const destinationBucket = await this.storage.buckets.getByName(
       principal.organizationId,

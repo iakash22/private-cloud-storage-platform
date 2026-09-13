@@ -25,6 +25,10 @@ import {
   type ProviderConfigService,
 } from './services/provider-config.service.js';
 import { createShareService, type ShareService } from './services/share.service.js';
+import {
+  createFolderAuthorizationService,
+  type FolderAuthorizationService,
+} from './services/folder-authorization.service.js';
 
 export interface StorageModuleDeps {
   prisma: PrismaClient;
@@ -46,6 +50,7 @@ export class StorageModule {
   readonly providers: ProviderConfigService;
   readonly tokens: StorageTokenService;
   readonly metrics: StorageMetrics;
+  readonly folderAuthorization: FolderAuthorizationService;
 
   constructor(deps: StorageModuleDeps) {
     const { prisma, config, logger, authorization } = deps;
@@ -60,6 +65,7 @@ export class StorageModule {
     this.storage = createStorageService({ config, registry, buckets, providers });
     this.tokens = createStorageTokenService(config.JWT_SECRET);
     this.metrics = createStorageMetrics(logger, deps.metrics);
+    this.folderAuthorization = createFolderAuthorizationService(prisma);
 
     this.objects = createObjectService({
       prisma,
@@ -68,6 +74,7 @@ export class StorageModule {
       tokens: this.tokens,
       metrics: this.metrics,
       logger,
+      folderAuthorization: this.folderAuthorization,
     });
 
     this.buckets = createBucketService({ prisma, buckets, storage: this.storage });
@@ -79,6 +86,7 @@ export class StorageModule {
       tokens: this.tokens,
       metrics: this.metrics,
       logger,
+      folderAuthorization: this.folderAuthorization,
     });
 
     this.policies = createPolicyService({
@@ -90,7 +98,12 @@ export class StorageModule {
       logger,
     });
 
-    this.shares = createShareService(prisma, this.tokens, config.NODE_ENV);
+    this.shares = createShareService(
+      prisma,
+      this.tokens,
+      config.NODE_ENV,
+      this.folderAuthorization,
+    );
     this.providers = createProviderConfigService({
       prisma,
       config,

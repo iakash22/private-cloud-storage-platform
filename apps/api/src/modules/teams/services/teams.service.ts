@@ -2,9 +2,13 @@ import type { PrismaClient } from '@vaultstack/database';
 import { conflict, dependencyError, notFound } from '../../../lib/errors.js';
 import { writeAuditLog } from '../../../lib/audit.js';
 import { serializeTeam, serializeTeamMember } from '../mappers/team.mapper.js';
+import type { NotificationService } from '../../notifications/notification.service.js';
 
 export class TeamsService {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly notifications: NotificationService,
+  ) {}
 
   async list(organizationId: string) {
     const teams = await this.prisma.team.findMany({
@@ -160,6 +164,26 @@ export class TeamsService {
       userAgent: meta.userAgent,
     });
 
+    const [organization, team] = await Promise.all([
+      this.prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: { name: true },
+      }),
+      this.prisma.team.findUnique({
+        where: { id: teamId },
+        select: { name: true },
+      }),
+    ]);
+    if (organization && team) {
+      this.notifications.notifyTeamAdded({
+        to: member.user.email,
+        recipientName: member.user.name,
+        organizationName: organization.name,
+        teamName: team.name,
+        actorUserId,
+      });
+    }
+
     return serializeTeamMember(member);
   }
 
@@ -201,6 +225,9 @@ export class TeamsService {
   }
 }
 
-export function createTeamsService(prisma: PrismaClient): TeamsService {
-  return new TeamsService(prisma);
+export function createTeamsService(
+  prisma: PrismaClient,
+  notifications: NotificationService,
+): TeamsService {
+  return new TeamsService(prisma, notifications);
 }

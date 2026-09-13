@@ -34,7 +34,7 @@ The worker is a separate process from the API:
 pnpm --filter @vaultstack/api worker:cleanup
 ```
 
-It uses `REDIS_URL` and repeats every 60 seconds. The same process runs multipart session cleanup and lifecycle policy evaluation. Do not run the worker in the API request process.
+It uses `REDIS_URL` and repeats every 60 seconds. The same process runs multipart session cleanup, lifecycle policy evaluation, and the **`email-delivery`** BullMQ consumer. Do not run the worker in the API request process.
 
 All three are confined to `apps/api/src/integrations/minio/` and
 `apps/api/src/modules/storage/providers/s3-compatible/`. The local filesystem
@@ -49,6 +49,22 @@ No new dependency was needed for:
 - **MinIO integration tests.** `testcontainers` was already a dependency for
   PostgreSQL, so the MinIO helper uses `GenericContainer`.
 - **Signed URLs for the local provider.** `node:crypto` HMAC is sufficient.
+
+## Transactional email
+
+| Package   | Where              | Why                                                                 |
+| --------- | ------------------ | ------------------------------------------------------------------- |
+| `resend`  | `@vaultstack/email` | Resend HTTP API for transactional auth/security/invitation email |
+
+Templates live in `@vaultstack/email`; the API enqueues delivery through BullMQ so HTTP
+handlers stay fast. No email provider credentials are exposed to the dashboard.
+
+## Realtime SSE
+
+No new npm packages. The API hub uses the existing Redis client for pub/sub;
+workers publish job and auth events through `RedisRealtimePublisher`. The dashboard
+opens `GET /api/v1/realtime/events` with session cookies. See
+[`docs/usage/notifications.md`](../usage/notifications.md).
 
 ## API documentation (OpenAPI)
 

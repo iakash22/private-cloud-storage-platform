@@ -8,6 +8,7 @@
 | Artifacts model                                                          | [artifacts/README.md](./artifacts/README.md)   |
 | Backups                                                                  | [backups/README.md](./backups/README.md)       |
 | Security                                                                 | [security/README.md](./security/README.md)     |
+| Notifications (email + realtime SSE)                                     | [usage/notifications.md](./usage/notifications.md) |
 | Architecture                                                             | [architecture/](./architecture/)               |
 | Development setup / testing                                              | [development/](./development/)                 |
 | Deployment                                                               | [deployment/README.md](./deployment/README.md) |

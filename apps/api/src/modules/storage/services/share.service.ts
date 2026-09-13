@@ -41,6 +41,7 @@ import {
 } from '../mappers/share.mapper.js';
 import type { RequestMeta } from './bucket.service.js';
 import type { StorageTokenService } from './storage-token.service.js';
+import type { FolderAuthorizationService } from './folder-authorization.service.js';
 
 const SHARE_INCLUDE = {
   object: { select: { key: true, size: true, contentType: true, isDeleted: true } },
@@ -76,6 +77,7 @@ export class ShareService {
     private readonly prisma: PrismaClient,
     private readonly storageTokens: StorageTokenService,
     nodeEnv: string,
+    private readonly folderAuthorization?: FolderAuthorizationService,
   ) {
     this.passwords = new PasswordService(nodeEnv);
   }
@@ -89,10 +91,19 @@ export class ShareService {
   ): Promise<CreatedShareLink> {
     const object = await this.prisma.storageObject.findFirst({
       where: { id: objectId, organizationId, isDeleted: false },
-      select: { id: true, key: true, size: true, contentType: true },
+      select: { id: true, bucketId: true, key: true, size: true, contentType: true },
     });
     if (!object) {
       throw storageObjectNotFound();
+    }
+    if (this.folderAuthorization) {
+      await this.folderAuthorization.assert({
+        organizationId,
+        bucketId: object.bucketId,
+        key: object.key,
+        userId: actorUserId,
+        action: 'SHARE',
+      });
     }
 
     if (input.visibility === 'TEAM') {
@@ -544,6 +555,7 @@ export function createShareService(
   prisma: PrismaClient,
   storageTokens: StorageTokenService,
   nodeEnv: string,
+  folderAuthorization?: FolderAuthorizationService,
 ): ShareService {
-  return new ShareService(prisma, storageTokens, nodeEnv);
+  return new ShareService(prisma, storageTokens, nodeEnv, folderAuthorization);
 }

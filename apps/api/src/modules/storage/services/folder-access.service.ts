@@ -6,6 +6,7 @@ import { conflict, validationError } from '../../../lib/errors.js';
 import { assertValidKeyPrefix } from '../domain/object-key.js';
 import type { RequestMeta } from './bucket.service.js';
 import type { StorageService } from './storage.service.js';
+import type { FolderAuthorizationService } from './folder-authorization.service.js';
 
 export interface CreateFolderAccessRuleInput {
   organizationId: string;
@@ -37,8 +38,9 @@ export function createFolderAccessService(deps: {
   prisma: PrismaClient;
   storage: StorageService;
   logger: Logger;
+  folderAuthorization?: FolderAuthorizationService;
 }): FolderAccessService {
-  const { prisma, storage, logger } = deps;
+  const { prisma, storage, logger, folderAuthorization } = deps;
 
   return {
     async list(organizationId, bucketId, prefix) {
@@ -56,8 +58,22 @@ export function createFolderAccessService(deps: {
     async create(input) {
       await storage.resolveBucket(input.organizationId, input.bucketId);
       const prefix = normalizePrefix(input.prefix, storage.limits.maxKeyLength);
+      if (folderAuthorization) {
+        await folderAuthorization.assert({
+          organizationId: input.organizationId,
+          bucketId: input.bucketId,
+          key: prefix,
+          userId: input.actorUserId,
+          action: 'MANAGE',
+        });
+      }
       if (input.userId) {
-        const user = await prisma.user.findFirst({ where: { id: input.userId } });
+        const user = await prisma.user.findFirst({
+          where: {
+            id: input.userId,
+            userRoles: { some: { organizationId: input.organizationId } },
+          },
+        });
         if (!user) {
           throw validationError('User not found', { userId: 'User not found' });
         }
@@ -112,6 +128,15 @@ export function createFolderAccessService(deps: {
       });
       if (!row) {
         throw validationError('Folder access rule not found');
+      }
+      if (folderAuthorization) {
+        await folderAuthorization.assert({
+          organizationId,
+          bucketId: row.bucketId,
+          key: row.prefix,
+          userId: actorUserId,
+          action: 'MANAGE',
+        });
       }
       await prisma.folderAccessRule.delete({ where: { id: ruleId } });
       await writeAuditLog(prisma, {

@@ -414,6 +414,7 @@ erDiagram
 | CI/CD artifacts       | `Project`, `Build`, `Artifact`, `ArtifactVersion`                                   | Metadata only. `ArtifactVersion.storageObjectId` references `StorageObject` (`onDelete: Restrict`). Bytes are uploaded/downloaded/deleted through StorageService.                                                                                                            |
 | Backups               | `BackupSchedule`, `BackupJob`, `BackupSnapshot`, `BackupJobLog`, `BackupRestoreJob` | Metadata only. Snapshot archives are `StorageObject` rows in org bucket `vs-backups`. Credentials are never stored on backup rows. Restore jobs store a plan JSON; they do not execute live restores.                                                                        |
 | Storage operations    | `FolderOperationJob`                                                                | Durable move, copy, and delete state for recursive prefix operations. Progress cursors are persisted so BullMQ retries resume safely.                                                                                                                                        |
+| Folder collaboration  | `FolderAccessRule`, `TeamMember`                                                    | Prefix ACLs are organization/bucket scoped. Direct user and team rules use the deepest matching prefix; `VIEWER` reads, `EDITOR` reads/writes, and `MANAGER` also deletes, shares, and manages ACLs.                                                                         |
 
 ## Cascade behavior
 
@@ -426,6 +427,11 @@ erDiagram
 - Deleting an **ArtifactVersion** is blocked while it still references a `StorageObject` (`onDelete: Restrict`). Application code unlinks and deletes bytes via `ObjectService.remove` first.
 - Deleting a **BackupSnapshot** is blocked while it still references a `StorageObject` (`onDelete: Restrict`). Application code unlinks and deletes bytes via `ObjectService.remove` first. Restore jobs restrict snapshot deletion while they exist.
 - **MultipartPart** rows cascade when their parent multipart upload is deleted.
+
+`StorageObject` has B-tree indexes for organization/bucket content type, size,
+and modification time to support structured filters. Key and metadata search
+remain deliberately bounded until production query volume justifies enabling a
+PostgreSQL trigram or full-text index.
 
 ## Keeping this diagram current
 

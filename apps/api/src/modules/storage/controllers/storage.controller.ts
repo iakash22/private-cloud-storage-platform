@@ -120,6 +120,7 @@ export class StorageController extends StorageScopedController {
 
   listObjects: AsyncRouteHandler = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
+      const auth = this.requireAuth(req);
       const query = listObjectsQuerySchema.parse(req.query);
       const page = await this.container.storage.objects.list(
         this.organizationId(req),
@@ -128,8 +129,19 @@ export class StorageController extends StorageScopedController {
           prefix: query.prefix,
           search: query.search,
           delimiter: query.delimiter,
+          contentType: query.contentType,
+          minSize: query.minSize,
+          maxSize: query.maxSize,
+          modifiedFrom: query.modifiedFrom ? new Date(query.modifiedFrom) : undefined,
+          modifiedTo: query.modifiedTo ? new Date(query.modifiedTo) : undefined,
+          folderPrefix: query.folderPrefix,
+          tag: query.tag,
+          externallyShared: query.externallyShared,
+          versioned: query.versioned,
+          processingState: query.processingState,
           limit: query.limit ?? 100,
           cursor: query.cursor,
+          userId: auth.user.id,
         },
       );
       this.ok(res, page);
@@ -138,9 +150,11 @@ export class StorageController extends StorageScopedController {
 
   getObject: AsyncRouteHandler = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
+      const auth = this.requireAuth(req);
       const object = await this.container.storage.objects.get(
         this.organizationId(req),
         routeParam(req, 'objectId'),
+        auth.user.id,
       );
       this.ok(res, { object });
     },
@@ -433,9 +447,11 @@ export class StorageController extends StorageScopedController {
 
   listObjectVersions: AsyncRouteHandler = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
+      const auth = this.requireAuth(req);
       const page = await this.container.storage.objects.listVersions(
         this.organizationId(req),
         routeParam(req, 'objectId'),
+        auth.user.id,
       );
       this.ok(res, page);
     },
@@ -443,10 +459,12 @@ export class StorageController extends StorageScopedController {
 
   getObjectVersion: AsyncRouteHandler = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
+      const auth = this.requireAuth(req);
       const version = await this.container.storage.objects.getVersion(
         this.organizationId(req),
         routeParam(req, 'objectId'),
         routeParam(req, 'versionId'),
+        auth.user.id,
       );
       this.ok(res, { version });
     },

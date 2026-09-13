@@ -22,6 +22,7 @@
     "@vaultstack/auth": "workspace:*",
     "@vaultstack/config": "workspace:*",
     "@vaultstack/database": "workspace:*",
+    "@vaultstack/email": "workspace:*",
     "@vaultstack/logger": "workspace:*",
     "@vaultstack/openapi": "workspace:*",
     "@vaultstack/startup": "workspace:*",

@@ -9,6 +9,7 @@ import {
   createFolderOperationBodySchema,
   folderAccessRuleBodySchema,
   folderAccessRuleParamsSchema,
+  listFolderAccessQuerySchema,
   createPreviewBodySchema,
   createLifecyclePolicyBodySchema,
   createShareBodySchema,
@@ -77,6 +78,7 @@ export function createStorageRouter(container: AppContainer): Router {
   router.get(
     '/buckets/:bucketId/folder-access',
     validateParams(bucketIdParamsSchema),
+    validateQuery(listFolderAccessQuerySchema),
     controller.allow(PERMISSIONS.STORAGE_READ),
     folderAccess.list,
   );

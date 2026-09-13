@@ -21,7 +21,7 @@ How clients authenticate and get organization context before calling storage or 
 | `GET` | `/api/v1/auth/sessions` | Session | List active sessions (IP + approx. location) |
 | `DELETE` | `/api/v1/auth/sessions/:sessionId` | Session | Revoke one session |
 | `POST` | `/api/v1/auth/sessions/revoke-others` | Session | Revoke all except current |
-| `GET` | `/api/v1/auth/me` | Session/key | Current user + CSRF token + permissions |
+| `GET` | `/api/v1/auth/me` | Session/key | Current user + CSRF token + permissions + `currentSessionId` (sessions only) |
 | `POST` | `/api/v1/auth/organization` | Session | Set active org selector |
 | `POST` | `/api/v1/auth/2fa/setup` | Session | Begin TOTP enrollment |
 | `POST` | `/api/v1/auth/2fa/enable` | Session | Confirm 2FA; backup codes once |
@@ -87,7 +87,20 @@ Dashboard UI: **Access → API keys** (and service accounts for S3 gateway).
 - Manual: [examples/01-auth-api-key.sh](./examples/01-auth-api-key.sh)
 - Automated: auth/session coverage in `apps/api` integration tests; see [../development/testing.md](../development/testing.md)
 
+## Notifications and realtime
+
+Security-sensitive actions can trigger **transactional email** (Resend) when
+`RESEND_API_KEY` is configured: login detected, failed login, 2FA changes,
+session revoke, user invite, team add, account disabled. See
+[notifications.md](./notifications.md).
+
+Signed-in dashboard clients also open **`GET /api/v1/realtime/events`** (SSE).
+Session-only — API keys cannot subscribe. Events include `session.revoked` so
+another device signing out or an admin disabling an account can push an immediate
+logout. Job progress for folder operations and backups is pushed on the same stream.
+
 ## Related
 
+- [notifications.md](./notifications.md)
 - [../security/README.md](../security/README.md)
 - [../api/README.md](../api/README.md)

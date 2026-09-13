@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { PublicFolderAccessRule, PublicTeam } from '@vaultstack/types';
+import type {
+  PublicAuditLog,
+  PublicFolderAccessRule,
+  PublicTeam,
+  PublicUser,
+} from '@vaultstack/types';
 import {
   Button,
   Card,
@@ -26,8 +31,13 @@ export function CollaborationPage() {
   const [prefix, setPrefix] = useState('');
   const [role, setRole] = useState('VIEWER');
   const [teamId, setTeamId] = useState('');
+  const [userId, setUserId] = useState('');
+  const [subjectType, setSubjectType] = useState<'TEAM' | 'USER'>('TEAM');
   const [teams, setTeams] = useState<PublicTeam[]>([]);
+  const [users, setUsers] = useState<PublicUser[]>([]);
   const [rules, setRules] = useState<PublicFolderAccessRule[]>([]);
+  const [activity, setActivity] = useState<PublicAuditLog[]>([]);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
 
   useEffect(() => {
@@ -44,14 +54,29 @@ export function CollaborationPage() {
       .catch((caught: unknown) => {
         setError(caught instanceof Error ? caught.message : 'Unable to load teams');
       });
+    void apiClient
+      .listUsers(activeOrganizationId)
+      .then(setUsers)
+      .catch(() => {
+        setUsers([]);
+      });
   }, [activeOrganizationId]);
 
   const loadRules = useCallback(async (): Promise<void> => {
     if (!bucketId) return;
+    setLoading(true);
     try {
       setRules(await apiClient.listFolderAccessRules(bucketId));
+      setActivity(
+        await apiClient.listAuditLogs({
+          resourceType: 'folder_access',
+          limit: 25,
+        }),
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to load folder access');
+    } finally {
+      setLoading(false);
     }
   }, [bucketId]);
 
@@ -60,13 +85,13 @@ export function CollaborationPage() {
   }, [loadRules]);
 
   const createRule = async (): Promise<void> => {
-    if (!bucketId || !teamId || !prefix.trim()) return;
+    if (!bucketId || !prefix.trim() || (subjectType === 'TEAM' ? !teamId : !userId)) return;
     try {
       await apiClient.createFolderAccessRule({
         bucketId,
         prefix: prefix.trim(),
         role: role as 'VIEWER' | 'EDITOR' | 'MANAGER',
-        teamId,
+        ...(subjectType === 'TEAM' ? { teamId } : { userId }),
       });
       setPrefix('');
       await loadRules();
@@ -83,6 +108,7 @@ export function CollaborationPage() {
         icon={<UsersRound className="h-5 w-5" aria-hidden="true" />}
       />
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {loading ? <p className="text-sm text-slate-500">Loading collaboration state…</p> : null}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Create team-folder access</CardTitle>
@@ -112,13 +138,35 @@ export function CollaborationPage() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="collaboration-team">Team</Label>
+            <Label htmlFor="collaboration-subject-type">Subject type</Label>
             <Select
-              id="collaboration-team"
-              value={teamId}
-              onChange={setTeamId}
-              options={teams.map((team) => ({ value: team.id, label: team.name }))}
-              placeholder="Select team"
+              id="collaboration-subject-type"
+              value={subjectType}
+              onChange={(value) => {
+                setSubjectType(value as 'TEAM' | 'USER');
+                setTeamId('');
+                setUserId('');
+              }}
+              options={[
+                { value: 'TEAM', label: 'Team' },
+                { value: 'USER', label: 'User' },
+              ]}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="collaboration-subject">
+              {subjectType === 'TEAM' ? 'Team' : 'User'}
+            </Label>
+            <Select
+              id="collaboration-subject"
+              value={subjectType === 'TEAM' ? teamId : userId}
+              onChange={subjectType === 'TEAM' ? setTeamId : setUserId}
+              options={
+                subjectType === 'TEAM'
+                  ? teams.map((team) => ({ value: team.id, label: team.name }))
+                  : users.map((user) => ({ value: user.id, label: `${user.name} (${user.email})` }))
+              }
+              placeholder={`Select ${subjectType.toLowerCase()}`}
             />
           </div>
           <div className="space-y-2">
@@ -145,12 +193,12 @@ export function CollaborationPage() {
           ) : null}
         </CardContent>
       </Card>
-      {rules.length === 0 ? (
+      {!loading && rules.length === 0 ? (
         <EmptyState
           title="No folder access rules"
           description="Create a team rule to start collaborating on a folder."
         />
-      ) : (
+      ) : !loading ? (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Active access rules</CardTitle>
@@ -181,7 +229,25 @@ export function CollaborationPage() {
             ))}
           </CardContent>
         </Card>
-      )}
+      ) : null}
+      {!loading && activity.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Recent collaboration activity</CardTitle>
+            <CardDescription>Folder grants and revocations for this organization.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {activity.map((entry) => (
+              <div key={entry.id} className="rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                <p className="font-medium text-slate-900">{entry.action}</p>
+                <p className="text-xs text-slate-500">
+                  {entry.actorName ?? 'System'} · {new Date(entry.createdAt).toLocaleString()}
+                </p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

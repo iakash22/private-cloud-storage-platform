@@ -79,6 +79,25 @@ curl -c cookies.txt -X POST http://localhost:3000/api/v1/auth/register \
 curl -b cookies.txt http://localhost:3000/api/v1/auth/me
 ```
 
+## Optional: email and realtime workers
+
+Transactional email and SSE realtime share Redis with BullMQ. For full local behavior:
+
+```bash
+# Terminal 3 — workers (email delivery, folder ops, backups, lifecycle, …)
+pnpm --filter @vaultstack/api worker:cleanup
+```
+
+Add to `.env` when testing Resend (see `.env.example`):
+
+```bash
+RESEND_API_KEY=re_…
+EMAIL_FROM="VaultStack <onboarding@resend.dev>"
+DASHBOARD_PUBLIC_URL=http://localhost:5173
+```
+
+Guide: [../usage/notifications.md](../usage/notifications.md).
+
 ## Next steps
 
-Phase 2 does not include dashboard UI, MinIO uploads, backups, or artifacts. Auth uses HTTP-only cookies. See [testing.md](./testing.md), [../api/README.md](../api/README.md), and [../security/README.md](../security/README.md).
+See [testing.md](./testing.md), [../api/README.md](../api/README.md), [../usage/README.md](../usage/README.md), and [../security/README.md](../security/README.md).

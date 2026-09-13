@@ -1,4 +1,8 @@
-import { folderAccessRuleBodySchema, folderAccessRuleParamsSchema } from '@vaultstack/validation';
+import {
+  folderAccessRuleBodySchema,
+  folderAccessRuleParamsSchema,
+  listFolderAccessQuerySchema,
+} from '@vaultstack/validation';
 import type { Request, Response } from 'express';
 import { requestMeta } from '../../../lib/audit.js';
 import { asyncHandler, type AsyncRouteHandler } from '../../../lib/async-handler.js';
@@ -9,7 +13,7 @@ import { readBody } from '../../../middleware/validate.js';
 export class FolderAccessController extends StorageScopedController {
   list: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response) => {
     const bucketId = routeParam(req, 'bucketId');
-    const prefix = typeof req.query.prefix === 'string' ? req.query.prefix : undefined;
+    const { prefix } = listFolderAccessQuerySchema.parse(req.query);
     const rules = await this.container.folderAccess.list(
       this.organizationId(req),
       bucketId,

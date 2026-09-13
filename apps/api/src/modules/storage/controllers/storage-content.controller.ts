@@ -29,6 +29,7 @@ export class StorageContentController {
     const { object, stream } = await storage.objects.openDownload(claims.organizationId, objectId, {
       range: parseRange(req.header('range')),
       signal: controller.signal,
+      userId: claims.actorId,
       ...(claims.versionId ? { versionId: claims.versionId } : {}),
     });
 

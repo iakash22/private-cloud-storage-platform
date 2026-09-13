@@ -428,6 +428,9 @@ model StorageObject {
   @@index([bucketId, key])
   @@index([organizationId, createdAt])
   @@index([bucketId, isDeleted, key])
+  @@index([organizationId, bucketId, contentType])
+  @@index([organizationId, bucketId, size])
+  @@index([organizationId, bucketId, updatedAt])
 }
 
 model PreviewJob {

@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { ToastProvider } from '@vaultstack/ui';
 import { SessionGuard } from './components/session-guard.js';
+import { RealtimeBridge } from './components/realtime-bridge.js';
 import { AuthProvider } from './context/auth-context.js';
 import { AuthEntry } from './pages/auth-entry.js';
 import { PublicSharePage } from './pages/public-share-page.js';
@@ -46,6 +47,7 @@ export function App() {
     <ToastProvider>
       <AuthProvider>
         <SessionGuard>
+          <RealtimeBridge>
           <Routes>
             <Route element={<AuthEntry />}>
               <Route path="/login" element={null} />
@@ -97,6 +99,7 @@ export function App() {
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </RealtimeBridge>
         </SessionGuard>
       </AuthProvider>
     </ToastProvider>

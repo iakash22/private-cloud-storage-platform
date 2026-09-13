@@ -28,6 +28,7 @@ import {
   createFolderOperationQueue,
   createFolderOperationWorker,
 } from './folder-operation.worker.js';
+import { createEmailQueue, createEmailWorker } from './email.worker.js';
 
 const config = loadEnv();
 const logger = createLogger({ name: 'api-worker', level: config.LOG_LEVEL });
@@ -61,6 +62,16 @@ if (runPreviewWorkers) {
 }
 
 if (runStorageWorkers) {
+  const emailQueue = createEmailQueue(connection);
+  const emailWorker = createEmailWorker({
+    connection,
+    notifications: container.notifications,
+    logger,
+  });
+  closeWorkers.push(() => emailWorker.close());
+  closeQueues.push(() => emailQueue.close());
+  queueNames.push(emailQueue.name);
+
   const folderOperationQueue = createFolderOperationQueue(connection);
   const folderOperationWorker = createFolderOperationWorker({
     connection,

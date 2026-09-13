@@ -34,6 +34,13 @@ Permissions: `backup.read`, `backup.create`, `backup.delete`, `backup.restore`.
 | `GET/POST` | `/api/v1/backups/restore` | `backup.restore` |
 | `GET` | `/api/v1/backups/restore/:restoreId` | `backup.restore` |
 
+## Dashboard progress
+
+The **Backups → Jobs** page subscribes to SSE events (`backup_job.progress`,
+`backup_job.completed`, `backup_job.failed`) on `GET /api/v1/realtime/events`.
+Terminal states can also send transactional email when Resend is configured.
+See [notifications.md](./notifications.md).
+
 ## How to use
 
 1. Authenticate with session or API key that has backup permissions.

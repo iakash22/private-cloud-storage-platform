@@ -22,6 +22,7 @@ import { createStorageRouter } from '../modules/storage/storage.router.js';
 import { createArtifactsRouter } from '../modules/artifacts/artifacts.router.js';
 import { createBackupsRouter } from '../modules/backups/backups.router.js';
 import { createInfrastructureRouter } from '../modules/infrastructure/infrastructure.router.js';
+import { createRealtimeRouter } from '../modules/realtime/realtime.router.js';
 import type { RateLimiter } from '../lib/rate-limit.js';
 import type { AppContainer } from '../container/app-container.js';
 
@@ -39,7 +40,13 @@ export function createV1Router(
   const loginRateLimit = createLoginRateLimitMiddleware(limiter, config);
   const sharePasswordRateLimit = createSharePasswordRateLimitMiddleware(limiter, config);
 
-  router.use(createApiRateLimitMiddleware(limiter, config));
+  router.use((req, res, next) => {
+    if (req.path.startsWith('/realtime/')) {
+      next();
+      return;
+    }
+    void createApiRateLimitMiddleware(limiter, config)(req, res, next);
+  });
 
   router.use('/auth', (req, res, next) => {
     const isPublicAuthPost =
@@ -73,6 +80,7 @@ export function createV1Router(
   router.use('/artifacts', authenticate, createArtifactsRouter(container));
   router.use('/backups', authenticate, createBackupsRouter(container));
   router.use('/infrastructure', authenticate, createInfrastructureRouter(container));
+  router.use('/realtime', authenticate, createRealtimeRouter(container));
 
   if (config.S3_GATEWAY_ENABLED) {
     router.use('/s3', createS3GatewayRouter(container, limiter));

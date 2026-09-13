@@ -25,6 +25,7 @@ interface AuthContextValue {
   organizations: PublicOrganization[];
   memberships: PublicMembership[];
   activeOrganizationId: string | null;
+  currentSessionId: string | null;
   permissions: string[];
   loading: boolean;
   error: string | null;
@@ -189,6 +190,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       organizations: session?.organizations ?? [],
       memberships: session?.memberships ?? [],
       activeOrganizationId,
+      currentSessionId: session?.currentSessionId ?? null,
       permissions,
       loading,
       error,

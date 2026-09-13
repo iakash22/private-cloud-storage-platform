@@ -51,9 +51,13 @@ describe('SessionManager', () => {
 
   it('revokes other sessions except current', async () => {
     const prisma = createPrismaMock();
+    prisma.session.findMany.mockResolvedValue([{ id: 's1' }, { id: 's2' }]);
     prisma.session.updateMany.mockResolvedValue({ count: 2 });
     const manager = new SessionManager(prisma as never, 'secret', 3600);
-    await expect(manager.revokeOthers('u1', 'current')).resolves.toBe(2);
+    await expect(manager.revokeOthers('u1', 'current')).resolves.toEqual({
+      count: 2,
+      revokedSessionIds: ['s1', 's2'],
+    });
     expect(prisma.session.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({

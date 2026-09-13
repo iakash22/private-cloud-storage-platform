@@ -36,6 +36,16 @@ export interface ListObjectsQuery {
   limit: number;
   cursorKey?: string;
   includeFolderMarkers?: boolean;
+  contentType?: string;
+  minSize?: number;
+  maxSize?: number;
+  modifiedFrom?: Date;
+  modifiedTo?: Date;
+  folderPrefix?: string;
+  tag?: string;
+  externallyShared?: boolean;
+  versioned?: boolean;
+  processingState?: string;
 }
 
 export interface ListObjectsResult {
@@ -191,16 +201,56 @@ function buildListWhere(query: ListObjectsQuery): Prisma.StorageObjectWhereInput
   if (query.cursorKey) {
     key.gt = query.cursorKey;
   }
-  if (query.search) {
-    key.contains = query.search;
-    key.mode = 'insensitive';
-  }
-
-  return {
+  const where: Prisma.StorageObjectWhereInput = {
     organizationId: query.organizationId,
     bucketId: query.bucketId,
     isDeleted: false,
     ...(query.includeFolderMarkers ? {} : { NOT: { key: { endsWith: '/' } } }),
     ...(Object.keys(key).length > 0 ? { key } : {}),
   };
+
+  if (query.search) {
+    where.OR = [
+      { key: { contains: query.search, mode: 'insensitive' } },
+      { contentType: { contains: query.search, mode: 'insensitive' } },
+    ];
+  }
+  if (query.contentType) {
+    where.contentType = { contains: query.contentType, mode: 'insensitive' };
+  }
+  if (query.minSize !== undefined || query.maxSize !== undefined) {
+    where.size = {
+      ...(query.minSize !== undefined ? { gte: BigInt(query.minSize) } : {}),
+      ...(query.maxSize !== undefined ? { lte: BigInt(query.maxSize) } : {}),
+    };
+  }
+  if (query.modifiedFrom || query.modifiedTo) {
+    where.updatedAt = {
+      ...(query.modifiedFrom ? { gte: query.modifiedFrom } : {}),
+      ...(query.modifiedTo ? { lte: query.modifiedTo } : {}),
+    };
+  }
+  if (query.folderPrefix) {
+    where.key = {
+      ...(typeof where.key === 'object' ? where.key : {}),
+      startsWith: query.folderPrefix,
+    };
+  }
+  if (query.tag) {
+    where.metadata = {
+      path: ['tags'],
+      string_contains: query.tag,
+    };
+  }
+  if (query.externallyShared !== undefined) {
+    where.shareLinks = query.externallyShared ? { some: {} } : { none: {} };
+  }
+  if (query.versioned !== undefined) {
+    where.versions = query.versioned ? { some: {} } : { none: {} };
+  }
+  if (query.processingState) {
+    where.previewJobs = { some: { status: query.processingState } };
+  }
+
+  return where;
 }

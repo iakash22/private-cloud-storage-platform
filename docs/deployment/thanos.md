@@ -24,7 +24,8 @@ VaultStack HTTP to `127.0.0.1:80` (Opsiva nginx owns that).
 ### Pending work on the server
 
 Open checklist of what is still incomplete on THANOS (permissions repair, git
-upgrade, Tunnel ports, Safe Browsing, backups, smoke tests):
+upgrade, Tunnel ports, Safe Browsing, backups, Resend email, realtime SSE,
+smoke tests):
 
 → **[`thanos-pending.md`](./thanos-pending.md)**
 
@@ -422,6 +423,13 @@ archives off the box; the backup disk alone is not off-site DR.
 | `secrets/metrics_token` | Bearer for `/metrics` scrape |
 | `secrets/grafana_admin_password` | Grafana admin |
 | `compose.env` | Domains, paths, Redis, CORS, build context |
+| `compose.env` → `RESEND_API_KEY` / `EMAIL_FROM` | Transactional email (Resend); see pending §13 |
+| `compose.env` → `DASHBOARD_PUBLIC_URL` | Link target in auth/security emails |
+| `compose.env` → `REALTIME_*` | SSE hub tuning (enabled by default when Redis is up); see pending §14 |
+| `secrets/resend_api_key` (optional) | Alternative to inline `RESEND_API_KEY` |
+
+After adding email or realtime env vars, rebuild API and worker images and verify
+with [`thanos-pending.md`](./thanos-pending.md) sections **13** and **14**.
 
 Rotate deliberately with `FORCE_REGENERATE_SECRETS=true` on `init-secrets.sh`
 (breaks existing sessions / DB URL unless Postgres password is updated in

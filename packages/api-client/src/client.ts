@@ -19,6 +19,7 @@ import {
   type PublicMultipartSessionDetail,
   type PublicMultipartSessionListPage,
   type PublicObjectListPage,
+  type PublicObjectListFilters,
   type PublicFolderOperationJob,
   type PublicFolderAccessRule,
   type FolderAccessRole,
@@ -99,7 +100,7 @@ export interface RequestOptions {
   csrfToken?: string;
 }
 
-export interface ListObjectsParams {
+export interface ListObjectsParams extends PublicObjectListFilters {
   prefix?: string;
   search?: string;
   delimiter?: string;
@@ -409,6 +410,27 @@ export class VaultStackApiClient {
     }
     if (params.delimiter) {
       search.set('delimiter', params.delimiter);
+    }
+    for (const key of [
+      'contentType',
+      'minSize',
+      'maxSize',
+      'modifiedFrom',
+      'modifiedTo',
+      'folderPrefix',
+      'tag',
+      'processingState',
+    ] as const) {
+      const value = params[key];
+      if (value !== undefined && value !== '') {
+        search.set(key, String(value));
+      }
+    }
+    for (const key of ['externallyShared', 'versioned'] as const) {
+      const value = params[key];
+      if (value !== undefined) {
+        search.set(key, String(value));
+      }
     }
     if (params.limit !== undefined) {
       search.set('limit', String(params.limit));

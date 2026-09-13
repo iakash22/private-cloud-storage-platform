@@ -149,6 +149,7 @@ export class AuthController extends AuthenticatedController {
       ...result,
       csrfToken: this.container.cookies.readCsrfToken(req),
       activeOrganizationId: this.container.cookies.readOrganizationId(req) ?? null,
+      currentSessionId: auth.sessionId ?? null,
     });
   });
 

@@ -22,6 +22,7 @@ Interactive OpenAPI remains at `/api/docs` when the API is running. This folder 
 | Backup schedules, jobs, snapshots                           | [backups.md](./backups.md)                 |
 | Host / disk / Docker monitoring                             | [infrastructure.md](./infrastructure.md)   |
 | Full route catalog by feature                               | [route-catalog.md](./route-catalog.md)     |
+| Transactional email + realtime SSE                          | [notifications.md](./notifications.md)     |
 | Copy-paste curl / shell tests                               | [examples/](./examples/)                   |
 
 ## Two ways to talk to VaultStack

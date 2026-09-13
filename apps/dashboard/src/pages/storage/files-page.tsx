@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   BucketSelector,
@@ -19,6 +19,7 @@ import {
   Label,
   ObjectDetails,
   PageHeader,
+  Select,
   ShareDialog,
   type ExplorerEntry,
   type ShareDialogCreateInput,
@@ -27,13 +28,19 @@ import {
   type ViewMode,
 } from '@vaultstack/ui';
 import { FolderOpen } from 'lucide-react';
-import type { PublicFolderOperationJob, PublicObjectVersion, PublicTeam } from '@vaultstack/types';
+import type {
+  PublicFolderOperationJob,
+  PublicObjectListFilters,
+  PublicObjectVersion,
+  PublicTeam,
+} from '@vaultstack/types';
 import { createFolderBodySchema, createShareBodySchema, parseForm } from '@vaultstack/validation';
 import { useAuth } from '../../context/auth-context.js';
 import { useObjectList, useSelectedObject, useBuckets } from '../../hooks/use-storage.js';
 import { useUploadQueue } from '../../hooks/use-upload-queue.js';
 import { apiClient } from '../../lib/api.js';
 import { useFormSubmit } from '../../lib/form-errors.js';
+import { useRealtimeSubscription } from '../../hooks/use-realtime-subscription.js';
 import {
   addTrashItem,
   buildObjectKey,
@@ -57,7 +64,19 @@ export function FilesPage() {
     searchParams.get('bucket') ?? getSelectedBucketId(),
   );
   const [prefix, setPrefix] = useState(searchParams.get('prefix') ?? '');
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(searchParams.get('search') ?? '');
+  const [filters, setFilters] = useState<PublicObjectListFilters>(() => ({
+    contentType: searchParams.get('contentType') ?? undefined,
+    minSize: parseOptionalNumber(searchParams.get('minSize')),
+    maxSize: parseOptionalNumber(searchParams.get('maxSize')),
+    externallyShared: parseOptionalBoolean(searchParams.get('externallyShared')),
+    versioned: parseOptionalBoolean(searchParams.get('versioned')),
+    processingState: searchParams.get('processingState') ?? undefined,
+    folderPrefix: searchParams.get('folderPrefix') ?? undefined,
+    tag: searchParams.get('tag') ?? undefined,
+    modifiedFrom: searchParams.get('modifiedFrom') ?? undefined,
+    modifiedTo: searchParams.get('modifiedTo') ?? undefined,
+  }));
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -82,7 +101,12 @@ export function FilesPage() {
   const [metadataDescription, setMetadataDescription] = useState('');
   const [metadataTags, setMetadataTags] = useState('');
 
-  const { page, loading, error, refresh, loadMore } = useObjectList(bucketId, prefix, search);
+  const { page, loading, error, refresh, loadMore } = useObjectList(
+    bucketId,
+    prefix,
+    search,
+    filters,
+  );
   const selectedObjectId = selectedEntry?.kind === 'file' ? selectedEntry.id : undefined;
   const { object } = useSelectedObject(selectedObjectId);
   const { uploads, enqueueFiles, cancelUpload, retryUpload, pauseUpload, resumeUpload } =
@@ -191,21 +215,59 @@ export function FilesPage() {
   }, [bucketId, prefix, searchParams, setSearchParams]);
 
   useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (search.trim()) {
+      next.set('search', search.trim());
+    } else {
+      next.delete('search');
+    }
+    for (const [key, value] of Object.entries(filters)) {
+      if (value === undefined || value === '') {
+        next.delete(key);
+      } else {
+        next.set(key, String(value));
+      }
+    }
+    setSearchParams(next, { replace: true });
+  }, [filters, search, searchParams, setSearchParams]);
+
+  const refreshOperationJob = useCallback(async () => {
+    if (!operationJob) {
+      return;
+    }
+    try {
+      const next = await apiClient.getFolderOperation(operationJob.id);
+      setOperationJob(next);
+    } catch (caught: unknown) {
+      catchError(caught);
+    }
+  }, [catchError, operationJob]);
+
+  useRealtimeSubscription(
+    ['folder_operation.progress', 'folder_operation.completed', 'folder_operation.failed'],
+    (event) => {
+      if (!operationJob) {
+        return;
+      }
+      const payload = event.payload as { jobId?: string };
+      if (payload.jobId !== operationJob.id) {
+        return;
+      }
+      void refreshOperationJob();
+    },
+  );
+
+  useEffect(() => {
     if (!operationJob || !['QUEUED', 'RUNNING', 'PAUSED'].includes(operationJob.status)) {
       return;
     }
     const timer = window.setInterval(() => {
-      void apiClient
-        .getFolderOperation(operationJob.id)
-        .then(setOperationJob)
-        .catch((caught: unknown) => {
-          catchError(caught);
-        });
-    }, 1_500);
+      void refreshOperationJob();
+    }, 15_000);
     return () => {
       window.clearInterval(timer);
     };
-  }, [catchError, operationJob]);
+  }, [operationJob, refreshOperationJob]);
 
   const handleCreateFolder = async (): Promise<void> => {
     if (!bucketId || !canUploadStorage(permissions)) {
@@ -405,6 +467,144 @@ export function FilesPage() {
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Advanced filters</CardTitle>
+              <CardDescription>
+                Narrow results by type, size, sharing, version, or processing state.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Input
+                aria-label="Content type filter"
+                placeholder="Content type"
+                value={filters.contentType ?? ''}
+                onChange={(event) => { setFilters((current) => ({
+                    ...current,
+                    contentType: event.target.value || undefined,
+                  })); }
+                }
+              />
+              <Input
+                aria-label="Minimum size filter"
+                type="number"
+                min={0}
+                placeholder="Min bytes"
+                value={filters.minSize ?? ''}
+                onChange={(event) => { setFilters((current) => ({
+                    ...current,
+                    minSize: parseOptionalNumber(event.target.value),
+                  })); }
+                }
+              />
+              <Input
+                aria-label="Maximum size filter"
+                type="number"
+                min={0}
+                placeholder="Max bytes"
+                value={filters.maxSize ?? ''}
+                onChange={(event) => { setFilters((current) => ({
+                    ...current,
+                    maxSize: parseOptionalNumber(event.target.value),
+                  })); }
+                }
+              />
+              <Select
+                aria-label="Sharing filter"
+                value={
+                  filters.externallyShared === undefined
+                    ? ''
+                    : filters.externallyShared
+                      ? 'shared'
+                      : 'private'
+                }
+                onChange={(value) => { setFilters((current) => ({
+                    ...current,
+                    externallyShared: value === '' ? undefined : value === 'shared',
+                  })); }
+                }
+                options={[
+                  { value: '', label: 'All sharing states' },
+                  { value: 'shared', label: 'Externally shared' },
+                  { value: 'private', label: 'Not externally shared' },
+                ]}
+              />
+              <Select
+                aria-label="Version filter"
+                value={
+                  filters.versioned === undefined
+                    ? ''
+                    : filters.versioned
+                      ? 'versioned'
+                      : 'unversioned'
+                }
+                onChange={(value) => { setFilters((current) => ({
+                    ...current,
+                    versioned: value === '' ? undefined : value === 'versioned',
+                  })); }
+                }
+                options={[
+                  { value: '', label: 'All version states' },
+                  { value: 'versioned', label: 'Versioned' },
+                  { value: 'unversioned', label: 'Unversioned' },
+                ]}
+              />
+              <Input
+                aria-label="Processing state filter"
+                placeholder="Processing state"
+                value={filters.processingState ?? ''}
+                onChange={(event) => { setFilters((current) => ({
+                    ...current,
+                    processingState: event.target.value || undefined,
+                  })); }
+                }
+              />
+              <Input
+                aria-label="Folder prefix filter"
+                placeholder="Folder prefix"
+                value={filters.folderPrefix ?? ''}
+                onChange={(event) => { setFilters((current) => ({
+                    ...current,
+                    folderPrefix: event.target.value || undefined,
+                  })); }
+                }
+              />
+              <Input
+                aria-label="Tag filter"
+                placeholder="Tag"
+                value={filters.tag ?? ''}
+                onChange={(event) => { setFilters((current) => ({
+                    ...current,
+                    tag: event.target.value || undefined,
+                  })); }
+                }
+              />
+              <Input
+                aria-label="Modified from filter"
+                type="date"
+                value={filters.modifiedFrom?.slice(0, 10) ?? ''}
+                onChange={(event) => { setFilters((current) => ({
+                    ...current,
+                    modifiedFrom: event.target.value
+                      ? `${event.target.value}T00:00:00.000Z`
+                      : undefined,
+                  })); }
+                }
+              />
+              <Input
+                aria-label="Modified to filter"
+                type="date"
+                value={filters.modifiedTo?.slice(0, 10) ?? ''}
+                onChange={(event) => { setFilters((current) => ({
+                    ...current,
+                    modifiedTo: event.target.value
+                      ? `${event.target.value}T23:59:59.999Z`
+                      : undefined,
+                  })); }
+                }
+              />
+            </CardContent>
+          </Card>
           <FileExplorer
             prefix={prefix}
             page={page}
@@ -864,4 +1064,22 @@ export function FilesPage() {
       />
     </div>
   );
+}
+
+function parseOptionalNumber(value: string | null): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+function parseOptionalBoolean(value: string | null): boolean | undefined {
+  if (value === 'true') {
+    return true;
+  }
+  if (value === 'false') {
+    return false;
+  }
+  return undefined;
 }

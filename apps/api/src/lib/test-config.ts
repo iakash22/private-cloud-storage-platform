@@ -35,6 +35,12 @@ export function createTestConfig(overrides: Partial<EnvConfig> = {}): EnvConfig 
     BACKUP_PROCESS_INLINE: false,
     WORKER_ROLE: 'all',
     DOCKER_SOCKET: '/var/run/docker.sock',
+    EMAIL_FROM: 'VaultStack <onboarding@resend.dev>',
+    EMAIL_ENABLED: false,
+    DASHBOARD_PUBLIC_URL: 'http://localhost:5173',
+    REALTIME_ENABLED: false,
+    REALTIME_MAX_CONNECTIONS_PER_USER: 3,
+    REALTIME_HEARTBEAT_SECONDS: 30,
     ...overrides,
   };
 }

@@ -37,6 +37,10 @@ async function start(): Promise<void> {
     throw error;
   }
 
+  if (container.realtimeHub) {
+    await container.realtimeHub.start();
+  }
+
   const server = app.listen(config.API_PORT, config.API_HOST, () => {
     logger.info({ host: config.API_HOST, port: config.API_PORT }, 'VaultStack API listening');
     void printStartupBanner({
@@ -63,6 +67,7 @@ async function start(): Promise<void> {
   async function shutdown(signal: string): Promise<void> {
     logger.info({ signal }, 'Shutting down API');
     server.close();
+    await container.realtimeHub?.stop();
     await shutdownDependencyClients({ redis, prisma });
     process.exit(0);
   }

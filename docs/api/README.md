@@ -74,7 +74,16 @@ Programmatic clients may still use `Authorization: Bearer <api-key>`.
 - `GET  /api/v1/auth/sessions` — list active browser sessions (IP + approximate location)
 - `DELETE /api/v1/auth/sessions/:sessionId` — revoke one session (clears cookies if it is the current session)
 - `POST /api/v1/auth/sessions/revoke-others` — revoke every session except the current one
-- `GET  /api/v1/auth/me`
+- `GET  /api/v1/auth/me` — includes `currentSessionId` for cookie sessions (used by realtime session-revoke handling)
+
+### Realtime (SSE)
+
+- `GET /api/v1/realtime/events` — **session cookie only** (not API keys); streams
+  organization-scoped events for the authenticated user. Response is
+  `text/event-stream`. See [`docs/usage/notifications.md`](../usage/notifications.md).
+
+Event types: `session.revoked`, `session.revoked_all`, `folder_operation.*`,
+`backup_job.*`, `ping`.
 
 ### Organizations
 
@@ -164,9 +173,13 @@ Buckets:
 - `POST   /api/v1/storage/folder-access` — `storage.upload`; grant user/team folder access
 - `DELETE /api/v1/storage/folder-access/:ruleId` — `storage.delete`; revoke folder access
 
+Folder ACLs are enforced server-side using the deepest matching prefix. Team
+rules require active membership; `VIEWER`, `EDITOR`, and `MANAGER` map to read,
+read/write, and read/write/delete/share/manage respectively.
+
 Objects:
 
-- `GET    /api/v1/storage/buckets/:bucketId/objects` — `storage.read` (`prefix`, `delimiter`, `limit`, `cursor`)
+- `GET    /api/v1/storage/buckets/:bucketId/objects` — `storage.read`; supports `prefix`, `delimiter`, `search`, `contentType`, `minSize`, `maxSize`, `modifiedFrom`, `modifiedTo`, `folderPrefix`, `tag`, `externallyShared`, `versioned`, `processingState`, `limit`, and `cursor`. Results are filtered by the caller's effective folder ACL.
 - `POST   /api/v1/storage/buckets/:bucketId/folders` — `storage.upload`; creates an empty folder marker
 - `POST   /api/v1/storage/folder-operations` — queue move, copy, or delete
 - `GET    /api/v1/storage/folder-operations/:jobId` — poll operation progress

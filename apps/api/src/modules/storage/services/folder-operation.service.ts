@@ -7,6 +7,10 @@ import { assertValidKeyPrefix } from '../domain/object-key.js';
 import type { RequestMeta } from './bucket.service.js';
 import type { ObjectService } from './object.service.js';
 import type { StorageService } from './storage.service.js';
+import type { FolderAuthorizationService } from './folder-authorization.service.js';
+import type { NotificationService } from '../../notifications/notification.service.js';
+import type { RealtimePublisher } from '../../realtime/services/redis-realtime.publisher.js';
+import { publishFolderOperationEvent } from '../../realtime/realtime-events.js';
 
 const PAGE_SIZE = 100;
 
@@ -26,10 +30,80 @@ export interface FolderOperationQueue {
 
 export interface FolderOperationService {
   create(input: CreateFolderOperationInput): Promise<PublicFolderOperationJob>;
-  get(organizationId: string, jobId: string): Promise<PublicFolderOperationJob | null>;
+  get(
+    organizationId: string,
+    jobId: string,
+    userId: string,
+  ): Promise<PublicFolderOperationJob | null>;
   cancel(organizationId: string, jobId: string, userId: string, meta: RequestMeta): Promise<void>;
-  retry(organizationId: string, jobId: string): Promise<PublicFolderOperationJob>;
+  retry(organizationId: string, jobId: string, userId: string): Promise<PublicFolderOperationJob>;
   process(jobId: string): Promise<void>;
+}
+
+async function emitFolderOperationUpdate(
+  deps: {
+    prisma: PrismaClient;
+    notifications?: NotificationService;
+    realtimePublisher?: RealtimePublisher;
+  },
+  job: Parameters<typeof serializeJob>[0],
+  type: 'folder_operation.progress' | 'folder_operation.completed' | 'folder_operation.failed',
+): Promise<void> {
+  const serialized = serializeJob(job);
+  const userId = job.createdByUserId;
+  if (!userId) {
+    return;
+  }
+
+  const payload = {
+    jobId: serialized.id,
+    status: serialized.status,
+    operation: serialized.operation,
+    processedObjects: serialized.processedObjects,
+    totalObjects: serialized.totalObjects,
+    failedObjects: serialized.failedObjects,
+    error: serialized.error,
+  };
+
+  if (deps.realtimePublisher) {
+    await publishFolderOperationEvent(deps.realtimePublisher, {
+      organizationId: job.organizationId,
+      userId,
+      type,
+      payload,
+    });
+  }
+
+  if (!deps.notifications || (type !== 'folder_operation.completed' && type !== 'folder_operation.failed')) {
+    return;
+  }
+
+  const user = await deps.prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true, name: true },
+  });
+  if (!user) {
+    return;
+  }
+
+  if (type === 'folder_operation.completed') {
+    deps.notifications.notifyFolderOperationCompleted({
+      to: user.email,
+      recipientName: user.name,
+      operation: serialized.operation,
+      sourcePrefix: serialized.sourcePrefix,
+      processedObjects: serialized.processedObjects,
+    });
+    return;
+  }
+
+  deps.notifications.notifyFolderOperationFailed({
+    to: user.email,
+    recipientName: user.name,
+    operation: serialized.operation,
+    sourcePrefix: serialized.sourcePrefix,
+    error: serialized.error ?? 'Folder operation failed',
+  });
 }
 
 export function createFolderOperationService(deps: {
@@ -38,8 +112,12 @@ export function createFolderOperationService(deps: {
   storage: StorageService;
   queue: FolderOperationQueue;
   logger: Logger;
+  folderAuthorization?: FolderAuthorizationService;
+  notifications?: NotificationService;
+  realtimePublisher?: RealtimePublisher;
 }): FolderOperationService {
-  const { prisma, objects, storage, queue, logger } = deps;
+  const { prisma, objects, storage, queue, logger, folderAuthorization, notifications, realtimePublisher } =
+    deps;
 
   return {
     async create(input) {
@@ -61,6 +139,24 @@ export function createFolderOperationService(deps: {
         (destinationPrefix === sourcePrefix || destinationPrefix.startsWith(sourcePrefix))
       ) {
         throw conflict('The destination cannot be the source folder or one of its children');
+      }
+      if (folderAuthorization) {
+        await folderAuthorization.assert({
+          organizationId: input.organizationId,
+          bucketId: input.bucketId,
+          key: sourcePrefix,
+          userId: input.userId,
+          action: input.operation === 'DELETE' ? 'DELETE' : 'READ',
+        });
+      }
+      if (destinationPrefix && folderAuthorization) {
+        await folderAuthorization.assert({
+          organizationId: input.organizationId,
+          bucketId: input.bucketId,
+          key: destinationPrefix,
+          userId: input.userId,
+          action: 'WRITE',
+        });
       }
 
       const totalObjects = await prisma.storageObject.count({
@@ -86,11 +182,14 @@ export function createFolderOperationService(deps: {
       return serializeJob(job);
     },
 
-    async get(organizationId, jobId) {
+    async get(organizationId, jobId, userId) {
       const job = await prisma.folderOperationJob.findFirst({
         where: { id: jobId, organizationId },
       });
-      return job ? serializeJob(job) : null;
+      if (job?.createdByUserId !== userId) {
+        return null;
+      }
+      return serializeJob(job);
     },
 
     async cancel(organizationId, jobId, userId, meta) {
@@ -98,6 +197,9 @@ export function createFolderOperationService(deps: {
         where: { id: jobId, organizationId },
       });
       if (!job) {
+        throw validationError('Folder operation not found');
+      }
+      if (job.createdByUserId !== userId) {
         throw validationError('Folder operation not found');
       }
       if (!['QUEUED', 'RUNNING', 'PAUSED'].includes(job.status)) {
@@ -118,11 +220,14 @@ export function createFolderOperationService(deps: {
       });
     },
 
-    async retry(organizationId, jobId) {
+    async retry(organizationId, jobId, userId) {
       const job = await prisma.folderOperationJob.findFirst({
         where: { id: jobId, organizationId },
       });
       if (!job) {
+        throw validationError('Folder operation not found');
+      }
+      if (job.createdByUserId !== userId) {
         throw validationError('Folder operation not found');
       }
       if (!['FAILED', 'PAUSED'].includes(job.status)) {
@@ -141,7 +246,7 @@ export function createFolderOperationService(deps: {
       if (!current || current.status === 'CANCELLED' || current.status === 'COMPLETED') {
         return;
       }
-      await prisma.folderOperationJob.update({
+      const running = await prisma.folderOperationJob.update({
         where: { id: jobId },
         data: {
           status: 'RUNNING',
@@ -149,6 +254,11 @@ export function createFolderOperationService(deps: {
           error: null,
         },
       });
+      await emitFolderOperationUpdate(
+        { prisma, notifications, realtimePublisher },
+        running,
+        'folder_operation.progress',
+      );
 
       try {
         let cursor = current.nextCursor ?? undefined;
@@ -171,10 +281,15 @@ export function createFolderOperationService(deps: {
             take: PAGE_SIZE,
           });
           if (rows.length === 0) {
-            await prisma.folderOperationJob.update({
+            const completed = await prisma.folderOperationJob.update({
               where: { id: jobId },
               data: { status: 'COMPLETED', completedAt: new Date(), nextCursor: null },
             });
+            await emitFolderOperationUpdate(
+              { prisma, notifications, realtimePublisher },
+              completed,
+              'folder_operation.completed',
+            );
             await writeAuditLog(prisma, {
               organizationId: latest.organizationId,
               userId: latest.createdByUserId,
@@ -237,27 +352,39 @@ export function createFolderOperationService(deps: {
             }
 
             cursor = row.key;
-            await prisma.folderOperationJob.update({
+            const progressed = await prisma.folderOperationJob.update({
               where: { id: jobId },
               data: {
                 processedObjects: { increment: 1 },
                 nextCursor: cursor,
               },
             });
+            if (progressed.processedObjects % 25 === 0) {
+              await emitFolderOperationUpdate(
+                { prisma, notifications, realtimePublisher },
+                progressed,
+                'folder_operation.progress',
+              );
+            }
           }
 
           if (rows.length < PAGE_SIZE) {
-            await prisma.folderOperationJob.update({
+            const completed = await prisma.folderOperationJob.update({
               where: { id: jobId },
               data: { status: 'COMPLETED', completedAt: new Date(), nextCursor: null },
             });
+            await emitFolderOperationUpdate(
+              { prisma, notifications, realtimePublisher },
+              completed,
+              'folder_operation.completed',
+            );
             return;
           }
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Folder operation failed';
         logger.error({ error, jobId }, 'Folder operation failed');
-        await prisma.folderOperationJob.update({
+        const failed = await prisma.folderOperationJob.update({
           where: { id: jobId },
           data: {
             status: 'FAILED',
@@ -266,6 +393,11 @@ export function createFolderOperationService(deps: {
             completedAt: new Date(),
           },
         });
+        await emitFolderOperationUpdate(
+          { prisma, notifications, realtimePublisher },
+          failed,
+          'folder_operation.failed',
+        );
         throw new Error(message);
       }
     },

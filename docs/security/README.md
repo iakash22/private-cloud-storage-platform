@@ -24,7 +24,17 @@ Passwords, session tokens, CSRF tokens, cookies, and key hashes are redacted fro
 
 Login is limited per IP + email and per IP (Redis in production, in-memory in tests) to slow brute-force attempts. `POST /api/v1/auth/login/totp` uses the same limiter. `/api/v1` also has a general per-IP limit. Limited responses use `429` with `RATE_LIMITED` and a `Retry-After` header.
 
-No extra npm packages were added for cookies, rate limiting, or CORS: hashing and cookie serialization live in `@vaultstack/auth`, the limiter is a small Redis/`Map` helper in the API, and browser origins are allowlisted in a small Express middleware.
+`GET /api/v1/realtime/events` is **excluded** from the per-IP REST burst limiter; instead,
+each user may hold at most `REALTIME_MAX_CONNECTIONS_PER_USER` concurrent SSE connections
+(default 3). The stream requires a **session cookie** (API keys are rejected). Events are
+filtered server-side by `userId` and active organization. Payloads never include secrets,
+tokens, or storage credentials.
+
+Failed login attempts for known accounts can trigger a security email when Resend is
+configured. Session revoke and account disable push realtime events so other browsers
+logout without waiting for the next REST call.
+
+No extra npm packages were added for cookies, rate limiting, or CORS: hashing and cookie serialization live in `@vaultstack/auth`, the limiter is a small Redis/`Map` helper in the API, and browser origins are allowlisted in a small Express middleware. Transactional email uses the `resend` package in `@vaultstack/email` (server-side only).
 
 ## Authorization
 

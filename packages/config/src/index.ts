@@ -102,9 +102,38 @@ const envSchema = z.object({
   // Comma-separated browser origins allowed to call the API with cookies.
   // Unset: localhost dashboard origins in development/test, none in production.
   CORS_ORIGINS: z.string().optional(),
+
+  // Transactional email (Resend). Disabled when RESEND_API_KEY is unset unless
+  // EMAIL_ENABLED=true is set explicitly (still requires a provider key to send).
+  RESEND_API_KEY: optionalSecret,
+  EMAIL_FROM: z.string().min(3).default('VaultStack <onboarding@resend.dev>'),
+  EMAIL_ENABLED: booleanFromString.optional(),
+  // Public dashboard URL used in email links. Defaults to the first CORS origin.
+  DASHBOARD_PUBLIC_URL: z.string().url().optional(),
+
+  // Server-sent events for authenticated dashboard clients.
+  REALTIME_ENABLED: booleanFromString.default('true'),
+  REALTIME_MAX_CONNECTIONS_PER_USER: z.coerce.number().int().positive().max(10).default(3),
+  REALTIME_HEARTBEAT_SECONDS: z.coerce.number().int().positive().max(300).default(30),
+
   // Prometheus authenticates to this endpoint with a bearer token. If unset,
   // the endpoint is unavailable rather than publicly readable.
   METRICS_TOKEN: optionalSecret,
+}).transform((env) => {
+  const defaultDashboardUrl =
+    env.DASHBOARD_PUBLIC_URL ??
+    env.CORS_ORIGINS?.split(',')
+      .map((origin) => origin.trim())
+      .find(Boolean) ??
+    (env.NODE_ENV === 'development' || env.NODE_ENV === 'test'
+      ? 'http://localhost:5173'
+      : 'https://vault.ivaultstack.com');
+
+  return {
+    ...env,
+    EMAIL_ENABLED: env.EMAIL_ENABLED ?? Boolean(env.RESEND_API_KEY),
+    DASHBOARD_PUBLIC_URL: defaultDashboardUrl,
+  };
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

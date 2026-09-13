@@ -1,4 +1,3 @@
-import type { IncomingMessage } from 'node:http';
 import { Readable } from 'node:stream';
 import {
   AbortMultipartUploadCommand,
@@ -707,12 +706,32 @@ function findObjectTooLarge(error: unknown): ObjectTooLargeError | undefined {
   return undefined;
 }
 
+function readableHttpHeaders(
+  body: Readable,
+): Record<string, string | string[] | undefined> | undefined {
+  if (!('headers' in body)) {
+    return undefined;
+  }
+
+  const headers = (body as { headers?: unknown }).headers;
+  if (typeof headers !== 'object' || headers === null) {
+    return undefined;
+  }
+
+  return headers as Record<string, string | string[] | undefined>;
+}
+
 function contentLengthOf(body: Readable, expected?: number): number | undefined {
   if (expected !== undefined) {
     return expected;
   }
 
-  const header = (body as IncomingMessage).headers?.['content-length'];
+  const headers = readableHttpHeaders(body);
+  if (!headers) {
+    return undefined;
+  }
+
+  const header = headers['content-length'];
   const raw = Array.isArray(header) ? header[0] : header;
   if (typeof raw === 'string' && raw.length > 0) {
     const parsed = Number.parseInt(raw, 10);
@@ -726,8 +745,8 @@ function contentLengthOf(body: Readable, expected?: number): number | undefined 
 
 async function collectStream(source: Readable): Promise<Buffer> {
   const chunks: Buffer[] = [];
-  for await (const chunk of source) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array));
+  for await (const chunk of source as AsyncIterable<Buffer | Uint8Array | string>) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   }
   return Buffer.concat(chunks);
 }

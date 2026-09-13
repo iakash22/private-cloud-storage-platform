@@ -28,6 +28,15 @@ Auth legend: **Pub** public · **Sess** session/API key · **Tok** content token
 | `POST`   | `/api/v1/auth/2fa/enable`             | Sess |
 | `POST`   | `/api/v1/auth/2fa/disable`            | Sess |
 
+## Realtime (SSE)
+
+| Method | Path                         | Auth | Notes                                      |
+| ------ | ---------------------------- | ---- | ------------------------------------------ |
+| `GET`  | `/api/v1/realtime/events`    | Sess | Cookie session only; org cookie/header required |
+
+Streams JSON events for session revoke, folder-operation progress, and backup job
+progress. See [notifications.md](./notifications.md).
+
 ## Organizations / IAM
 
 | Method                  | Path                                                                  |
@@ -47,29 +56,29 @@ Auth legend: **Pub** public · **Sess** session/API key · **Tok** content token
 
 ## Storage providers / buckets / objects
 
-| Method             | Path                                                                             |
-| ------------------ | -------------------------------------------------------------------------------- |
-| `GET/POST`         | `/api/v1/storage/providers`                                                      |
-| `GET/PATCH/DELETE` | `/api/v1/storage/providers/:providerId`                                          |
-| `POST`             | `/api/v1/storage/providers/:providerId/test`                                     |
-| `GET/POST`         | `/api/v1/storage/buckets`                                                        |
-| `GET/DELETE`       | `/api/v1/storage/buckets/:bucketId`                                              |
-| `PUT`              | `/api/v1/storage/buckets/:bucketId/versioning`                                   |
-| `GET`              | `/api/v1/storage/buckets/:bucketId/summary`                                      |
-| `GET`              | `/api/v1/storage/buckets/:bucketId/objects`                                      |
-| `POST`             | `/api/v1/storage/buckets/:bucketId/folders`                                      |
-| `POST`             | `/api/v1/storage/folder-operations`                                              |
-| `GET/POST`         | `/api/v1/storage/folder-operations/:jobId` · `/cancel` · `/retry`                |
-| `GET/DELETE`       | `/api/v1/storage/objects/:objectId`                                              |
-| `PATCH`            | `/api/v1/storage/objects/:objectId/metadata`                                     |
-| `GET`              | `/api/v1/storage/buckets/:bucketId/folder-access`                                |
-| `POST/DELETE`      | `/api/v1/storage/folder-access` · `/:ruleId`                                     |
-| `POST`             | `/api/v1/storage/objects/:objectId/download-url`                                 |
-| `POST`             | `/api/v1/storage/objects/:objectId/previews`                                     |
-| `GET`              | `/api/v1/storage/previews/:jobId`                                                |
-| `GET`              | `/api/v1/storage/objects/:objectId/versions[/:versionId]`                        |
-| `POST/DELETE`      | `/api/v1/storage/objects/:objectId/versions/:versionId/restore` · delete version |
-| `POST`             | `/api/v1/storage/objects/:objectId/copy` · `/move`                               |
+| Method             | Path                                                                                                                   |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| `GET/POST`         | `/api/v1/storage/providers`                                                                                            |
+| `GET/PATCH/DELETE` | `/api/v1/storage/providers/:providerId`                                                                                |
+| `POST`             | `/api/v1/storage/providers/:providerId/test`                                                                           |
+| `GET/POST`         | `/api/v1/storage/buckets`                                                                                              |
+| `GET/DELETE`       | `/api/v1/storage/buckets/:bucketId`                                                                                    |
+| `PUT`              | `/api/v1/storage/buckets/:bucketId/versioning`                                                                         |
+| `GET`              | `/api/v1/storage/buckets/:bucketId/summary`                                                                            |
+| `GET`              | `/api/v1/storage/buckets/:bucketId/objects` (prefix, search, metadata, size, date, share, version, processing filters) |
+| `POST`             | `/api/v1/storage/buckets/:bucketId/folders`                                                                            |
+| `POST`             | `/api/v1/storage/folder-operations`                                                                                    |
+| `GET/POST`         | `/api/v1/storage/folder-operations/:jobId` · `/cancel` · `/retry`                                                      |
+| `GET/DELETE`       | `/api/v1/storage/objects/:objectId`                                                                                    |
+| `PATCH`            | `/api/v1/storage/objects/:objectId/metadata`                                                                           |
+| `GET`              | `/api/v1/storage/buckets/:bucketId/folder-access`                                                                      |
+| `POST/DELETE`      | `/api/v1/storage/folder-access` · `/:ruleId`                                                                           |
+| `POST`             | `/api/v1/storage/objects/:objectId/download-url`                                                                       |
+| `POST`             | `/api/v1/storage/objects/:objectId/previews`                                                                           |
+| `GET`              | `/api/v1/storage/previews/:jobId`                                                                                      |
+| `GET`              | `/api/v1/storage/objects/:objectId/versions[/:versionId]`                                                              |
+| `POST/DELETE`      | `/api/v1/storage/objects/:objectId/versions/:versionId/restore` · delete version                                       |
+| `POST`             | `/api/v1/storage/objects/:objectId/copy` · `/move`                                                                     |
 
 ## Uploads / multipart / content tokens
 
@@ -143,3 +152,4 @@ Auth legend: **Pub** public · **Sess** session/API key · **Tok** content token
 | Backups                       | [backups.md](./backups.md)                 |
 | Monitoring                    | [infrastructure.md](./infrastructure.md)   |
 | Connectivity diagram          | [connectivity.md](./connectivity.md)       |
+| Email + realtime SSE          | [notifications.md](./notifications.md)     |

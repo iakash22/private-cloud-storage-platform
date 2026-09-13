@@ -34,6 +34,10 @@ import { deleteVersionBytes, reclaimSupersededVersions } from './reclaim-version
 import type { StorageMetrics } from './storage.metrics.js';
 import type { StorageService } from './storage.service.js';
 import type { StorageTokenService } from './storage-token.service.js';
+import type {
+  FolderAccessAction,
+  FolderAuthorizationService,
+} from './folder-authorization.service.js';
 
 export interface PutObjectOptions {
   organizationId: string;
@@ -58,6 +62,17 @@ export interface ListOptions {
   includeFolderMarkers?: boolean;
   limit: number;
   cursor?: string;
+  userId?: string | null;
+  contentType?: string;
+  minSize?: number;
+  maxSize?: number;
+  modifiedFrom?: Date;
+  modifiedTo?: Date;
+  folderPrefix?: string;
+  tag?: string;
+  externallyShared?: boolean;
+  versioned?: boolean;
+  processingState?: string;
 }
 
 export interface ObjectService {
@@ -66,7 +81,11 @@ export interface ObjectService {
     bucketId: string,
     options: ListOptions,
   ): Promise<PublicObjectListPage>;
-  get(organizationId: string, objectId: string): Promise<PublicStorageObject>;
+  get(
+    organizationId: string,
+    objectId: string,
+    userId?: string | null,
+  ): Promise<PublicStorageObject>;
   updateMetadata(
     organizationId: string,
     objectId: string,
@@ -74,7 +93,12 @@ export interface ObjectService {
     userId: string,
     meta: RequestMeta,
   ): Promise<PublicStorageObject>;
-  findByKey(organizationId: string, bucketId: string, key: string): Promise<PublicStorageObject>;
+  findByKey(
+    organizationId: string,
+    bucketId: string,
+    key: string,
+    userId?: string | null,
+  ): Promise<PublicStorageObject>;
   createFolder(
     organizationId: string,
     bucketId: string,
@@ -91,6 +115,7 @@ export interface ObjectService {
       range?: { start: number; end?: number };
       signal?: AbortSignal;
       versionId?: string;
+      userId?: string | null;
     },
   ): Promise<{ object: StorageObject; stream: GetObjectResult }>;
   createDownloadUrl(
@@ -108,11 +133,16 @@ export interface ObjectService {
     meta: RequestMeta,
     versionId?: string,
   ): Promise<void>;
-  listVersions(organizationId: string, objectId: string): Promise<PublicObjectVersionListPage>;
+  listVersions(
+    organizationId: string,
+    objectId: string,
+    userId?: string | null,
+  ): Promise<PublicObjectVersionListPage>;
   getVersion(
     organizationId: string,
     objectId: string,
     versionId: string,
+    userId?: string | null,
   ): Promise<PublicObjectVersion>;
   restoreVersion(
     organizationId: string,
@@ -148,9 +178,23 @@ export function createObjectService(deps: {
   tokens: StorageTokenService;
   metrics: StorageMetrics;
   logger: Logger;
+  folderAuthorization?: FolderAuthorizationService;
 }): ObjectService {
-  const { prisma, objects, storage, tokens, metrics, logger } = deps;
+  const { prisma, objects, storage, tokens, metrics, logger, folderAuthorization } = deps;
   const limits = storage.limits;
+
+  async function assertFolderAccess(
+    organizationId: string,
+    bucketId: string,
+    key: string,
+    userId: string | null | undefined,
+    action: FolderAccessAction,
+  ): Promise<void> {
+    if (!userId || !folderAuthorization) {
+      return;
+    }
+    await folderAuthorization.assert({ organizationId, bucketId, key, userId, action });
+  }
 
   /** Loads an object and its bucket together, always inside one organization. */
   async function requireObject(organizationId: string, objectId: string) {
@@ -192,6 +236,7 @@ export function createObjectService(deps: {
       objectId,
       versionId,
     );
+    await assertFolderAccess(organizationId, object.bucketId, object.key, userId, 'DELETE');
 
     await prisma.objectVersion.deleteMany({
       where: { organizationId, objectId, versionId },
@@ -270,6 +315,16 @@ export function createObjectService(deps: {
         limit: Math.min(options.limit, 1000),
         cursorKey: options.cursor,
         includeFolderMarkers: options.includeFolderMarkers,
+          contentType: options.contentType,
+          minSize: options.minSize,
+          maxSize: options.maxSize,
+          modifiedFrom: options.modifiedFrom,
+          modifiedTo: options.modifiedTo,
+          folderPrefix: options.folderPrefix,
+          tag: options.tag,
+          externallyShared: options.externallyShared,
+          versioned: options.versioned,
+          processingState: options.processingState,
       };
 
       const [page, prefixes] = await Promise.all([
@@ -279,7 +334,41 @@ export function createObjectService(deps: {
           : Promise.resolve([]),
       ]);
       const delimiter = options.delimiter ?? '/';
-      const folders: PublicStorageFolder[] = prefixes.map((folderPrefix) => ({
+      const visibleObjects = options.userId && folderAuthorization
+        ? (
+            await Promise.all(
+              page.objects.map(async (object) =>
+                (await folderAuthorization.can({
+                  organizationId,
+                  bucketId,
+                  key: object.key,
+                  userId: options.userId,
+                  action: 'READ',
+                }))
+                  ? object
+                  : null,
+              ),
+            )
+          ).filter((object): object is StorageObject => object !== null)
+        : page.objects;
+      const visiblePrefixes = options.userId && folderAuthorization
+        ? (
+            await Promise.all(
+              prefixes.map(async (folderPrefix) =>
+                (await folderAuthorization.can({
+                  organizationId,
+                  bucketId,
+                  key: folderPrefix,
+                  userId: options.userId,
+                  action: 'READ',
+                }))
+                  ? folderPrefix
+                  : null,
+              ),
+            )
+          ).filter((prefix): prefix is string => prefix !== null)
+        : prefixes;
+      const folders: PublicStorageFolder[] = visiblePrefixes.map((folderPrefix) => ({
         name:
           folderPrefix
             .slice(prefix?.length ?? 0, -delimiter.length)
@@ -291,16 +380,17 @@ export function createObjectService(deps: {
       }));
 
       return {
-        objects: page.objects.map(serializeStorageObject),
-        prefixes,
+        objects: visibleObjects.map(serializeStorageObject),
+        prefixes: visiblePrefixes,
         folders,
         nextCursor: page.nextCursor,
         isTruncated: page.isTruncated,
       };
     },
 
-    async get(organizationId, objectId) {
+    async get(organizationId, objectId, userId) {
       const { object } = await requireLiveObject(organizationId, objectId);
+      await assertFolderAccess(organizationId, object.bucketId, object.key, userId, 'READ');
       return serializeStorageObject(object);
     },
 
@@ -309,6 +399,7 @@ export function createObjectService(deps: {
       if (!object) {
         throw storageObjectNotFound();
       }
+      await assertFolderAccess(organizationId, object.bucketId, object.key, userId, 'WRITE');
       const existing = isStringRecord(object.metadata) ? object.metadata : {};
       const metadata: Record<string, string> = { ...existing };
       if (input.description !== undefined) {
@@ -338,17 +429,19 @@ export function createObjectService(deps: {
       return serializeStorageObject(updated);
     },
 
-    async findByKey(organizationId, bucketId, key) {
+    async findByKey(organizationId, bucketId, key, userId) {
       const normalizedKey = assertValidObjectKey(key, limits.maxKeyLength);
       const object = await objects.findByKey(organizationId, bucketId, normalizedKey);
       if (!object || object.isDeleted) {
         throw storageObjectNotFound();
       }
+      await assertFolderAccess(organizationId, bucketId, normalizedKey, userId, 'READ');
       return serializeStorageObject(object);
     },
 
     async createFolder(organizationId, bucketId, name, parentPrefix, userId, meta) {
       const key = buildFolderMarkerKey(parentPrefix, name, limits.maxKeyLength);
+      await assertFolderAccess(organizationId, bucketId, key, userId, 'WRITE');
       const existing = await objects.findByKey(organizationId, bucketId, key);
       if (existing && !existing.isDeleted) {
         return serializeStorageObject(existing);
@@ -373,6 +466,13 @@ export function createObjectService(deps: {
         ? assertValidFolderMarkerKey(options.key, limits.maxKeyLength)
         : assertValidObjectKey(options.key, limits.maxKeyLength);
       assertMetadataSize(options.metadata, limits.maxMetadataBytes);
+      await assertFolderAccess(
+        options.organizationId,
+        options.bucketId,
+        key,
+        options.userId,
+        'WRITE',
+      );
 
       if (options.expectedSize !== undefined && options.expectedSize > limits.maxObjectSizeBytes) {
         throw storageObjectTooLarge(limits.maxObjectSizeBytes);
@@ -526,6 +626,13 @@ export function createObjectService(deps: {
           objectId,
           options.versionId,
         );
+        await assertFolderAccess(
+          organizationId,
+          object.bucketId,
+          object.key,
+          options.userId,
+          'READ',
+        );
         if (version.isDeleteMarker || version.physicalKey.length === 0) {
           throw storageObjectNotFound();
         }
@@ -546,6 +653,13 @@ export function createObjectService(deps: {
       }
 
       const { object, bucket, provider } = await requireLiveObject(organizationId, objectId);
+      await assertFolderAccess(
+        organizationId,
+        object.bucketId,
+        object.key,
+        options?.userId,
+        'READ',
+      );
       const stream = await provider.getObject({
         ...storage.locationFor(bucket, object.physicalKey),
         range: options?.range,
@@ -577,6 +691,7 @@ export function createObjectService(deps: {
           objectId,
           versionId,
         );
+        await assertFolderAccess(organizationId, object.bucketId, object.key, userId, 'READ');
         if (version.isDeleteMarker || version.physicalKey.length === 0) {
           throw storageObjectNotFound();
         }
@@ -607,7 +722,7 @@ export function createObjectService(deps: {
         }
 
         const issued = tokens.issue(
-          { purpose: 'download', organizationId, subjectId: object.id, versionId },
+          { purpose: 'download', organizationId, subjectId: object.id, versionId, actorId: userId },
           limits.presignedUrlTtlSeconds,
         );
         const download = {
@@ -630,6 +745,7 @@ export function createObjectService(deps: {
       }
 
       const { object, bucket, provider } = await requireLiveObject(organizationId, objectId);
+      await assertFolderAccess(organizationId, object.bucketId, object.key, userId, 'READ');
 
       if (provider.capabilities.nativePresignedUrls) {
         const presigned = await provider.createPresignedDownloadUrl({
@@ -658,7 +774,7 @@ export function createObjectService(deps: {
       }
 
       const issued = tokens.issue(
-        { purpose: 'download', organizationId, subjectId: object.id },
+        { purpose: 'download', organizationId, subjectId: object.id, actorId: userId },
         limits.presignedUrlTtlSeconds,
       );
 
@@ -688,6 +804,7 @@ export function createObjectService(deps: {
       }
 
       const { object, bucket, provider } = await requireObject(organizationId, objectId);
+      await assertFolderAccess(organizationId, object.bucketId, object.key, userId, 'DELETE');
 
       if (usesDeleteMarkers(bucket.versioning) && !object.isDeleted) {
         const markerVersionId = storage.newVersionId();
@@ -747,8 +864,9 @@ export function createObjectService(deps: {
       });
     },
 
-    async listVersions(organizationId, objectId) {
+    async listVersions(organizationId, objectId, userId) {
       const { object } = await requireObject(organizationId, objectId);
+      await assertFolderAccess(organizationId, object.bucketId, object.key, userId, 'READ');
       const versions = await objects.listVersions(organizationId, objectId);
       return {
         objectId: object.id,
@@ -757,8 +875,9 @@ export function createObjectService(deps: {
       };
     },
 
-    async getVersion(organizationId, objectId, versionId) {
-      const { version } = await requireVersion(organizationId, objectId, versionId);
+    async getVersion(organizationId, objectId, versionId, userId) {
+      const { object, version } = await requireVersion(organizationId, objectId, versionId);
+      await assertFolderAccess(organizationId, object.bucketId, object.key, userId, 'READ');
       return serializeObjectVersion(version);
     },
 
@@ -768,6 +887,7 @@ export function createObjectService(deps: {
         objectId,
         versionId,
       );
+      await assertFolderAccess(organizationId, object.bucketId, object.key, userId, 'WRITE');
       if (version.isDeleteMarker || version.physicalKey.length === 0) {
         throw validationError('A delete marker cannot be restored');
       }
@@ -824,12 +944,26 @@ export function createObjectService(deps: {
 
     async copy(input) {
       const source = await requireLiveObject(input.organizationId, input.objectId);
+      await assertFolderAccess(
+        input.organizationId,
+        source.object.bucketId,
+        source.object.key,
+        input.userId,
+        'READ',
+      );
       const destinationKey = input.allowFolderMarker
         ? assertValidFolderMarkerKey(input.destinationKey, limits.maxKeyLength)
         : assertValidObjectKey(input.destinationKey, limits.maxKeyLength);
       const destination = await storage.resolveBucket(
         input.organizationId,
         input.destinationBucketId,
+      );
+      await assertFolderAccess(
+        input.organizationId,
+        destination.bucket.id,
+        destinationKey,
+        input.userId,
+        'WRITE',
       );
 
       const existing = await objects.findByKey(
@@ -913,6 +1047,13 @@ export function createObjectService(deps: {
      */
     async move(input) {
       const source = await requireLiveObject(input.organizationId, input.objectId);
+      await assertFolderAccess(
+        input.organizationId,
+        source.object.bucketId,
+        source.object.key,
+        input.userId,
+        'DELETE',
+      );
       const destinationKey = input.allowFolderMarker
         ? assertValidFolderMarkerKey(input.destinationKey, limits.maxKeyLength)
         : assertValidObjectKey(input.destinationKey, limits.maxKeyLength);
@@ -929,6 +1070,13 @@ export function createObjectService(deps: {
             destinationKey: 'An object already exists at the destination key',
           });
         }
+        await assertFolderAccess(
+          input.organizationId,
+          input.destinationBucketId,
+          destinationKey,
+          input.userId,
+          'WRITE',
+        );
 
         const renamed = await objects.updateKey(
           input.organizationId,
