@@ -59,10 +59,18 @@ export function useStorageProviders() {
   return { providers, loading, error, refresh };
 }
 
-export function useObjectList(bucketId?: string, prefix = '') {
+export function useObjectList(bucketId?: string, prefix = '', search = '') {
   const [page, setPage] = useState<PublicObjectListPage | undefined>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [debouncedSearch, setDebouncedSearch] = useState(search.trim());
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
 
   const refresh = useCallback(async () => {
     if (!bucketId) {
@@ -76,6 +84,7 @@ export function useObjectList(bucketId?: string, prefix = '') {
     try {
       const next = await apiClient.listObjects(bucketId, {
         prefix,
+        search: debouncedSearch || undefined,
         delimiter: '/',
         limit: 100,
       });
@@ -85,7 +94,7 @@ export function useObjectList(bucketId?: string, prefix = '') {
     } finally {
       setLoading(false);
     }
-  }, [bucketId, prefix]);
+  }, [bucketId, prefix, debouncedSearch]);
 
   const loadMore = useCallback(async () => {
     if (!bucketId || !page?.nextCursor) {
@@ -98,6 +107,7 @@ export function useObjectList(bucketId?: string, prefix = '') {
     try {
       const next = await apiClient.listObjects(bucketId, {
         prefix,
+        search: debouncedSearch || undefined,
         delimiter: '/',
         limit: 100,
         cursor: page.nextCursor,
@@ -109,6 +119,14 @@ export function useObjectList(bucketId?: string, prefix = '') {
               ...next,
               objects: [...current.objects, ...next.objects],
               prefixes: [...new Set([...current.prefixes, ...next.prefixes])],
+              folders: [
+                ...new Map(
+                  [...(current.folders ?? []), ...(next.folders ?? [])].map((folder) => [
+                    folder.prefix,
+                    folder,
+                  ]),
+                ).values(),
+              ],
             }
           : next,
       );
@@ -117,7 +135,7 @@ export function useObjectList(bucketId?: string, prefix = '') {
     } finally {
       setLoading(false);
     }
-  }, [bucketId, prefix, page?.nextCursor]);
+  }, [bucketId, prefix, debouncedSearch, page?.nextCursor]);
 
   useEffect(() => {
     void refresh();

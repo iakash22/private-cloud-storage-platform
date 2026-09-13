@@ -13,6 +13,16 @@ export interface SessionRecord {
   userId: string;
 }
 
+export interface ActiveSessionRow {
+  id: string;
+  userId: string;
+  createdAt: Date;
+  lastSeenAt: Date;
+  expiresAt: Date;
+  ipAddress: string | null;
+  userAgent: string | null;
+}
+
 export class SessionManager {
   private readonly tokens: TokenService;
 
@@ -45,7 +55,7 @@ export class SessionManager {
     return { sessionId: session.id, sessionToken, csrfToken };
   }
 
-  async resolve(sessionToken: string): Promise<SessionRecord | null> {
+  async resolve(sessionToken: string, meta?: RequestMeta): Promise<SessionRecord | null> {
     const session = await this.prisma.session.findUnique({
       where: { tokenHash: this.tokens.hashToken(sessionToken) },
     });
@@ -54,9 +64,15 @@ export class SessionManager {
       return null;
     }
 
+    const nextIp = meta?.ipAddress?.trim() || null;
+    const nextUa = meta?.userAgent?.trim() || null;
     await this.prisma.session.update({
       where: { id: session.id },
-      data: { lastSeenAt: new Date() },
+      data: {
+        lastSeenAt: new Date(),
+        ...(nextIp && nextIp !== session.ipAddress ? { ipAddress: nextIp } : {}),
+        ...(nextUa && nextUa !== session.userAgent ? { userAgent: nextUa } : {}),
+      },
     });
 
     return { id: session.id, userId: session.userId };
@@ -70,11 +86,54 @@ export class SessionManager {
     return session.csrfHash === this.tokens.hashToken(csrfToken);
   }
 
+  async listActiveByUser(userId: string): Promise<ActiveSessionRow[]> {
+    const now = new Date();
+    return this.prisma.session.findMany({
+      where: {
+        userId,
+        revokedAt: null,
+        expiresAt: { gt: now },
+      },
+      orderBy: { lastSeenAt: 'desc' },
+      select: {
+        id: true,
+        userId: true,
+        createdAt: true,
+        lastSeenAt: true,
+        expiresAt: true,
+        ipAddress: true,
+        userAgent: true,
+      },
+    });
+  }
+
   async revoke(sessionId: string): Promise<void> {
     await this.prisma.session.updateMany({
       where: { id: sessionId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+  }
+
+  /** Revoke a session only when it belongs to the given user. Returns whether a row was updated. */
+  async revokeOwned(userId: string, sessionId: string): Promise<boolean> {
+    const result = await this.prisma.session.updateMany({
+      where: { id: sessionId, userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    return result.count > 0;
+  }
+
+  /** Revoke every active session for the user except the current one. */
+  async revokeOthers(userId: string, exceptSessionId: string): Promise<number> {
+    const result = await this.prisma.session.updateMany({
+      where: {
+        userId,
+        id: { not: exceptSessionId },
+        revokedAt: null,
+      },
+      data: { revokedAt: new Date() },
+    });
+    return result.count;
   }
 
   async revokeByToken(sessionToken: string): Promise<void> {

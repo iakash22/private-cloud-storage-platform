@@ -4,7 +4,7 @@ import { type ButtonHTMLAttributes, type MouseEvent, useState } from 'react';
 import { cn } from '../lib/utils.js';
 
 const buttonVariants = cva(
-  'inline-flex min-h-11 items-center justify-center rounded-lg text-sm font-medium touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 transition-[transform,box-shadow,background-color,border-color,color] duration-200 ease-out active:scale-[0.98]',
+  'inline-flex min-h-11 cursor-pointer items-center justify-center rounded-lg text-sm font-medium touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 transition-[transform,box-shadow,background-color,border-color,color] duration-200 ease-out active:scale-[0.98]',
   {
     variants: {
       variant: {

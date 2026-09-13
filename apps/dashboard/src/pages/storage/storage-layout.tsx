@@ -5,6 +5,7 @@ import {
   FileBox,
   FolderOpen,
   HardDrive,
+  UsersRound,
   ScrollText,
   Share2,
   Trash2,
@@ -24,6 +25,7 @@ const navItems: {
   { to: '/storage/providers', label: 'Providers', icon: FileBox },
   { to: '/storage/shares', label: 'Shares', icon: Share2 },
   { to: '/storage/policies', label: 'Policies', icon: ScrollText },
+  { to: '/storage/collaboration', label: 'Collaboration', icon: UsersRound },
   { to: '/storage/usage', label: 'Usage', icon: BookOpen },
   { to: '/storage/trash', label: 'Trash', icon: Trash2 },
 ];

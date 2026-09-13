@@ -32,6 +32,18 @@ import { BACKUP_QUEUE_NAME, enqueueBackupPayload } from '../workers/backup.worke
 import type { MetricsRecorder } from '../observability/metrics.js';
 import { PREVIEW_QUEUE_NAME, PreviewService } from '../modules/previews/preview.service.js';
 import { enqueuePreviewPayload } from '../workers/preview.worker.js';
+import {
+  createFolderAccessService,
+  type FolderAccessService,
+} from '../modules/storage/services/folder-access.service.js';
+import {
+  createFolderOperationService,
+  type FolderOperationService,
+} from '../modules/storage/services/folder-operation.service.js';
+import {
+  enqueueFolderOperation,
+  FOLDER_OPERATION_QUEUE,
+} from '../workers/folder-operation.worker.js';
 
 export interface AppServices {
   sessions: SessionManager;
@@ -50,6 +62,8 @@ export interface AppServices {
   infrastructure: InfrastructureService;
   s3Credentials: S3CredentialService;
   previews: PreviewService;
+  folderOperations: FolderOperationService;
+  folderAccess: FolderAccessService;
 }
 
 /**
@@ -75,6 +89,8 @@ export class AppContainer {
   readonly infrastructure: InfrastructureService;
   readonly s3Credentials: S3CredentialService;
   readonly previews: PreviewService;
+  readonly folderOperations: FolderOperationService;
+  readonly folderAccess: FolderAccessService;
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -113,7 +129,10 @@ export class AppContainer {
       config.NODE_ENV === 'test'
         ? null
         : new Queue(PREVIEW_QUEUE_NAME, {
-            connection: new Redis(config.REDIS_URL, { maxRetriesPerRequest: null, lazyConnect: true }),
+            connection: new Redis(config.REDIS_URL, {
+              maxRetriesPerRequest: null,
+              lazyConnect: true,
+            }),
           });
     this.previews = new PreviewService(
       prisma,
@@ -129,6 +148,33 @@ export class AppContainer {
       },
       logger,
     );
+    const folderOperationQueue =
+      config.NODE_ENV === 'test'
+        ? null
+        : new Queue(FOLDER_OPERATION_QUEUE, {
+            connection: new Redis(config.REDIS_URL, {
+              maxRetriesPerRequest: null,
+              lazyConnect: true,
+            }),
+          });
+    this.folderOperations = createFolderOperationService({
+      prisma,
+      objects: this.storage.objects,
+      storage: this.storage.storage,
+      queue: {
+        enqueue: async (jobId) => {
+          if (folderOperationQueue) {
+            await enqueueFolderOperation(folderOperationQueue, jobId);
+          }
+        },
+      },
+      logger,
+    });
+    this.folderAccess = createFolderAccessService({
+      prisma,
+      storage: this.storage.storage,
+      logger,
+    });
     this.artifacts = new ArtifactsService(prisma, this.storage);
     this.backups = this.createBackupsService(prisma, config, logger);
     this.infrastructure = InfrastructureService.create(prisma, this.storage, config, logger);
@@ -176,6 +222,8 @@ export function createServices(
     infrastructure: container.infrastructure,
     s3Credentials: container.s3Credentials,
     previews: container.previews,
+    folderOperations: container.folderOperations,
+    folderAccess: container.folderAccess,
   };
 }
 

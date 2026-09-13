@@ -47,9 +47,14 @@ export const disableTotpBodySchema = z.object({
   code: totpOrBackupCodeSchema,
 });
 
+export const sessionIdParamsSchema = z.object({
+  sessionId: z.string().min(1),
+});
+
 export type RegisterBody = z.infer<typeof registerBodySchema>;
 export type LoginBody = z.infer<typeof loginBodySchema>;
 export type SelectOrganizationBody = z.infer<typeof selectOrganizationBodySchema>;
 export type VerifyTotpLoginBody = z.infer<typeof verifyTotpLoginBodySchema>;
 export type EnableTotpBody = z.infer<typeof enableTotpBodySchema>;
 export type DisableTotpBody = z.infer<typeof disableTotpBodySchema>;
+export type SessionIdParams = z.infer<typeof sessionIdParamsSchema>;

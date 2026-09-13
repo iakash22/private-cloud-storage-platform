@@ -1,4 +1,4 @@
-import { Grid3X3, List, Search, Upload } from 'lucide-react';
+import { FolderPlus, Grid3X3, List, Search, Upload } from 'lucide-react';
 import type { SortDirection, SortField } from '../../lib/storage-utils.js';
 import { cn } from '../../lib/utils.js';
 import { Button } from '../button.js';
@@ -17,6 +17,7 @@ export interface StorageToolbarProps {
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
   onUploadClick: () => void;
+  onCreateFolder?: () => void;
   uploadDisabled?: boolean;
   className?: string;
 }
@@ -31,13 +32,22 @@ export function StorageToolbar({
   viewMode,
   onViewModeChange,
   onUploadClick,
+  onCreateFolder,
   uploadDisabled = false,
   className,
 }: StorageToolbarProps) {
   return (
-    <div className={cn('flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between', className)}>
+    <div
+      className={cn(
+        'flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between',
+        className,
+      )}
+    >
       <div className="relative max-w-md flex-1">
-        <Search aria-hidden className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <Search
+          aria-hidden
+          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+        />
         <Input
           aria-label="Search files"
           placeholder="Search files and folders"
@@ -50,6 +60,18 @@ export function StorageToolbar({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
+        {onCreateFolder ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCreateFolder}
+            disabled={uploadDisabled}
+            aria-label="Create folder"
+          >
+            <FolderPlus aria-hidden className="mr-2 h-4 w-4" />
+            New folder
+          </Button>
+        ) : null}
         <label className="sr-only" htmlFor="sort-field">
           Sort by
         </label>
@@ -105,7 +127,12 @@ export function StorageToolbar({
           <Grid3X3 aria-hidden className="h-4 w-4" />
         </Button>
 
-        <Button type="button" onClick={onUploadClick} disabled={uploadDisabled} aria-label="Upload files">
+        <Button
+          type="button"
+          onClick={onUploadClick}
+          disabled={uploadDisabled}
+          aria-label="Upload files"
+        >
           <Upload aria-hidden className="mr-2 h-4 w-4" />
           Upload
         </Button>

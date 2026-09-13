@@ -58,6 +58,43 @@ const version = await client.uploadArtifact({
 Bodies can be `Uint8Array`, `Blob`, a string, or a `ReadableStream`. Use the
 existing multipart methods for large/resumable uploads.
 
+## Folders
+
+Folders are key prefixes and empty folders are represented by a zero-byte
+marker. The client provides a convenience method for creating one:
+
+```ts
+const folder = await client.createFolder(process.env.VS_BUCKET_ID!, {
+  name: 'reports',
+  parentPrefix: 'documents/2026/',
+});
+
+const page = await client.listObjects(process.env.VS_BUCKET_ID!, {
+  prefix: 'documents/2026/',
+  delimiter: '/',
+});
+
+console.log(page.folders);
+```
+
+The API returns both structured `folders` and the legacy `prefixes` array.
+
+Recursive operations are durable and can be polled:
+
+```ts
+const job = await client.createFolderOperation({
+  bucketId: process.env.VS_BUCKET_ID!,
+  operation: 'MOVE',
+  sourcePrefix: 'documents/old/',
+  destinationPrefix: 'documents/archive/',
+});
+
+const current = await client.getFolderOperation(job.id);
+if (current.status === 'FAILED') {
+  await client.retryFolderOperation(job.id);
+}
+```
+
 ## Optional S3 gateway
 
 For bucket I/O through AWS SDK, install the optional peer:

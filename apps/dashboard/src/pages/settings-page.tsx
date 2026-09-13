@@ -10,8 +10,9 @@ import {
   Input,
   Label,
   PageHeader,
+  PasswordInput,
 } from '@vaultstack/ui';
-import { Building2, KeyRound, Settings, Shield, UserRound } from 'lucide-react';
+import { Building2, KeyRound, MonitorSmartphone, Settings, Shield, UserRound } from 'lucide-react';
 import {
   createOrganizationBodySchema,
   parseForm,
@@ -22,6 +23,7 @@ import { useAuth } from '../context/auth-context.js';
 import { apiClient } from '../lib/api.js';
 import { canManageAccess } from '../lib/dashboard-permissions.js';
 import { useFormSubmit } from '../lib/form-errors.js';
+import { ActiveSessionsSettings } from './active-sessions-settings.js';
 import { TwoFactorSettings } from './two-factor-settings.js';
 
 function SettingsSection({
@@ -190,6 +192,13 @@ export function SettingsPage() {
       </SettingsSection>
 
       <SettingsSection
+        icon={<MonitorSmartphone className="h-3.5 w-3.5" aria-hidden="true" />}
+        label="Sessions"
+      >
+        <ActiveSessionsSettings />
+      </SettingsSection>
+
+      <SettingsSection
         icon={<Building2 className="h-3.5 w-3.5" aria-hidden="true" />}
         label="Organization"
       >
@@ -320,9 +329,9 @@ export function SettingsPage() {
               {manage ? (
                 <FormField error={profileForm.fieldErrors.password}>
                   <Label htmlFor="profile-password">New password (optional)</Label>
-                  <Input
+                  <PasswordInput
                     id="profile-password"
-                    type="password"
+                    autoComplete="new-password"
                     value={password}
                     aria-invalid={Boolean(profileForm.fieldErrors.password)}
                     onChange={(event) => {

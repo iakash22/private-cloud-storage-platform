@@ -2,8 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { ToastProvider } from '@vaultstack/ui';
 import { SessionGuard } from './components/session-guard.js';
 import { AuthProvider } from './context/auth-context.js';
-import { LoginPage } from './pages/login-page.js';
-import { SignupPage } from './pages/signup-page.js';
+import { AuthEntry } from './pages/auth-entry.js';
 import { PublicSharePage } from './pages/public-share-page.js';
 import { ProtectedRoute } from './pages/protected-route.js';
 import { BackupsLayout } from './pages/backups/backups-layout.js';
@@ -40,6 +39,7 @@ import { DashboardPage } from './pages/dashboard-page.js';
 import { DashboardShell } from './pages/dashboard-shell.js';
 import { SettingsPage } from './pages/settings-page.js';
 import { PoliciesPage } from './pages/storage/policies-page.js';
+import { CollaborationPage } from './pages/storage/collaboration-page.js';
 
 export function App() {
   return (
@@ -47,8 +47,10 @@ export function App() {
       <AuthProvider>
         <SessionGuard>
           <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/signup" element={<SignupPage />} />
+            <Route element={<AuthEntry />}>
+              <Route path="/login" element={null} />
+              <Route path="/signup" element={null} />
+            </Route>
             <Route path="/s/:token" element={<PublicSharePage />} />
             <Route element={<ProtectedRoute />}>
               <Route element={<DashboardShell />}>
@@ -60,6 +62,7 @@ export function App() {
                   <Route path="providers" element={<ProvidersPage />} />
                   <Route path="shares" element={<SharesPage />} />
                   <Route path="policies" element={<PoliciesPage />} />
+                  <Route path="collaboration" element={<CollaborationPage />} />
                   <Route path="usage" element={<UsagePage />} />
                   <Route path="trash" element={<TrashPage />} />
                 </Route>

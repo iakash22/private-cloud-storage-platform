@@ -16,6 +16,10 @@ The design preserves the existing storage architecture:
 
 ## Current state
 
+Phase 1 virtual-folder support is implemented in the storage API and
+dashboard. Phase 2 recursive move, copy, and delete operations now use durable
+PostgreSQL jobs and a BullMQ worker.
+
 VaultStack already supports folder-like navigation through object key prefixes.
 For example:
 
@@ -339,20 +343,56 @@ Folder work must include:
 
 ### Phase 4: search and metadata
 
-- filename search;
-- tags;
-- favorites;
-- recent items;
-- descriptions;
-- advanced filters.
+- filename search (implemented as a case-insensitive server-side object-list
+  query);
+- favorites and recent items (implemented in the dashboard preferences layer);
+- tags and descriptions are implemented using the existing PostgreSQL object
+  metadata column;
+- advanced filters remain the next metadata extension.
 
 ### Phase 5: collaboration
 
-- folder ACLs;
-- team folders;
-- folder shares;
-- shared-folder activity;
-- external collaboration controls.
+- folder ACLs and team-folder access rules (implemented);
+- folder collaboration dashboard and server-side rule management (implemented);
+- audit events for grants and revocations (implemented);
+- folder-share enforcement and external collaboration controls remain
+  deployment follow-up work before enabling cross-organization sharing.
+
+## Pending work
+
+### Phase 4 — advanced search and metadata
+
+- [ ] Add advanced object filters for content type, size range, modified date,
+  bucket, and folder prefix.
+- [ ] Add filters for externally shared, versioned, and processing-state
+  objects.
+- [ ] Add PostgreSQL trigram or full-text indexes before search volume requires
+  a separate search service.
+- [ ] Add dashboard tests for debounced search and metadata editing.
+
+### Phase 5 — collaboration enforcement
+
+- [ ] Enforce folder ACLs during object listing, upload, download, sharing,
+  restore, and recursive folder operations.
+- [ ] Resolve effective permissions from direct user rules and team
+  membership, with the most-specific folder prefix taking precedence.
+- [ ] Add folder-level share links with read-only and download controls.
+- [ ] Add shared-folder activity filtering and dashboard history.
+- [ ] Add external collaboration controls: invitations, expiry, domain
+  restrictions, revocation, and cross-organization policy checks.
+- [ ] Add authorization, organization-isolation, and team-membership tests for
+  every collaboration route.
+
+### Production rollout
+
+- [ ] Apply the `FolderAccessRule` database migration on THANOS.
+- [ ] Rebuild and redeploy API, dashboard, and worker services.
+- [ ] Verify role permissions, navigation, folder ACLs, team shares, and audit
+  events in the deployed environment.
+- [ ] Run upload, download, folder-operation, S3, backup, and readiness smoke
+  tests.
+- [ ] Complete the remaining operator checklist in
+  `docs/deployment/thanos-pending.md`.
 
 ## Acceptance criteria for Phase 1
 

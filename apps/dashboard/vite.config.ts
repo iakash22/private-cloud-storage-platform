@@ -11,6 +11,7 @@ export default defineConfig({
     alias: {
       '@vaultstack/ui': path.resolve(__dirname, '../../packages/ui/src/index.ts'),
       '@vaultstack/api-client': path.resolve(__dirname, '../../packages/api-client/src/index.ts'),
+      '@vaultstack/types': path.resolve(__dirname, '../../packages/types/src/index.ts'),
       '@vaultstack/validation': path.resolve(__dirname, '../../packages/validation/src/index.ts'),
     },
   },

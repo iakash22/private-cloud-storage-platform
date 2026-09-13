@@ -26,6 +26,7 @@ model User {
   sessions          Session[]
   teamMembers       TeamMember[]
   createdShareLinks        ShareLink[]
+  folderAccessRules        FolderAccessRule[]
   createdProjects          Project[]           @relation("ProjectCreatedBy")
   createdBuilds            Build[]             @relation("BuildCreatedBy")
   createdBackupSchedules   BackupSchedule[]    @relation("BackupScheduleCreatedBy")
@@ -72,6 +73,7 @@ model Organization {
   multipartUploads MultipartUpload[]
   storagePolicies  StoragePolicy[]
   shareLinks       ShareLink[]
+  folderAccessRules FolderAccessRule[]
   teamMembers      TeamMember[]
   serviceAccounts  ServiceAccount[]
   s3Credentials    S3AccessCredential[]
@@ -85,6 +87,7 @@ model Organization {
   backupJobLogs      BackupJobLog[]
   backupRestoreJobs  BackupRestoreJob[]
   previewJobs        PreviewJob[]
+  folderOperationJobs FolderOperationJob[]
 }
 
 model Team {
@@ -97,6 +100,7 @@ model Team {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   members      TeamMember[]
   shareLinks   ShareLink[]
+  folderAccessRules FolderAccessRule[]
 
   @@unique([organizationId, name])
   @@index([organizationId])
@@ -117,6 +121,29 @@ model TeamMember {
   @@unique([teamId, userId])
   @@index([organizationId])
   @@index([userId])
+}
+
+model FolderAccessRule {
+  id              String   @id @default(cuid())
+  organizationId  String
+  bucketId        String
+  prefix          String
+  role            String   @default("VIEWER")
+  userId          String?
+  teamId          String?
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bucket       Bucket       @relation(fields: [bucketId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team         Team?        @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, bucketId, prefix])
+  @@index([organizationId, userId])
+  @@index([organizationId, teamId])
+  @@unique([bucketId, prefix, userId, teamId])
 }
 
 model Role {
@@ -348,6 +375,8 @@ model Bucket {
   uploads          Upload[]
   multipartUploads MultipartUpload[]
   policies         StoragePolicy[]
+  folderOperationJobs FolderOperationJob[]
+  folderAccessRules FolderAccessRule[]
 
   @@unique([organizationId, name])
   @@index([organizationId])
@@ -421,6 +450,33 @@ model PreviewJob {
 
   @@index([organizationId, createdAt])
   @@index([objectId, kind, status])
+}
+
+model FolderOperationJob {
+  id               String   @id @default(cuid())
+  organizationId   String
+  bucketId         String
+  operation        String
+  sourcePrefix     String
+  destinationPrefix String?
+  status           String   @default("QUEUED")
+  processedObjects Int      @default(0)
+  totalObjects     Int?
+  failedObjects    Int      @default(0)
+  nextCursor       String?
+  error            String?
+  createdByUserId  String?
+  createdAt        DateTime @default(now())
+  startedAt        DateTime?
+  completedAt      DateTime?
+  updatedAt        DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bucket       Bucket       @relation(fields: [bucketId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, status])
+  @@index([bucketId, sourcePrefix])
 }
 
 model ObjectVersion {

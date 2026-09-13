@@ -5,6 +5,7 @@ import {
   Button,
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
   DeleteConfirmation,
@@ -26,8 +27,8 @@ import {
   type ViewMode,
 } from '@vaultstack/ui';
 import { FolderOpen } from 'lucide-react';
-import type { PublicObjectVersion, PublicTeam } from '@vaultstack/types';
-import { createShareBodySchema, parseForm } from '@vaultstack/validation';
+import type { PublicFolderOperationJob, PublicObjectVersion, PublicTeam } from '@vaultstack/types';
+import { createFolderBodySchema, createShareBodySchema, parseForm } from '@vaultstack/validation';
 import { useAuth } from '../../context/auth-context.js';
 import { useObjectList, useSelectedObject, useBuckets } from '../../hooks/use-storage.js';
 import { useUploadQueue } from '../../hooks/use-upload-queue.js';
@@ -63,6 +64,8 @@ export function FilesPage() {
   const [selectedEntry, setSelectedEntry] = useState<ExplorerEntry | undefined>();
   const [favoriteIds, setFavoriteIds] = useState(getFavoriteIds());
   const [showUploader, setShowUploader] = useState(false);
+  const [createFolderOpen, setCreateFolderOpen] = useState(false);
+  const [folderName, setFolderName] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<ExplorerEntry | undefined>();
   const [renameTarget, setRenameTarget] = useState<ExplorerEntry | undefined>();
   const [renameValue, setRenameValue] = useState('');
@@ -74,8 +77,12 @@ export function FilesPage() {
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [teams, setTeams] = useState<PublicTeam[]>([]);
   const [versions, setVersions] = useState<PublicObjectVersion[]>([]);
+  const [operationJob, setOperationJob] = useState<PublicFolderOperationJob>();
+  const [metadataOpen, setMetadataOpen] = useState(false);
+  const [metadataDescription, setMetadataDescription] = useState('');
+  const [metadataTags, setMetadataTags] = useState('');
 
-  const { page, loading, error, refresh, loadMore } = useObjectList(bucketId, prefix);
+  const { page, loading, error, refresh, loadMore } = useObjectList(bucketId, prefix, search);
   const selectedObjectId = selectedEntry?.kind === 'file' ? selectedEntry.id : undefined;
   const { object } = useSelectedObject(selectedObjectId);
   const { uploads, enqueueFiles, cancelUpload, retryUpload, pauseUpload, resumeUpload } =
@@ -91,6 +98,40 @@ export function FilesPage() {
   );
 
   useEffect(() => {
+    const metadata = object?.metadata;
+    setMetadataDescription(metadata?.description ?? '');
+    try {
+      const parsed = metadata?.tags ? (JSON.parse(metadata.tags) as unknown) : [];
+      setMetadataTags(
+        Array.isArray(parsed)
+          ? parsed.filter((tag): tag is string => typeof tag === 'string').join(', ')
+          : '',
+      );
+    } catch {
+      setMetadataTags('');
+    }
+  }, [object]);
+
+  const handleSaveMetadata = async (): Promise<void> => {
+    if (!object) {
+      return;
+    }
+    try {
+      await apiClient.updateObjectMetadata(object.id, {
+        description: metadataDescription.trim() || null,
+        tags: metadataTags
+          .split(',')
+          .map((tag) => tag.trim())
+          .filter(Boolean),
+      });
+      setMetadataOpen(false);
+      await refresh();
+    } catch (caught) {
+      catchError(caught);
+    }
+  };
+
+  useEffect(() => {
     if (!selectedObjectId || selectedBucket?.versioning === 'UNVERSIONED') {
       setVersions([]);
       return;
@@ -101,7 +142,7 @@ export function FilesPage() {
       .listObjectVersions(selectedObjectId)
       .then((versionPage) => {
         if (!cancelled) {
-          setVersions(versionPage.versions ?? []);
+          setVersions(versionPage.versions);
         }
       })
       .catch((caught: unknown) => {
@@ -123,6 +164,17 @@ export function FilesPage() {
   }, [bucketId, buckets]);
 
   useEffect(() => {
+    const nextBucketId = searchParams.get('bucket') ?? undefined;
+    const nextPrefix = searchParams.get('prefix') ?? '';
+    if (nextBucketId !== bucketId) {
+      setBucketId(nextBucketId);
+    }
+    if (nextPrefix !== prefix) {
+      setPrefix(nextPrefix);
+    }
+  }, [bucketId, prefix, searchParams]);
+
+  useEffect(() => {
     if (!bucketId) {
       return;
     }
@@ -137,6 +189,46 @@ export function FilesPage() {
     setSearchParams(next, { replace: true });
     setSelectedBucketId(bucketId);
   }, [bucketId, prefix, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (!operationJob || !['QUEUED', 'RUNNING', 'PAUSED'].includes(operationJob.status)) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      void apiClient
+        .getFolderOperation(operationJob.id)
+        .then(setOperationJob)
+        .catch((caught: unknown) => {
+          catchError(caught);
+        });
+    }, 1_500);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [catchError, operationJob]);
+
+  const handleCreateFolder = async (): Promise<void> => {
+    if (!bucketId || !canUploadStorage(permissions)) {
+      return;
+    }
+    const body = validate(
+      parseForm(createFolderBodySchema, {
+        name: folderName,
+        parentPrefix: prefix,
+      }),
+    );
+    if (!body) {
+      return;
+    }
+    try {
+      await apiClient.createFolder(bucketId, body);
+      setCreateFolderOpen(false);
+      setFolderName('');
+      await refresh();
+    } catch (caught) {
+      catchError(caught);
+    }
+  };
 
   const handleOpen = (entry: ExplorerEntry) => {
     if (entry.kind === 'folder') {
@@ -199,6 +291,17 @@ export function FilesPage() {
     }
 
     try {
+      if (deleteTarget.kind === 'folder' && bucketId) {
+        const job = await apiClient.createFolderOperation({
+          bucketId,
+          operation: 'DELETE',
+          sourcePrefix: deleteTarget.key,
+        });
+        setOperationJob(job);
+        setDeleteTarget(undefined);
+        await refresh();
+        return;
+      }
       await apiClient.deleteObject(deleteTarget.id);
       addTrashItem({
         id: deleteTarget.id,
@@ -221,6 +324,20 @@ export function FilesPage() {
     }
 
     try {
+      if (renameTarget.kind === 'folder') {
+        const destinationPrefix = `${buildObjectKey(prefix, renameValue.trim())}/`;
+        const job = await apiClient.createFolderOperation({
+          bucketId,
+          operation: 'MOVE',
+          sourcePrefix: renameTarget.key,
+          destinationPrefix,
+        });
+        setOperationJob(job);
+        setRenameTarget(undefined);
+        setRenameValue('');
+        await refresh();
+        return;
+      }
       const destinationKey = buildObjectKey(prefix, renameValue.trim());
       await apiClient.moveObject(renameTarget.id, {
         destinationBucketId: bucketId,
@@ -316,9 +433,6 @@ export function FilesPage() {
             onRename={
               canUploadStorage(permissions)
                 ? (entry) => {
-                    if (entry.kind !== 'file') {
-                      return;
-                    }
                     setRenameTarget(entry);
                     setRenameValue(entry.name);
                   }
@@ -333,6 +447,11 @@ export function FilesPage() {
             }}
             onUploadClick={() => {
               setShowUploader((current) => !current);
+            }}
+            onCreateFolder={() => {
+              clearFieldErrors();
+              setFolderName('');
+              setCreateFolderOpen(true);
             }}
             onFilesSelected={(files) => {
               if (!bucketId || !canUploadStorage(permissions)) {
@@ -368,6 +487,17 @@ export function FilesPage() {
 
         <div className="space-y-4">
           <ObjectDetails object={object} bucket={selectedBucket} />
+          {object && canUploadStorage(permissions) ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setMetadataOpen(true);
+              }}
+            >
+              Edit description and tags
+            </Button>
+          ) : null}
           {selectedEntry?.kind === 'file' ? (
             <div className="flex flex-wrap gap-2">
               <Button
@@ -444,7 +574,7 @@ export function FilesPage() {
                         <p className="text-xs text-slate-500">{formatDate(version.createdAt)}</p>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {!version.isDeleteMarker && selectedEntry ? (
+                        {!version.isDeleteMarker ? (
                           <Button
                             type="button"
                             size="sm"
@@ -454,7 +584,9 @@ export function FilesPage() {
                             Download
                           </Button>
                         ) : null}
-                        {canUploadStorage(permissions) && !version.isDeleteMarker && !version.isCurrent ? (
+                        {canUploadStorage(permissions) &&
+                        !version.isDeleteMarker &&
+                        !version.isCurrent ? (
                           <Button
                             type="button"
                             size="sm"
@@ -486,8 +618,8 @@ export function FilesPage() {
 
       <DeleteConfirmation
         open={Boolean(deleteTarget)}
-        title="Delete object"
-        description={`Delete "${deleteTarget?.name}" from this bucket?`}
+        title={deleteTarget?.kind === 'folder' ? 'Delete folder' : 'Delete object'}
+        description={`${deleteTarget?.kind === 'folder' ? 'Delete all contents of' : 'Delete'} "${deleteTarget?.name}" from this bucket?`}
         onOpenChange={(open) => {
           if (!open) {
             setDeleteTarget(undefined);
@@ -495,6 +627,132 @@ export function FilesPage() {
         }}
         onConfirm={() => void handleDelete()}
       />
+
+      <Dialog
+        open={metadataOpen}
+        onOpenChange={setMetadataOpen}
+        title="Edit metadata"
+        description="Add searchable description and comma-separated tags."
+        footer={
+          <DialogActions
+            cancelLabel="Cancel"
+            confirmLabel="Save"
+            onCancel={() => {
+              setMetadataOpen(false);
+            }}
+            onConfirm={() => void handleSaveMetadata()}
+          />
+        }
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="object-description">Description</Label>
+            <Input
+              id="object-description"
+              value={metadataDescription}
+              onChange={(event) => {
+                setMetadataDescription(event.target.value);
+              }}
+              placeholder="What is this file used for?"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="object-tags">Tags</Label>
+            <Input
+              id="object-tags"
+              value={metadataTags}
+              onChange={(event) => {
+                setMetadataTags(event.target.value);
+              }}
+              placeholder="finance, 2026, report"
+            />
+          </div>
+        </div>
+      </Dialog>
+
+      {operationJob ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Folder operation</CardTitle>
+            <CardDescription>
+              {operationJob.operation} · {operationJob.status.toLowerCase()}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center justify-between text-sm">
+              <span className="truncate">{operationJob.sourcePrefix}</span>
+              <span>
+                {operationJob.processedObjects}
+                {operationJob.totalObjects === null ? '' : ` / ${operationJob.totalObjects}`}
+              </span>
+            </div>
+            {operationJob.error ? (
+              <p className="text-sm text-red-600">{operationJob.error}</p>
+            ) : null}
+            <div className="flex flex-wrap gap-2">
+              {['QUEUED', 'RUNNING', 'PAUSED'].includes(operationJob.status) ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    void apiClient.cancelFolderOperation(operationJob.id).then(() => {
+                      setOperationJob((current) =>
+                        current ? { ...current, status: 'CANCELLED' } : current,
+                      );
+                    });
+                  }}
+                >
+                  Cancel
+                </Button>
+              ) : null}
+              {operationJob.status === 'FAILED' ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    void apiClient.retryFolderOperation(operationJob.id).then(setOperationJob);
+                  }}
+                >
+                  Retry
+                </Button>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Dialog
+        open={createFolderOpen}
+        onOpenChange={setCreateFolderOpen}
+        title="Create folder"
+        description={`Create a folder inside ${prefix || 'the bucket root'}.`}
+        footer={
+          <DialogActions
+            cancelLabel="Cancel"
+            confirmLabel="Create folder"
+            onCancel={() => {
+              setCreateFolderOpen(false);
+            }}
+            onConfirm={() => void handleCreateFolder()}
+          />
+        }
+      >
+        <div className="space-y-2">
+          <Label htmlFor="folder-name">Folder name</Label>
+          <Input
+            id="folder-name"
+            value={folderName}
+            aria-invalid={Boolean(fieldErrors.name)}
+            onChange={(event) => {
+              setFolderName(event.target.value);
+            }}
+            placeholder="Reports"
+            autoFocus
+          />
+          <FieldError message={fieldErrors.name} />
+        </div>
+      </Dialog>
 
       <Dialog
         open={Boolean(renameTarget)}
@@ -594,7 +852,7 @@ export function FilesPage() {
           void apiClient
             .createShare(selectedEntry.id, body)
             .then((share) => {
-              setShareUrl(`${window.location.origin}/s/${share?.token ?? ''}`);
+              setShareUrl(`${window.location.origin}/s/${share.token}`);
             })
             .catch((caught: unknown) => {
               catchError(caught);

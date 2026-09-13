@@ -9,12 +9,14 @@ import {
 } from '@vaultstack/auth';
 import type { PrismaClient } from '@vaultstack/database';
 import { uniqueSlug } from '@vaultstack/database';
-import type { PublicMembership, RequestMeta } from '@vaultstack/types';
-import { conflict, forbidden, totpInvalid, unauthorized } from '../../../lib/errors.js';
+import type { PublicAuthSession, PublicMembership, RequestMeta } from '@vaultstack/types';
+import { conflict, forbidden, notFound, totpInvalid, unauthorized } from '../../../lib/errors.js';
 import { writeAuditLog } from '../../../lib/audit.js';
 import { serializeOrganization, serializeUser } from '../../../lib/serializers.js';
 import { createDefaultOrganizationRoles, getUserOrganizationIds } from '../organization-roles.js';
+import { lookupIpGeoMany } from './ip-geo.service.js';
 import type { SessionManager, SessionTokens } from './session.manager.js';
+import { parseUserAgent } from './user-agent.js';
 
 export interface RegisterInput {
   email: string;
@@ -347,6 +349,76 @@ export class AuthService {
     }
   }
 
+  async listSessions(userId: string, currentSessionId: string | undefined): Promise<PublicAuthSession[]> {
+    const rows = await this.sessions.listActiveByUser(userId);
+    const geoByIp = await lookupIpGeoMany(rows.map((row) => row.ipAddress));
+
+    return rows.map((row) => {
+      const parsed = parseUserAgent(row.userAgent);
+      const geo = row.ipAddress ? (geoByIp.get(row.ipAddress) ?? null) : null;
+      const session: PublicAuthSession = {
+        id: row.id,
+        current: Boolean(currentSessionId && row.id === currentSessionId),
+        createdAt: row.createdAt.toISOString(),
+        lastSeenAt: row.lastSeenAt.toISOString(),
+        expiresAt: row.expiresAt.toISOString(),
+        ipAddress: row.ipAddress,
+        userAgent: row.userAgent,
+        label: parsed.label,
+        browser: parsed.browser,
+        os: parsed.os,
+        isMobile: parsed.isMobile,
+        locationLabel: geo?.locationLabel ?? null,
+        city: geo?.city ?? null,
+        region: geo?.region ?? null,
+        country: geo?.country ?? null,
+        countryCode: geo?.countryCode ?? null,
+        latitude: geo?.latitude ?? null,
+        longitude: geo?.longitude ?? null,
+        isp: geo?.isp ?? null,
+        locationAccuracy: geo?.accuracy ?? null,
+      };
+      return session;
+    });
+  }
+
+  async revokeSession(
+    userId: string,
+    sessionId: string,
+    currentSessionId: string | undefined,
+    meta: SessionMeta,
+  ): Promise<{ revokedCurrent: boolean }> {
+    const revoked = await this.sessions.revokeOwned(userId, sessionId);
+    if (!revoked) {
+      throw notFound('Session not found');
+    }
+
+    await this.recordSecurityAudit(userId, 'auth.session.revoke', meta, {
+      sessionId,
+      revokedCurrent: currentSessionId === sessionId,
+    });
+
+    return { revokedCurrent: Boolean(currentSessionId && currentSessionId === sessionId) };
+  }
+
+  async revokeOtherSessions(
+    userId: string,
+    currentSessionId: string | undefined,
+    meta: SessionMeta,
+  ): Promise<{ revokedCount: number }> {
+    if (!currentSessionId) {
+      throw unauthorized('Invalid session');
+    }
+
+    const revokedCount = await this.sessions.revokeOthers(userId, currentSessionId);
+    await this.recordSecurityAudit(userId, 'auth.session.revoke_others', meta, {
+      revokedCount,
+      keptSessionId: currentSessionId,
+    });
+
+    return { revokedCount };
+  }
+
   async me(userId: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
@@ -441,6 +513,7 @@ export class AuthService {
     userId: string,
     action: string,
     meta: RequestMeta,
+    metadata?: Record<string, string | number | boolean | null>,
   ): Promise<void> {
     const organizationId = (await getUserOrganizationIds(this.prisma, userId))[0];
     if (!organizationId) {
@@ -451,8 +524,9 @@ export class AuthService {
       organizationId,
       userId,
       action,
-      resourceType: 'user',
-      resourceId: userId,
+      resourceType: action.startsWith('auth.session.') ? 'session' : 'user',
+      resourceId: typeof metadata?.sessionId === 'string' ? metadata.sessionId : userId,
+      metadata,
       ipAddress: meta.ipAddress,
       userAgent: meta.userAgent,
       requestId: meta.requestId,

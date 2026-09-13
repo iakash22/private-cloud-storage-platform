@@ -48,6 +48,7 @@ describe('DashboardPage', () => {
     api.listObjects.mockResolvedValue({
       objects: [],
       prefixes: [],
+      folders: [],
       nextCursor: null,
       isTruncated: false,
     });

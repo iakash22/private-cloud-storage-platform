@@ -160,3 +160,30 @@ confirming a destructive action, the UI should show:
 
 The server must repeat these checks and write an audit event. A client-side
 confirmation dialog is not an authorization boundary.
+
+## Recursive folder operations
+
+Move, copy, and delete operations are queued because they may affect many
+objects:
+
+```http
+POST /api/v1/storage/folder-operations
+Authorization: Bearer <api-key>
+Content-Type: application/json
+
+{
+  "bucketId": "bucket-id",
+  "operation": "MOVE",
+  "sourcePrefix": "documents/old/",
+  "destinationPrefix": "documents/archive/"
+}
+```
+
+Poll the returned job with
+`GET /api/v1/storage/folder-operations/:jobId`. Jobs expose processed object
+counts, total counts, failure counts, the last cursor, and an error message.
+Failed jobs can be retried and running jobs can be cancelled.
+
+The worker processes bounded pages and persists its cursor after each object.
+Retries therefore resume from the last successful key instead of restarting
+the entire folder.

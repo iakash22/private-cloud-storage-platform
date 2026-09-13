@@ -228,6 +228,21 @@ export interface PublicTeamMember {
   createdAt: string;
 }
 
+export type FolderAccessRole = 'VIEWER' | 'EDITOR' | 'MANAGER';
+
+export interface PublicFolderAccessRule {
+  id: string;
+  organizationId: string;
+  bucketId: string;
+  prefix: string;
+  role: FolderAccessRole;
+  userId: string | null;
+  teamId: string | null;
+  subjectName: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export const SHARE_VISIBILITIES = {
   PRIVATE: 'PRIVATE',
   TEAM: 'TEAM',
@@ -458,6 +473,27 @@ export interface PublicBucket {
   updatedAt: string;
 }
 
+export interface PublicBucketSummary {
+  bucket: PublicBucket;
+  provider: {
+    id: string;
+    name: string;
+    dialect: string;
+    status: string;
+    isDefault: boolean;
+  };
+  usage: {
+    objectCount: number;
+    totalBytes: number;
+    explicitFolderCount: number;
+    versionCount: number;
+  };
+  activeShareCount: number;
+  activeOperationCount: number;
+  policyCount: number;
+  health: 'HEALTHY' | 'DEGRADED' | 'DISABLED';
+}
+
 export interface PublicStorageObject {
   id: string;
   bucketId: string;
@@ -538,8 +574,39 @@ export interface PublicStoragePolicy {
 export interface PublicObjectListPage {
   objects: PublicStorageObject[];
   prefixes: string[];
+  folders: PublicStorageFolder[];
   nextCursor: string | null;
   isTruncated: boolean;
+}
+
+export interface PublicStorageFolder {
+  name: string;
+  prefix: string;
+  objectCount: number | null;
+}
+
+export type FolderOperationName = 'MOVE' | 'COPY' | 'DELETE';
+export type FolderOperationStatus =
+  'QUEUED' | 'RUNNING' | 'PAUSED' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+
+export interface PublicFolderOperationJob {
+  id: string;
+  organizationId: string;
+  bucketId: string;
+  operation: FolderOperationName;
+  sourcePrefix: string;
+  destinationPrefix: string | null;
+  status: FolderOperationStatus;
+  processedObjects: number;
+  totalObjects: number | null;
+  failedObjects: number;
+  nextCursor: string | null;
+  error: string | null;
+  createdByUserId: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  updatedAt: string;
 }
 
 export interface PublicUpload {
@@ -664,6 +731,35 @@ export interface TotpSetupPayload {
 export interface TotpEnablePayload {
   backupCodes: string[];
   user: PublicUser;
+}
+
+/** Active auth session exposed to account security UI (never includes token hashes). */
+export interface PublicAuthSession {
+  id: string;
+  current: boolean;
+  createdAt: string;
+  lastSeenAt: string;
+  expiresAt: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+  label: string;
+  browser: string;
+  os: string;
+  isMobile: boolean;
+  locationLabel: string | null;
+  city: string | null;
+  region: string | null;
+  country: string | null;
+  countryCode: string | null;
+  /** Approximate coordinates from IP geolocation — not GPS. */
+  latitude: number | null;
+  longitude: number | null;
+  isp: string | null;
+  locationAccuracy: 'ip-approximate' | null;
+}
+
+export interface PublicAuthSessionList {
+  sessions: PublicAuthSession[];
 }
 
 export interface PublicServiceAccount {

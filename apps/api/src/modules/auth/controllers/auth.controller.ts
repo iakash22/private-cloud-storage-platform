@@ -109,6 +109,39 @@ export class AuthController extends AuthenticatedController {
     this.noContent(res);
   });
 
+  listSessions: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const auth = this.requireAuth(req);
+    const sessions = await this.container.auth.listSessions(auth.user.id, auth.sessionId);
+    this.ok(res, { sessions });
+  });
+
+  revokeSession: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    const auth = this.requireAuth(req);
+    const { sessionId } = req.params as { sessionId: string };
+    const result = await this.container.auth.revokeSession(
+      auth.user.id,
+      sessionId,
+      auth.sessionId,
+      requestMeta(req),
+    );
+    if (result.revokedCurrent) {
+      this.container.cookies.clearSession(res);
+    }
+    this.ok(res, result);
+  });
+
+  revokeOtherSessions: AsyncRouteHandler = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const auth = this.requireAuth(req);
+      const result = await this.container.auth.revokeOtherSessions(
+        auth.user.id,
+        auth.sessionId,
+        requestMeta(req),
+      );
+      this.ok(res, result);
+    },
+  );
+
   me: AsyncRouteHandler = asyncHandler(async (req: Request, res: Response): Promise<void> => {
     const auth = this.requireAuth(req);
     const result = await this.container.auth.me(auth.user.id);

@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 import { BrandLogo } from '../components/brand-logo.js';
+import { AuthFlipStage } from '../components/auth-flip-stage.js';
+import { LiquidGlassPanel } from '../components/liquid-glass-panel.js';
 
 const HIGHLIGHTS = [
   {
@@ -22,13 +24,49 @@ export function AuthLayout({
   children,
   footer,
   badge,
+  bootstrapping = false,
+  mode = 'login',
+  flipContent,
 }: {
-  title: string;
-  subtitle: string;
-  children: ReactNode;
+  title?: string;
+  subtitle?: string;
+  children?: ReactNode;
   footer?: ReactNode;
   badge?: ReactNode;
+  /** Full-panel session bootstrap — hide the form until auth ready. */
+  bootstrapping?: boolean;
+  mode?: 'login' | 'signup';
+  /** When set, card content flips with height physics between login/signup. */
+  flipContent?: ReactNode;
 }) {
+  const cardBody = flipContent ? (
+    <AuthFlipStage mode={mode}>{flipContent}</AuthFlipStage>
+  ) : bootstrapping ? (
+    <div
+      className="vs-auth-bootstrap flex flex-col items-center gap-4 py-10 text-center"
+      role="status"
+      aria-live="polite"
+    >
+      <BrandLogo size="md" />
+      <span className="vs-auth-bootstrap__spinner" aria-hidden="true" />
+      <div className="space-y-1">
+        <p className="font-display text-base font-semibold text-vs-shade-900">Preparing VaultStack</p>
+        <p className="text-sm text-vs-shade-500">Getting things ready…</p>
+      </div>
+    </div>
+  ) : (
+    <>
+      {badge ? <div className="mb-4">{badge}</div> : null}
+      {title ? (
+        <h2 className="font-display text-xl font-semibold tracking-tight text-vs-shade-900 sm:text-2xl">
+          {title}
+        </h2>
+      ) : null}
+      {subtitle ? <p className="mt-2 text-sm leading-6 text-vs-shade-500">{subtitle}</p> : null}
+      <div className="vs-auth-liquid-glass__form mt-6">{children}</div>
+    </>
+  );
+
   return (
     <div
       data-auth-screen
@@ -79,17 +117,38 @@ export function AuthLayout({
           </ul>
         </aside>
 
-        <main className="custom-scrollbar flex items-start justify-center px-4 py-6 sm:px-8 md:h-full md:min-h-0 md:overflow-y-auto md:px-10 md:py-8 lg:px-12">
-          <div className="vs-form-field my-auto w-full max-w-[26rem] py-2">
-            <div className="vs-panel rounded-2xl border border-vs-shade-200 bg-white p-5 shadow-sm sm:p-8">
-              {badge ? <div className="mb-4">{badge}</div> : null}
-              <h2 className="font-display text-xl font-semibold tracking-tight text-vs-shade-900 sm:text-2xl">
-                {title}
-              </h2>
-              <p className="mt-2 text-sm leading-6 text-vs-shade-500">{subtitle}</p>
-              <div className="mt-6">{children}</div>
-            </div>
-            {footer ? (
+        <main className="vs-auth-form-stage custom-scrollbar relative flex items-start justify-center overflow-hidden px-4 py-6 sm:px-8 md:h-full md:min-h-0 md:overflow-y-auto md:px-10 md:py-8 lg:px-12">
+          <div aria-hidden className="vs-auth-form-stage__texture pointer-events-none absolute inset-0">
+            <span className="vs-auth-form-stage__orb vs-auth-form-stage__orb--a" />
+            <span className="vs-auth-form-stage__orb vs-auth-form-stage__orb--b" />
+            <span className="vs-auth-form-stage__orb vs-auth-form-stage__orb--c" />
+            <span className="vs-auth-form-stage__grid" />
+            <span className="vs-auth-form-stage__sheen" />
+            <span className="vs-auth-form-stage__noise" />
+          </div>
+
+          <div className="relative z-10 my-auto w-full max-w-[28rem] py-2">
+            <LiquidGlassPanel className="p-5 sm:p-8">
+              {bootstrapping && !flipContent ? (
+                <div
+                  className="vs-auth-bootstrap flex flex-col items-center gap-4 py-10 text-center"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <BrandLogo size="md" />
+                  <span className="vs-auth-bootstrap__spinner" aria-hidden="true" />
+                  <div className="space-y-1">
+                    <p className="font-display text-base font-semibold text-vs-shade-900">
+                      Preparing VaultStack
+                    </p>
+                    <p className="text-sm text-vs-shade-500">Getting things ready…</p>
+                  </div>
+                </div>
+              ) : (
+                cardBody
+              )}
+            </LiquidGlassPanel>
+            {!bootstrapping && !flipContent && footer ? (
               <div className="mt-6 text-center text-sm text-vs-shade-600">{footer}</div>
             ) : null}
           </div>

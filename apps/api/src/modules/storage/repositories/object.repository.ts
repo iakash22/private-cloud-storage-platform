@@ -31,9 +31,11 @@ export interface ListObjectsQuery {
   organizationId: string;
   bucketId: string;
   prefix?: string;
+  search?: string;
   delimiter?: string;
   limit: number;
   cursorKey?: string;
+  includeFolderMarkers?: boolean;
 }
 
 export interface ListObjectsResult {
@@ -118,6 +120,8 @@ export function createObjectRepository(prisma: PrismaClient): ObjectRepository {
         const index = remainder.indexOf(delimiter);
         if (index !== -1) {
           prefixes.add(`${prefix}${remainder.slice(0, index + delimiter.length)}`);
+        } else if (row.key.endsWith(delimiter) && remainder.length > 0) {
+          prefixes.add(row.key);
         }
       }
 
@@ -187,11 +191,16 @@ function buildListWhere(query: ListObjectsQuery): Prisma.StorageObjectWhereInput
   if (query.cursorKey) {
     key.gt = query.cursorKey;
   }
+  if (query.search) {
+    key.contains = query.search;
+    key.mode = 'insensitive';
+  }
 
   return {
     organizationId: query.organizationId,
     bucketId: query.bucketId,
     isDeleted: false,
+    ...(query.includeFolderMarkers ? {} : { NOT: { key: { endsWith: '/' } } }),
     ...(Object.keys(key).length > 0 ? { key } : {}),
   };
 }

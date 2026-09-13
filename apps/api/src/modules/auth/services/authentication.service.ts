@@ -101,7 +101,10 @@ export class AuthenticationService {
       throw unauthorized('Authentication is required');
     }
 
-    const session = await this.sessions.resolve(sessionToken);
+    const session = await this.sessions.resolve(sessionToken, {
+      ipAddress: req.ip ?? null,
+      userAgent: req.get('user-agent') ?? null,
+    });
     if (!session) {
       throw unauthorized('Invalid or expired session');
     }

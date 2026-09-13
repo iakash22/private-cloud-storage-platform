@@ -244,6 +244,81 @@ paths:
         '204':
           description: Session revoked
 
+  /api/v1/auth/sessions:
+    get:
+      tags: [Auth]
+      summary: List active sessions for the current user
+      operationId: listAuthSessions
+      security:
+        - sessionCookie: []
+      responses:
+        '200':
+          description: Active sessions with IP and approximate location
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sessions]
+                properties:
+                  sessions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PublicAuthSession'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /api/v1/auth/sessions/revoke-others:
+    post:
+      tags: [Auth]
+      summary: Revoke all other sessions (keep current)
+      operationId: revokeOtherAuthSessions
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      responses:
+        '200':
+          description: Other sessions revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [revokedCount]
+                properties:
+                  revokedCount:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /api/v1/auth/sessions/{sessionId}:
+    delete:
+      tags: [Auth]
+      summary: Revoke a specific session
+      operationId: revokeAuthSession
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Session revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [revokedCurrent]
+                properties:
+                  revokedCurrent:
+                    type: boolean
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
   /api/v1/auth/me:
     get:
       tags: [Auth]
@@ -962,6 +1037,88 @@ paths:
         '200':
           description: Bucket versioning updated
 
+  /api/v1/storage/buckets/{bucketId}/summary:
+    parameters:
+      - $ref: '#/components/parameters/bucketId'
+    get:
+      tags: [Storage]
+      summary: Get bucket control-center summary
+      operationId: getBucketSummary
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Bucket usage, provider, policy, sharing, and operation summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [summary]
+                properties:
+                  summary:
+                    $ref: '#/components/schemas/BucketSummary'
+
+  /api/v1/storage/buckets/{bucketId}/folder-access:
+    parameters:
+      - $ref: '#/components/parameters/bucketId'
+    get:
+      tags: [Storage]
+      summary: List folder access rules
+      operationId: listFolderAccessRules
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Folder ACL rules
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [rules]
+                properties:
+                  rules:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FolderAccessRule'
+
+  /api/v1/storage/folder-access:
+    post:
+      tags: [Storage]
+      summary: Grant team or user access to a folder
+      operationId: createFolderAccessRule
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FolderAccessRuleBody'
+      responses:
+        '201':
+          description: Folder access rule created
+
+  /api/v1/storage/folder-access/{ruleId}:
+    delete:
+      tags: [Storage]
+      summary: Remove folder access
+      operationId: deleteFolderAccessRule
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      parameters:
+        - name: ruleId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Folder access removed
+
   /api/v1/storage/buckets/{bucketId}/objects:
     parameters:
       - $ref: '#/components/parameters/bucketId'
@@ -981,6 +1138,12 @@ paths:
           in: query
           schema:
             type: string
+        - name: search
+          in: query
+          description: Case-insensitive filename or full-key search
+          schema:
+            type: string
+            maxLength: 255
         - name: limit
           in: query
           schema:
@@ -993,7 +1156,144 @@ paths:
             type: string
       responses:
         '200':
-          description: Object listing
+          description: Object listing with immediate child folders
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [objects, prefixes, folders, nextCursor, isTruncated]
+                properties:
+                  objects:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StorageObject'
+                  prefixes:
+                    type: array
+                    items:
+                      type: string
+                    description: Legacy prefix representation
+                  folders:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StorageFolder'
+                  nextCursor:
+                    type: string
+                    nullable: true
+                  isTruncated:
+                    type: boolean
+
+  /api/v1/storage/buckets/{bucketId}/folders:
+    parameters:
+      - $ref: '#/components/parameters/bucketId'
+    post:
+      tags: [Storage]
+      summary: Create an empty folder marker
+      operationId: createFolder
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFolderBody'
+      responses:
+        '201':
+          description: Folder marker created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [folder]
+                properties:
+                  folder:
+                    $ref: '#/components/schemas/StorageObject'
+
+  /api/v1/storage/folder-operations:
+    post:
+      tags: [Storage]
+      summary: Queue a recursive folder operation
+      operationId: createFolderOperation
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFolderOperationBody'
+      responses:
+        '201':
+          description: Folder operation queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job:
+                    $ref: '#/components/schemas/FolderOperationJob'
+
+  /api/v1/storage/folder-operations/{jobId}:
+    parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Storage]
+      summary: Get folder operation progress
+      operationId: getFolderOperation
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Folder operation status
+        '404':
+          description: Folder operation not found
+
+  /api/v1/storage/folder-operations/{jobId}/cancel:
+    parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      tags: [Storage]
+      summary: Cancel a queued or running folder operation
+      operationId: cancelFolderOperation
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      responses:
+        '204':
+          description: Operation cancelled
+
+  /api/v1/storage/folder-operations/{jobId}/retry:
+    parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      tags: [Storage]
+      summary: Retry a failed folder operation
+      operationId: retryFolderOperation
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+        - bearerApiKey: []
+      responses:
+        '200':
+          description: Operation requeued
 
   /api/v1/storage/objects/{objectId}:
     parameters:
@@ -1029,6 +1329,34 @@ paths:
           schema:
             type: string
           description: Permanently delete this version instead of the current object
+
+  /api/v1/storage/objects/{objectId}/metadata:
+    parameters:
+      - $ref: '#/components/parameters/objectId'
+    patch:
+      tags: [Storage]
+      summary: Update searchable object metadata
+      operationId: updateObjectMetadata
+      security:
+        - sessionCookie: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateObjectMetadataBody'
+      responses:
+        '200':
+          description: Updated object
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [object]
+                properties:
+                  object:
+                    $ref: '#/components/schemas/StorageObject'
 
   /api/v1/storage/objects/{objectId}/versions:
     parameters:
@@ -2535,6 +2863,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ApiError'
+    NotFoundError:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
     ConflictError:
       description: Resource conflict
       content:
@@ -2739,6 +3073,90 @@ components:
       properties:
         organizationId:
           type: string
+
+    PublicAuthSession:
+      type: object
+      required:
+        [
+          id,
+          current,
+          createdAt,
+          lastSeenAt,
+          expiresAt,
+          ipAddress,
+          userAgent,
+          label,
+          browser,
+          os,
+          isMobile,
+          locationLabel,
+          city,
+          region,
+          country,
+          countryCode,
+          latitude,
+          longitude,
+          isp,
+          locationAccuracy,
+        ]
+      properties:
+        id:
+          type: string
+        current:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        lastSeenAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        ipAddress:
+          type: string
+          nullable: true
+        userAgent:
+          type: string
+          nullable: true
+        label:
+          type: string
+        browser:
+          type: string
+        os:
+          type: string
+        isMobile:
+          type: boolean
+        locationLabel:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        region:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+        countryCode:
+          type: string
+          nullable: true
+        latitude:
+          type: number
+          nullable: true
+          description: Approximate latitude from IP geolocation (not GPS)
+        longitude:
+          type: number
+          nullable: true
+          description: Approximate longitude from IP geolocation (not GPS)
+        isp:
+          type: string
+          nullable: true
+        locationAccuracy:
+          type: string
+          nullable: true
+          enum: [ip-approximate]
 
     CreateOrganizationBody:
       type: object
@@ -2945,6 +3363,30 @@ components:
         storageProviderId:
           type: string
 
+    StorageBucket:
+      type: object
+      required: [id, organizationId, storageProviderId, name, versioning, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        organizationId:
+          type: string
+        storageProviderId:
+          type: string
+        name:
+          type: string
+        region:
+          type: string
+          nullable: true
+        versioning:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
     CreateStorageProviderBody:
       type: object
       required: [name, dialect, accessKeyId, secretAccessKey]
@@ -3072,6 +3514,212 @@ components:
           type: string
           format: date-time
 
+    CreateFolderBody:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: One safe folder path segment
+        parentPrefix:
+          type: string
+          maxLength: 1024
+          default: ''
+
+    StorageFolder:
+      type: object
+      required: [name, prefix, objectCount]
+      properties:
+        name:
+          type: string
+        prefix:
+          type: string
+        objectCount:
+          type: integer
+          nullable: true
+
+    BucketSummary:
+      type: object
+      required:
+        - bucket
+        - provider
+        - usage
+        - activeShareCount
+        - activeOperationCount
+        - policyCount
+        - health
+      properties:
+        bucket:
+          $ref: '#/components/schemas/StorageBucket'
+        provider:
+          type: object
+          required: [id, name, dialect, status, isDefault]
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            dialect:
+              type: string
+            status:
+              type: string
+            isDefault:
+              type: boolean
+        usage:
+          type: object
+          required: [objectCount, totalBytes, explicitFolderCount, versionCount]
+          properties:
+            objectCount:
+              type: integer
+            totalBytes:
+              type: integer
+              format: int64
+            explicitFolderCount:
+              type: integer
+            versionCount:
+              type: integer
+        activeShareCount:
+          type: integer
+        activeOperationCount:
+          type: integer
+        policyCount:
+          type: integer
+        health:
+          type: string
+          enum: [HEALTHY, DEGRADED, DISABLED]
+
+    FolderAccessRuleBody:
+      type: object
+      required: [bucketId, prefix, role]
+      additionalProperties: false
+      properties:
+        bucketId:
+          type: string
+        prefix:
+          type: string
+          minLength: 1
+          maxLength: 1024
+        role:
+          type: string
+          enum: [VIEWER, EDITOR, MANAGER]
+        userId:
+          type: string
+        teamId:
+          type: string
+
+    FolderAccessRule:
+      type: object
+      required: [id, organizationId, bucketId, prefix, role, subjectName, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        organizationId:
+          type: string
+        bucketId:
+          type: string
+        prefix:
+          type: string
+        role:
+          type: string
+          enum: [VIEWER, EDITOR, MANAGER]
+        userId:
+          type: string
+          nullable: true
+        teamId:
+          type: string
+          nullable: true
+        subjectName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateFolderOperationBody:
+      type: object
+      required: [bucketId, operation, sourcePrefix]
+      additionalProperties: false
+      properties:
+        bucketId:
+          type: string
+        operation:
+          type: string
+          enum: [MOVE, COPY, DELETE]
+        sourcePrefix:
+          type: string
+          minLength: 1
+          maxLength: 1024
+        destinationPrefix:
+          type: string
+          maxLength: 1024
+
+    FolderOperationJob:
+      type: object
+      required:
+        - id
+        - organizationId
+        - bucketId
+        - operation
+        - sourcePrefix
+        - status
+        - processedObjects
+        - failedObjects
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+        organizationId:
+          type: string
+        bucketId:
+          type: string
+        operation:
+          type: string
+          enum: [MOVE, COPY, DELETE]
+        sourcePrefix:
+          type: string
+        destinationPrefix:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [QUEUED, RUNNING, PAUSED, COMPLETED, FAILED, CANCELLED]
+        processedObjects:
+          type: integer
+        totalObjects:
+          type: integer
+          nullable: true
+        failedObjects:
+          type: integer
+        nextCursor:
+          type: string
+          nullable: true
+        error:
+          type: string
+          nullable: true
+        createdByUserId:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+
     InitiateUploadBody:
       type: object
       required: [bucketId, key]
@@ -3091,6 +3739,22 @@ components:
         checksumSha256:
           type: string
           pattern: '^[a-fA-F0-9]{64}$'
+
+    UpdateObjectMetadataBody:
+      type: object
+      additionalProperties: false
+      properties:
+        description:
+          type: string
+          maxLength: 2000
+          nullable: true
+        tags:
+          type: array
+          maxItems: 32
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
 
     ObjectDestinationBody:
       type: object

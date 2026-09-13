@@ -66,7 +66,8 @@ export function Dialog({
       aria-labelledby={titleId}
       aria-describedby={description ? descriptionId : undefined}
       className={cn(
-        'vs-dialog-enter fixed inset-0 z-[100] m-auto flex h-fit max-h-[min(90dvh,40rem)] w-[min(100%-1rem,32rem)] max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 shadow-2xl',
+        'vs-dialog-enter fixed inset-0 z-[100] m-auto flex h-fit w-[min(100%-1rem,32rem)] max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-0 shadow-2xl',
+        scrollable ? 'max-h-[min(90dvh,40rem)]' : 'max-h-[min(92dvh,100%)]',
         className,
       )}
       onCancel={(event) => {
@@ -80,31 +81,36 @@ export function Dialog({
       }}
     >
       <div
-        className="flex max-h-[min(90dvh,40rem)] w-full flex-col"
+        className={cn(
+          'flex w-full flex-col',
+          scrollable ? 'max-h-[min(90dvh,40rem)]' : 'h-fit max-h-[min(92dvh,100%)]',
+        )}
         onClick={(event) => {
           event.stopPropagation();
         }}
       >
-        <div className="shrink-0 space-y-1.5 border-b border-slate-200 px-5 py-4 sm:px-6">
+        <div className="shrink-0 space-y-1 border-b border-slate-200 px-5 py-3.5 sm:px-6 sm:py-4">
           <h2 id={titleId} className="font-display text-lg font-semibold tracking-tight text-slate-900">
             {title}
           </h2>
           {description ? (
-            <p id={descriptionId} className="text-sm leading-6 text-slate-500">
+            <p id={descriptionId} className="text-sm leading-5 text-slate-500">
               {description}
             </p>
           ) : null}
         </div>
         <div
           className={cn(
-            'min-h-0 flex-1 space-y-4 px-5 py-4 sm:px-6',
-            'custom-scrollbar overflow-y-auto overscroll-contain',
+            'space-y-4 px-5 py-3.5 sm:px-6 sm:py-4',
+            scrollable
+              ? 'custom-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain'
+              : 'overflow-visible max-sm:custom-scrollbar max-sm:max-h-[min(70dvh,28rem)] max-sm:overflow-y-auto',
           )}
         >
           {children}
         </div>
         {footer ? (
-          <div className="shrink-0 border-t border-slate-200 bg-white px-5 py-3 sm:px-6 sm:py-4">
+          <div className="shrink-0 border-t border-slate-200 bg-white px-5 py-3 sm:px-6 sm:py-3.5">
             <div className="flex justify-end gap-2">{footer}</div>
           </div>
         ) : null}

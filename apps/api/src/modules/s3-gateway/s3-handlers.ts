@@ -5,11 +5,7 @@ import { requestMeta } from '../../lib/audit.js';
 import type { S3Principal } from './s3-auth.strategy.js';
 import type { S3RequestTarget } from './s3-operations.js';
 import { filterAllowedBuckets, requireS3Permission } from './s3-authorization.js';
-import {
-  parseCompleteMultipartXml,
-  parseCopySource,
-  readLimitedBody,
-} from './s3-request-body.js';
+import { parseCompleteMultipartXml, parseCopySource, readLimitedBody } from './s3-request-body.js';
 import {
   renderCompleteMultipartUploadXml,
   renderCopyObjectXml,
@@ -49,7 +45,12 @@ export class S3GatewayHandlers {
     return target.partNumber;
   }
 
-  async handle(principal: S3Principal, target: S3RequestTarget, req: Request, res: Response): Promise<void> {
+  async handle(
+    principal: S3Principal,
+    target: S3RequestTarget,
+    req: Request,
+    res: Response,
+  ): Promise<void> {
     requireS3Permission(principal, target.operation, target.bucket);
 
     switch (target.operation) {
@@ -65,17 +66,47 @@ export class S3GatewayHandlers {
       case 'ListObjectsV2':
         return this.listObjects(principal, this.requireBucket(target), req, res);
       case 'PutObject':
-        return this.putObject(principal, this.requireBucket(target), this.requireKey(target), req, res);
+        return this.putObject(
+          principal,
+          this.requireBucket(target),
+          this.requireKey(target),
+          req,
+          res,
+        );
       case 'GetObject':
-        return this.getObject(principal, this.requireBucket(target), this.requireKey(target), req, res);
+        return this.getObject(
+          principal,
+          this.requireBucket(target),
+          this.requireKey(target),
+          req,
+          res,
+        );
       case 'HeadObject':
         return this.headObject(principal, this.requireBucket(target), this.requireKey(target), res);
       case 'DeleteObject':
-        return this.deleteObject(principal, this.requireBucket(target), this.requireKey(target), req, res);
+        return this.deleteObject(
+          principal,
+          this.requireBucket(target),
+          this.requireKey(target),
+          req,
+          res,
+        );
       case 'CopyObject':
-        return this.copyObject(principal, this.requireBucket(target), this.requireKey(target), req, res);
+        return this.copyObject(
+          principal,
+          this.requireBucket(target),
+          this.requireKey(target),
+          req,
+          res,
+        );
       case 'CreateMultipartUpload':
-        return this.createMultipartUpload(principal, this.requireBucket(target), this.requireKey(target), req, res);
+        return this.createMultipartUpload(
+          principal,
+          this.requireBucket(target),
+          this.requireKey(target),
+          req,
+          res,
+        );
       case 'UploadPart':
         return this.uploadPart(principal, target, req, res);
       case 'CompleteMultipartUpload':
@@ -114,7 +145,11 @@ export class S3GatewayHandlers {
     res.status(200).end();
   }
 
-  private async headBucket(principal: S3Principal, bucketName: string, res: Response): Promise<void> {
+  private async headBucket(
+    principal: S3Principal,
+    bucketName: string,
+    res: Response,
+  ): Promise<void> {
     await this.storage.buckets.getByName(principal.organizationId, bucketName);
     res.status(200).end();
   }
@@ -147,7 +182,11 @@ export class S3GatewayHandlers {
       prefix,
       delimiter: '/',
       limit: 1000,
-      cursor: typeof req.query['continuation-token'] === 'string' ? req.query['continuation-token'] : undefined,
+      includeFolderMarkers: true,
+      cursor:
+        typeof req.query['continuation-token'] === 'string'
+          ? req.query['continuation-token']
+          : undefined,
     });
 
     res
@@ -245,7 +284,10 @@ export class S3GatewayHandlers {
     res: Response,
   ): Promise<void> {
     const source = parseCopySource(req.header('x-amz-copy-source'));
-    const sourceBucket = await this.storage.buckets.getByName(principal.organizationId, source.bucket);
+    const sourceBucket = await this.storage.buckets.getByName(
+      principal.organizationId,
+      source.bucket,
+    );
     const sourceObject = await this.storage.objects.findByKey(
       principal.organizationId,
       sourceBucket.id,
@@ -285,7 +327,10 @@ export class S3GatewayHandlers {
       meta: this.meta(req),
     });
 
-    res.status(200).type('application/xml').send(renderInitiateMultipartUploadXml(initiated.providerUploadId));
+    res
+      .status(200)
+      .type('application/xml')
+      .send(renderInitiateMultipartUploadXml(initiated.providerUploadId));
   }
 
   private async uploadPart(
@@ -294,7 +339,10 @@ export class S3GatewayHandlers {
     req: Request,
     res: Response,
   ): Promise<void> {
-    const bucket = await this.storage.buckets.getByName(principal.organizationId, this.requireBucket(target));
+    const bucket = await this.storage.buckets.getByName(
+      principal.organizationId,
+      this.requireBucket(target),
+    );
     const uploadId = await this.storage.uploads.resolveMultipartUploadId({
       organizationId: principal.organizationId,
       bucketId: bucket.id,
@@ -309,9 +357,12 @@ export class S3GatewayHandlers {
       body: req,
     });
 
-    res.status(200).type('application/xml').send(
-      `<?xml version="1.0" encoding="UTF-8"?><Part><PartNumber>${part.partNumber}</PartNumber><ETag>"${part.etag}"</ETag></Part>`,
-    );
+    res
+      .status(200)
+      .type('application/xml')
+      .send(
+        `<?xml version="1.0" encoding="UTF-8"?><Part><PartNumber>${part.partNumber}</PartNumber><ETag>"${part.etag}"</ETag></Part>`,
+      );
   }
 
   private async completeMultipartUpload(
@@ -320,7 +371,10 @@ export class S3GatewayHandlers {
     req: Request,
     res: Response,
   ): Promise<void> {
-    const bucket = await this.storage.buckets.getByName(principal.organizationId, this.requireBucket(target));
+    const bucket = await this.storage.buckets.getByName(
+      principal.organizationId,
+      this.requireBucket(target),
+    );
     const uploadId = await this.storage.uploads.resolveMultipartUploadId({
       organizationId: principal.organizationId,
       bucketId: bucket.id,
@@ -346,7 +400,10 @@ export class S3GatewayHandlers {
     req: Request,
     res: Response,
   ): Promise<void> {
-    const bucket = await this.storage.buckets.getByName(principal.organizationId, this.requireBucket(target));
+    const bucket = await this.storage.buckets.getByName(
+      principal.organizationId,
+      this.requireBucket(target),
+    );
     const uploadId = await this.storage.uploads.resolveMultipartUploadId({
       organizationId: principal.organizationId,
       bucketId: bucket.id,

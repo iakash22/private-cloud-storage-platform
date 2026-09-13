@@ -24,6 +24,10 @@ import {
   scheduleBackupMaintenance,
 } from './backup.worker.js';
 import { createPreviewQueue, createPreviewWorker } from './preview.worker.js';
+import {
+  createFolderOperationQueue,
+  createFolderOperationWorker,
+} from './folder-operation.worker.js';
 
 const config = loadEnv();
 const logger = createLogger({ name: 'api-worker', level: config.LOG_LEVEL });
@@ -57,6 +61,16 @@ if (runPreviewWorkers) {
 }
 
 if (runStorageWorkers) {
+  const folderOperationQueue = createFolderOperationQueue(connection);
+  const folderOperationWorker = createFolderOperationWorker({
+    connection,
+    operations: container.folderOperations,
+    logger,
+  });
+  closeWorkers.push(() => folderOperationWorker.close());
+  closeQueues.push(() => folderOperationQueue.close());
+  queueNames.push(folderOperationQueue.name);
+
   const queue = createMultipartCleanupQueue(connection);
   const worker = createMultipartCleanupWorker({
     connection,

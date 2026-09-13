@@ -41,11 +41,15 @@ erDiagram
     Organization ||--o{ BackupJobLog : "owns"
     Organization ||--o{ BackupRestoreJob : "owns"
     Organization ||--o{ PreviewJob : "owns"
+    Organization ||--o{ FolderOperationJob : "owns"
+    Organization ||--o{ FolderAccessRule : "owns"
 
     Team ||--o{ TeamMember : "has"
     Team ||--o{ ShareLink : "receives"
+    Team ||--o{ FolderAccessRule : "receives"
     User ||--o{ TeamMember : "joins"
     User ||--o{ ShareLink : "creates"
+    User ||--o{ FolderAccessRule : "receives"
     User ||--o{ Project : "creates"
     User ||--o{ Build : "creates"
 
@@ -71,6 +75,8 @@ erDiagram
     StorageObject ||--o{ ShareLink : "shared_via"
     StorageObject ||--o{ ArtifactVersion : "holds_bytes"
     StorageObject ||--o{ PreviewJob : "previews"
+    Bucket ||--o{ FolderOperationJob : "processes"
+    Bucket ||--o{ FolderAccessRule : "protects"
     StorageObject }o..o| ObjectVersion : "currentVersionId (logical)"
 
     Project ||--o{ Build : "has"
@@ -108,6 +114,11 @@ erDiagram
         string tokenHash UK
         string csrfHash
         datetime expiresAt
+        datetime revokedAt
+        datetime createdAt
+        datetime lastSeenAt
+        string ipAddress
+        string userAgent
     }
 
     Organization {
@@ -391,7 +402,7 @@ erDiagram
 
 | Domain                | Models                                                                              | Notes                                                                                                                                                                                                                                                                        |
 | --------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Identity              | `User`, `Session`                                                                   | Sessions store hashed tokens; plaintext never persisted. TOTP secrets are AES-256-GCM (`totpSecretCiphertext` + `totpSecretNonce`); backup codes are SHA-256 hashes. Plaintext authenticator secret and backup codes are returned only at setup. |
+| Identity              | `User`, `Session`                                                                   | Sessions store hashed tokens; plaintext never persisted. TOTP secrets are AES-256-GCM (`totpSecretCiphertext` + `totpSecretNonce`); backup codes are SHA-256 hashes. Plaintext authenticator secret and backup codes are returned only at setup.                             |
 | Tenancy               | `Organization`, `Team`, `TeamMember`                                                | Every org-owned row carries `organizationId`. Team shares require membership.                                                                                                                                                                                                |
 | Sharing               | `ShareLink`                                                                         | Public identifier is a hashed high-entropy token, never the sequential id. Password hashes, expiry, download limits, and revocation are enforced at read time.                                                                                                               |
 | RBAC                  | `Role`, `Permission`, `RolePermission`, `UserRole`                                  | Permissions seeded from `@vaultstack/types`                                                                                                                                                                                                                                  |
@@ -402,6 +413,7 @@ erDiagram
 | Storage data plane    | `StorageObject`, `ObjectVersion`, `Upload`, `MultipartUpload`, `MultipartPart`      | Metadata only; bytes in provider. Version ids are VaultStack-owned.                                                                                                                                                                                                          |
 | CI/CD artifacts       | `Project`, `Build`, `Artifact`, `ArtifactVersion`                                   | Metadata only. `ArtifactVersion.storageObjectId` references `StorageObject` (`onDelete: Restrict`). Bytes are uploaded/downloaded/deleted through StorageService.                                                                                                            |
 | Backups               | `BackupSchedule`, `BackupJob`, `BackupSnapshot`, `BackupJobLog`, `BackupRestoreJob` | Metadata only. Snapshot archives are `StorageObject` rows in org bucket `vs-backups`. Credentials are never stored on backup rows. Restore jobs store a plan JSON; they do not execute live restores.                                                                        |
+| Storage operations    | `FolderOperationJob`                                                                | Durable move, copy, and delete state for recursive prefix operations. Progress cursors are persisted so BullMQ retries resume safely.                                                                                                                                        |
 
 ## Cascade behavior
 

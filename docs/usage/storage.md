@@ -17,26 +17,28 @@ Organization context: API key (pinned) or session `vs_org` / `x-vaultstack-organ
 
 ## Routes — providers
 
-| Method | Path | Permission |
-| --- | --- | --- |
-| `GET` | `/api/v1/storage/providers` | `storage.read` |
-| `POST` | `/api/v1/storage/providers` | `storage.upload` |
-| `GET` | `/api/v1/storage/providers/:providerId` | `storage.read` |
-| `PATCH` | `/api/v1/storage/providers/:providerId` | `storage.upload` |
-| `DELETE` | `/api/v1/storage/providers/:providerId` | `storage.delete` |
-| `POST` | `/api/v1/storage/providers/:providerId/test` | `storage.upload` |
+| Method   | Path                                         | Permission       |
+| -------- | -------------------------------------------- | ---------------- |
+| `GET`    | `/api/v1/storage/providers`                  | `storage.read`   |
+| `POST`   | `/api/v1/storage/providers`                  | `storage.upload` |
+| `GET`    | `/api/v1/storage/providers/:providerId`      | `storage.read`   |
+| `PATCH`  | `/api/v1/storage/providers/:providerId`      | `storage.upload` |
+| `DELETE` | `/api/v1/storage/providers/:providerId`      | `storage.delete` |
+| `POST`   | `/api/v1/storage/providers/:providerId/test` | `storage.upload` |
 
 Create is for **S3-compatible** backends. Secrets never returned (`hasSecret` only). Blank secret on update keeps the stored credential.
 
 ## Routes — buckets
 
-| Method | Path | Permission |
-| --- | --- | --- |
-| `GET` | `/api/v1/storage/buckets` | `storage.read` |
-| `POST` | `/api/v1/storage/buckets` | `storage.upload` |
-| `GET` | `/api/v1/storage/buckets/:bucketId` | `storage.read` |
-| `DELETE` | `/api/v1/storage/buckets/:bucketId` | `storage.delete` |
-| `PUT` | `/api/v1/storage/buckets/:bucketId/versioning` | `storage.upload` |
+| Method   | Path                                           | Permission       |
+| -------- | ---------------------------------------------- | ---------------- |
+| `GET`    | `/api/v1/storage/buckets`                      | `storage.read`   |
+| `POST`   | `/api/v1/storage/buckets`                      | `storage.upload` |
+| `GET`    | `/api/v1/storage/buckets/:bucketId`            | `storage.read`   |
+| `DELETE` | `/api/v1/storage/buckets/:bucketId`            | `storage.delete` |
+| `PUT`    | `/api/v1/storage/buckets/:bucketId/versioning` | `storage.upload` |
+| `GET`    | `/api/v1/storage/buckets/:bucketId/summary`    | `storage.read`   |
+| `POST`   | `/api/v1/storage/buckets/:bucketId/folders`    | `storage.upload` |
 
 Create body:
 
@@ -46,22 +48,54 @@ Create body:
 
 If you omit `storageProviderId`, the org **default** provider is used. The dashboard hides the provider dropdown when only one provider exists.
 
+The bucket summary powers the control center and returns provider status,
+object and folder usage, version count, active shares, running folder
+operations, policy count, and normalized health (`HEALTHY`, `DEGRADED`, or
+`DISABLED`).
+
 ## Routes — objects
 
-| Method | Path | Permission |
-| --- | --- | --- |
-| `GET` | `/api/v1/storage/buckets/:bucketId/objects` | `storage.read` |
-| `GET` | `/api/v1/storage/objects/:objectId` | `storage.read` |
-| `POST` | `/api/v1/storage/objects/:objectId/download-url` | `storage.read` |
-| `DELETE` | `/api/v1/storage/objects/:objectId` | `storage.delete` |
-| `GET` | `/api/v1/storage/objects/:objectId/versions` | `storage.read` |
-| `GET` | `/api/v1/storage/objects/:objectId/versions/:versionId` | `storage.read` |
-| `POST` | `/api/v1/storage/objects/:objectId/versions/:versionId/restore` | `storage.upload` |
-| `DELETE` | `/api/v1/storage/objects/:objectId/versions/:versionId` | `storage.delete` |
-| `POST` | `/api/v1/storage/objects/:objectId/copy` | `storage.upload` |
-| `POST` | `/api/v1/storage/objects/:objectId/move` | `storage.upload` + `storage.delete` |
+Object listings accept an optional `search` query parameter for a
+case-insensitive filename or full-key search. The dashboard debounces this
+field before requesting the server, so search works across the bucket rather
+than only across the currently loaded page.
+
+Selected objects can store a description and normalized tag list through
+`PATCH /api/v1/storage/objects/:objectId/metadata`. These values remain
+PostgreSQL metadata; object bytes are never stored there.
+
+| Method   | Path                                                            | Permission                          |
+| -------- | --------------------------------------------------------------- | ----------------------------------- |
+| `GET`    | `/api/v1/storage/buckets/:bucketId/objects`                     | `storage.read`                      |
+| `GET`    | `/api/v1/storage/objects/:objectId`                             | `storage.read`                      |
+| `POST`   | `/api/v1/storage/objects/:objectId/download-url`                | `storage.read`                      |
+| `DELETE` | `/api/v1/storage/objects/:objectId`                             | `storage.delete`                    |
+| `GET`    | `/api/v1/storage/objects/:objectId/versions`                    | `storage.read`                      |
+| `GET`    | `/api/v1/storage/objects/:objectId/versions/:versionId`         | `storage.read`                      |
+| `POST`   | `/api/v1/storage/objects/:objectId/versions/:versionId/restore` | `storage.upload`                    |
+| `DELETE` | `/api/v1/storage/objects/:objectId/versions/:versionId`         | `storage.delete`                    |
+| `POST`   | `/api/v1/storage/objects/:objectId/copy`                        | `storage.upload`                    |
+| `POST`   | `/api/v1/storage/objects/:objectId/move`                        | `storage.upload` + `storage.delete` |
 
 Download URL response: short-lived `GET` URL (token or provider-native), same idea as S3 GetObject presign.
+
+### Folders and prefixes
+
+VaultStack folders are provider-neutral object-key prefixes. Creating an empty
+folder creates a zero-byte marker ending in `/`; ordinary dashboard listings
+hide that marker while delimiter-aware listings expose the folder.
+
+```http
+POST /api/v1/storage/buckets/:bucketId/folders
+Authorization: Bearer <api-key>
+Content-Type: application/json
+
+{"name":"reports","parentPrefix":"documents/2026/"}
+```
+
+Uploads made while browsing `documents/2026/` use that prefix in their object
+key. The API rejects traversal-shaped, absolute, backslash-containing, and
+control-character folder names.
 
 ## Dashboard
 

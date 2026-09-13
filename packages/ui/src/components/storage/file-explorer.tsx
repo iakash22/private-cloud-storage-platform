@@ -34,6 +34,7 @@ export interface FileExplorerProps {
   onDelete?: (entry: ExplorerEntry) => void;
   onToggleFavorite?: (entry: ExplorerEntry) => void;
   onUploadClick: () => void;
+  onCreateFolder?: () => void;
   onFilesSelected: (files: File[]) => void;
   uploads?: UploadItem[];
   onCancelUpload?: (uploadId: string) => void;
@@ -55,7 +56,8 @@ function buildEntries(
     return [];
   }
 
-  const folders: ExplorerEntry[] = page.prefixes.map((folderPrefix) => {
+  const folderPrefixes = page.folders?.map((folder) => folder.prefix) ?? page.prefixes;
+  const folders: ExplorerEntry[] = folderPrefixes.map((folderPrefix) => {
     const { name } = splitObjectKey(folderPrefix.replace(/\/$/, ''));
     return {
       id: `folder:${folderPrefix}`,
@@ -65,19 +67,21 @@ function buildEntries(
     };
   });
 
-  const files: ExplorerEntry[] = page.objects.map((object) => {
-    const { name } = splitObjectKey(object.key);
-    return {
-      id: object.id,
-      name,
-      kind: 'file',
-      key: object.key,
-      size: object.size,
-      contentType: object.contentType,
-      updatedAt: object.updatedAt,
-      favorite: favoriteIds?.has(object.id),
-    };
-  });
+  const files: ExplorerEntry[] = page.objects
+    .filter((object) => !object.key.endsWith('/'))
+    .map((object) => {
+      const { name } = splitObjectKey(object.key);
+      return {
+        id: object.id,
+        name,
+        kind: 'file',
+        key: object.key,
+        size: object.size,
+        contentType: object.contentType,
+        updatedAt: object.updatedAt,
+        favorite: favoriteIds?.has(object.id),
+      };
+    });
 
   return [...folders, ...files].filter((entry) => {
     if (!prefix) {
@@ -111,6 +115,7 @@ export function FileExplorer({
   onDelete,
   onToggleFavorite,
   onUploadClick,
+  onCreateFolder,
   onFilesSelected,
   uploads = [],
   onCancelUpload,
@@ -147,10 +152,13 @@ export function FileExplorer({
         viewMode={viewMode}
         onViewModeChange={onViewModeChange}
         onUploadClick={onUploadClick}
+        onCreateFolder={onCreateFolder}
         uploadDisabled={uploadDisabled}
       />
 
-      {showUploader ? <FileUploader onFilesSelected={onFilesSelected} disabled={uploadDisabled} /> : null}
+      {showUploader ? (
+        <FileUploader onFilesSelected={onFilesSelected} disabled={uploadDisabled} />
+      ) : null}
       <UploadProgressPanel
         uploads={uploads}
         onCancel={onCancelUpload}

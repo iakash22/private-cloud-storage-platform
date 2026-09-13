@@ -5,6 +5,10 @@ import {
   completeUploadBodySchema,
   confirmMultipartPartBodySchema,
   createBucketBodySchema,
+  createFolderBodySchema,
+  createFolderOperationBodySchema,
+  folderAccessRuleBodySchema,
+  folderAccessRuleParamsSchema,
   createPreviewBodySchema,
   createLifecyclePolicyBodySchema,
   createShareBodySchema,
@@ -20,8 +24,10 @@ import {
   multipartPartParamsSchema,
   objectDestinationBodySchema,
   objectIdParamsSchema,
+  updateObjectMetadataBodySchema,
   objectVersionParamsSchema,
   previewJobIdParamsSchema,
+  folderOperationJobIdParamsSchema,
   shareIdParamsSchema,
   storagePolicyIdParamsSchema,
   storageProviderIdParamsSchema,
@@ -39,6 +45,8 @@ import { validateBody, validateParams, validateQuery } from '../../middleware/va
 import { ShareController } from './controllers/share.controller.js';
 import { ProviderController } from './controllers/provider.controller.js';
 import { StorageController } from './controllers/storage.controller.js';
+import { FolderOperationController } from './controllers/folder-operation.controller.js';
+import { FolderAccessController } from './controllers/folder-access.controller.js';
 import { PreviewController } from '../previews/preview.controller.js';
 
 /**
@@ -54,6 +62,8 @@ export function createStorageRouter(container: AppContainer): Router {
   const shares = new ShareController(container);
   const providers = new ProviderController(container);
   const previews = new PreviewController(container);
+  const folderOperations = new FolderOperationController(container);
+  const folderAccess = new FolderAccessController(container);
 
   router.use(requireOrganizationContext);
 
@@ -63,6 +73,24 @@ export function createStorageRouter(container: AppContainer): Router {
     validateBody(createStorageProviderBodySchema),
     providers.allow(PERMISSIONS.STORAGE_UPLOAD),
     providers.create,
+  );
+  router.get(
+    '/buckets/:bucketId/folder-access',
+    validateParams(bucketIdParamsSchema),
+    controller.allow(PERMISSIONS.STORAGE_READ),
+    folderAccess.list,
+  );
+  router.post(
+    '/folder-access',
+    validateBody(folderAccessRuleBodySchema),
+    controller.allow(PERMISSIONS.STORAGE_UPLOAD),
+    folderAccess.create,
+  );
+  router.delete(
+    '/folder-access/:ruleId',
+    validateParams(folderAccessRuleParamsSchema),
+    controller.allow(PERMISSIONS.STORAGE_DELETE),
+    folderAccess.remove,
   );
   router.get(
     '/providers/:providerId',
@@ -97,11 +125,48 @@ export function createStorageRouter(container: AppContainer): Router {
     controller.allow(PERMISSIONS.STORAGE_UPLOAD),
     controller.createBucket,
   );
+  router.post(
+    '/buckets/:bucketId/folders',
+    validateParams(bucketIdParamsSchema),
+    validateBody(createFolderBodySchema),
+    controller.allow(PERMISSIONS.STORAGE_UPLOAD),
+    controller.createFolder,
+  );
+  router.post(
+    '/folder-operations',
+    validateBody(createFolderOperationBodySchema),
+    controller.allow(PERMISSIONS.STORAGE_UPLOAD),
+    folderOperations.create,
+  );
+  router.get(
+    '/folder-operations/:jobId',
+    validateParams(folderOperationJobIdParamsSchema),
+    controller.allow(PERMISSIONS.STORAGE_READ),
+    folderOperations.get,
+  );
+  router.post(
+    '/folder-operations/:jobId/cancel',
+    validateParams(folderOperationJobIdParamsSchema),
+    controller.allow(PERMISSIONS.STORAGE_DELETE),
+    folderOperations.cancel,
+  );
+  router.post(
+    '/folder-operations/:jobId/retry',
+    validateParams(folderOperationJobIdParamsSchema),
+    controller.allow(PERMISSIONS.STORAGE_UPLOAD),
+    folderOperations.retry,
+  );
   router.get(
     '/buckets/:bucketId',
     validateParams(bucketIdParamsSchema),
     controller.allow(PERMISSIONS.STORAGE_READ),
     controller.getBucket,
+  );
+  router.get(
+    '/buckets/:bucketId/summary',
+    validateParams(bucketIdParamsSchema),
+    controller.allow(PERMISSIONS.STORAGE_READ),
+    controller.getBucketSummary,
   );
   router.delete(
     '/buckets/:bucketId',
@@ -130,6 +195,13 @@ export function createStorageRouter(container: AppContainer): Router {
     validateParams(objectIdParamsSchema),
     controller.allow(PERMISSIONS.STORAGE_READ),
     controller.getObject,
+  );
+  router.patch(
+    '/objects/:objectId/metadata',
+    validateParams(objectIdParamsSchema),
+    validateBody(updateObjectMetadataBodySchema),
+    controller.allow(PERMISSIONS.STORAGE_UPLOAD),
+    controller.updateObjectMetadata,
   );
   router.post(
     '/objects/:objectId/download-url',

@@ -22,7 +22,7 @@ describe('ShareDialog', () => {
       />,
     );
 
-    expect(screen.getByLabelText('Visibility')).toHaveValue('PUBLIC_LINK');
+    expect(screen.getByLabelText('Visibility')).toHaveTextContent('Public link');
     fireEvent.click(screen.getByLabelText('Viewer permission'));
     fireEvent.click(screen.getByRole('button', { name: 'Create link' }));
     expect(onCreate).toHaveBeenCalledWith(

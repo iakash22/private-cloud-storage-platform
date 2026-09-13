@@ -106,7 +106,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (caught) {
       applySession(null);
       if (!(caught instanceof ApiClientError) || caught.status !== 401) {
-        setError(caught instanceof Error ? caught.message : 'Unable to load session');
+        if (caught instanceof ApiClientError && caught.status >= 500) {
+          setError('Internal server error');
+        } else {
+          setError(caught instanceof Error ? caught.message : 'Unable to load session');
+        }
       }
     } finally {
       if (!silent) {

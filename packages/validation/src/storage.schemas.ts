@@ -22,6 +22,37 @@ export const createBucketBodySchema = z.object({
   storageProviderId: z.string().min(1).optional(),
 });
 
+export const createFolderBodySchema = z
+  .object({
+    name: z.string().trim().min(1).max(255),
+    parentPrefix: z.string().max(1024).optional().default(''),
+  })
+  .strict();
+
+export type CreateFolderBody = z.infer<typeof createFolderBodySchema>;
+
+export const createFolderOperationBodySchema = z
+  .object({
+    bucketId: z.string().min(1),
+    operation: z.enum(['MOVE', 'COPY', 'DELETE']),
+    sourcePrefix: z.string().min(1).max(1024),
+    destinationPrefix: z.string().max(1024).optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.operation !== 'DELETE' && !value.destinationPrefix) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['destinationPrefix'],
+        message: 'Destination prefix is required for move and copy operations',
+      });
+    }
+  });
+
+export const folderOperationJobIdParamsSchema = z.object({
+  jobId: z.string().min(1),
+});
+
 export const S3_DIALECT_VALUES = [
   'AWS_S3',
   'CLOUDFLARE_R2',
@@ -186,6 +217,7 @@ export const multipartPartParamsSchema = z
 
 export const listObjectsQuerySchema = z.object({
   prefix: z.string().max(1024).optional(),
+  search: z.string().trim().max(255).optional(),
   delimiter: z.string().max(8).optional(),
   limit: z.coerce.number().int().min(1).max(1000).optional(),
   cursor: z.string().max(1024).optional(),
@@ -209,6 +241,36 @@ export const uploadContentQuerySchema = z.object({
 export const objectDestinationBodySchema = z.object({
   destinationBucketId: z.string().min(1),
   destinationKey: objectKeySchema,
+});
+
+export const updateObjectMetadataBodySchema = z
+  .object({
+    description: z.string().trim().max(2000).nullable().optional(),
+    tags: z.array(z.string().trim().min(1).max(64)).max(32).optional(),
+  })
+  .strict();
+
+export const folderAccessRuleBodySchema = z
+  .object({
+    bucketId: z.string().min(1),
+    prefix: z.string().trim().min(1).max(1024),
+    role: z.enum(['VIEWER', 'EDITOR', 'MANAGER']),
+    userId: z.string().min(1).optional(),
+    teamId: z.string().min(1).optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (Boolean(value.userId) === Boolean(value.teamId)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Exactly one of userId or teamId is required',
+        path: ['userId'],
+      });
+    }
+  });
+
+export const folderAccessRuleParamsSchema = z.object({
+  ruleId: z.string().min(1),
 });
 
 export const initiateMultipartBodySchema = z.object({

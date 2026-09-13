@@ -15,6 +15,7 @@ import {
   Input,
   Label,
   PageHeader,
+  PasswordInput,
   Select,
 } from '@vaultstack/ui';
 import { CloudCog } from 'lucide-react';
@@ -434,9 +435,8 @@ export function ProvidersPage() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="provider-secret">Secret key</Label>
-            <Input
+            <PasswordInput
               id="provider-secret"
-              type="password"
               autoComplete="new-password"
               value={secretAccessKey}
               aria-invalid={Boolean(fieldErrors.secretAccessKey)}
@@ -545,9 +545,8 @@ export function ProvidersPage() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="edit-provider-secret">Secret key</Label>
-            <Input
+            <PasswordInput
               id="edit-provider-secret"
-              type="password"
               autoComplete="new-password"
               value={secretAccessKey}
               disabled={editingLocalProvider}

@@ -97,6 +97,56 @@ export function assertValidObjectKey(key: string, maxLength: number): string {
   return key;
 }
 
+/** Validates one user-visible folder name without allowing nested segments. */
+export function assertValidFolderName(name: string, maxLength: number): string {
+  const normalized = name.trim();
+  if (!normalized) {
+    throw storageInvalidKey('Folder name must not be empty');
+  }
+  if (Buffer.byteLength(normalized, 'utf8') > maxLength) {
+    throw storageInvalidKey(`Folder name must be at most ${maxLength} bytes`);
+  }
+  if (
+    normalized === '.' ||
+    normalized === '..' ||
+    normalized.includes('/') ||
+    normalized.includes('\\') ||
+    normalized.includes('\0') ||
+    /^[a-zA-Z]:/.test(normalized)
+  ) {
+    throw storageInvalidKey('Folder name must be a single safe path segment');
+  }
+  for (const character of normalized) {
+    const code = character.codePointAt(0) ?? 0;
+    if (code < 0x20 || code === 0x7f) {
+      throw storageInvalidKey('Folder name must not contain control characters');
+    }
+  }
+  return normalized;
+}
+
+/** Builds and validates the canonical zero-byte marker key for a folder. */
+export function buildFolderMarkerKey(
+  parentPrefix: string,
+  name: string,
+  maxLength: number,
+): string {
+  const normalizedPrefix =
+    parentPrefix.length > 0 && !parentPrefix.endsWith('/') ? `${parentPrefix}/` : parentPrefix;
+  const prefix = assertValidKeyPrefix(normalizedPrefix, maxLength);
+  const folderName = assertValidFolderName(name, maxLength);
+  return assertValidFolderMarkerKey(`${prefix}${folderName}/`, maxLength);
+}
+
+export function assertValidFolderMarkerKey(key: string, maxLength: number): string {
+  if (!key.endsWith('/')) {
+    throw storageInvalidKey('Folder marker key must end with a slash');
+  }
+  const objectKey = key.slice(0, -1);
+  assertValidObjectKey(objectKey, maxLength);
+  return key;
+}
+
 /**
  * Validates a listing prefix. Prefixes are looser than keys because a prefix
  * legitimately ends mid-segment, but traversal shapes are still rejected.

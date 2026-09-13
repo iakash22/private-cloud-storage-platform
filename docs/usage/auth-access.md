@@ -17,7 +17,10 @@ How clients authenticate and get organization context before calling storage or 
 | `POST` | `/api/v1/auth/register` | Public | First SUPER_ADMIN + org + session |
 | `POST` | `/api/v1/auth/login` | Public | Session cookies, or TOTP challenge |
 | `POST` | `/api/v1/auth/login/totp` | Public | Finish 2FA login |
-| `POST` | `/api/v1/auth/logout` | Session | Revoke session |
+| `POST` | `/api/v1/auth/logout` | Session | Revoke current session |
+| `GET` | `/api/v1/auth/sessions` | Session | List active sessions (IP + approx. location) |
+| `DELETE` | `/api/v1/auth/sessions/:sessionId` | Session | Revoke one session |
+| `POST` | `/api/v1/auth/sessions/revoke-others` | Session | Revoke all except current |
 | `GET` | `/api/v1/auth/me` | Session/key | Current user + CSRF token + permissions |
 | `POST` | `/api/v1/auth/organization` | Session | Set active org selector |
 | `POST` | `/api/v1/auth/2fa/setup` | Session | Begin TOTP enrollment |

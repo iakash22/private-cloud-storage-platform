@@ -69,7 +69,9 @@ export function FileTable({
                   >
                     {entry.name}
                   </button>
-                  {entry.favorite ? <Star aria-label="Favorite" className="h-4 w-4 fill-amber-400 text-amber-400" /> : null}
+                  {entry.favorite ? (
+                    <Star aria-label="Favorite" className="h-4 w-4 fill-amber-400 text-amber-400" />
+                  ) : null}
                 </div>
               </td>
               <td className="px-4 py-3 text-slate-600">
@@ -122,7 +124,7 @@ export function FileTable({
                       <MoreHorizontal aria-hidden className="h-4 w-4" />
                     </Button>
                   ) : null}
-                  {entry.kind === 'file' && onDelete ? (
+                  {onDelete ? (
                     <Button
                       type="button"
                       variant="outline"

@@ -50,6 +50,8 @@ If the account has two-factor authentication enabled, `POST /api/v1/auth/login` 
 
 Users enable or disable 2FA for themselves from Settings (`POST /api/v1/auth/2fa/setup`, `/2fa/enable`, `/2fa/disable`). The authenticator secret is encrypted at rest. Backup codes are hashed; plaintext codes are returned only when 2FA is first enabled.
 
+Active sessions are listed and revoked from Settings → Active sessions (`GET /api/v1/auth/sessions`, `DELETE /api/v1/auth/sessions/:sessionId`, `POST /api/v1/auth/sessions/revoke-others`). Location is derived from the session IP (city/region/country and approximate coordinates) — not device GPS.
+
 The dashboard origin must be allowlisted (`CORS_ORIGINS`, with localhost defaults in development) so credentialed `fetch` from `:5173` is not blocked by the browser.
 
 Mutating cookie-authenticated requests must send `x-csrf-token` matching the CSRF token from login/register/`GET /auth/me`.
@@ -69,6 +71,9 @@ Programmatic clients may still use `Authorization: Bearer <api-key>`.
 - `POST /api/v1/auth/2fa/enable` — confirm enrollment; backup codes returned once
 - `POST /api/v1/auth/2fa/disable` — turn 2FA off (password + code)
 - `POST /api/v1/auth/logout`
+- `GET  /api/v1/auth/sessions` — list active browser sessions (IP + approximate location)
+- `DELETE /api/v1/auth/sessions/:sessionId` — revoke one session (clears cookies if it is the current session)
+- `POST /api/v1/auth/sessions/revoke-others` — revoke every session except the current one
 - `GET  /api/v1/auth/me`
 
 ### Organizations
@@ -153,10 +158,20 @@ Buckets:
 - `GET    /api/v1/storage/buckets/:bucketId` — `storage.read`
 - `DELETE /api/v1/storage/buckets/:bucketId` — `storage.delete` (refuses a non-empty bucket)
 - `PUT    /api/v1/storage/buckets/:bucketId/versioning` — `storage.upload` (`UNVERSIONED` | `ENABLED` | `SUSPENDED`)
+- `GET    /api/v1/storage/buckets/:bucketId/summary` — `storage.read`; provider, usage, policy, share, and operation health
+- `PATCH  /api/v1/storage/objects/:objectId/metadata` — `storage.upload`; update description and tags
+- `GET    /api/v1/storage/buckets/:bucketId/folder-access` — `storage.read`; list folder collaboration rules
+- `POST   /api/v1/storage/folder-access` — `storage.upload`; grant user/team folder access
+- `DELETE /api/v1/storage/folder-access/:ruleId` — `storage.delete`; revoke folder access
 
 Objects:
 
 - `GET    /api/v1/storage/buckets/:bucketId/objects` — `storage.read` (`prefix`, `delimiter`, `limit`, `cursor`)
+- `POST   /api/v1/storage/buckets/:bucketId/folders` — `storage.upload`; creates an empty folder marker
+- `POST   /api/v1/storage/folder-operations` — queue move, copy, or delete
+- `GET    /api/v1/storage/folder-operations/:jobId` — poll operation progress
+- `POST   /api/v1/storage/folder-operations/:jobId/cancel` — cancel operation
+- `POST   /api/v1/storage/folder-operations/:jobId/retry` — retry failed operation
 - `GET    /api/v1/storage/objects/:objectId` — `storage.read`
 - `POST   /api/v1/storage/objects/:objectId/download-url` — `storage.read` (optional `versionId`)
 - `POST   /api/v1/storage/objects/:objectId/previews` — queue bounded archive or Office preview

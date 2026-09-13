@@ -14,6 +14,7 @@ import {
   formatBytes,
   Input,
   Label,
+  PasswordInput,
 } from '@vaultstack/ui';
 import { parseForm, unlockShareBodySchema } from '@vaultstack/validation';
 import { apiClient } from '../lib/api.js';
@@ -198,9 +199,8 @@ export function PublicSharePage() {
             <form className="space-y-4" onSubmit={(event) => void handleUnlock(event)}>
               <div className="space-y-2">
                 <Label htmlFor="share-unlock-password">Password</Label>
-                <Input
+                <PasswordInput
                   id="share-unlock-password"
-                  type="password"
                   value={password}
                   aria-invalid={Boolean(fieldErrors.password)}
                   onChange={(event) => {

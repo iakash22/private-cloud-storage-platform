@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { AppError } from '../../../lib/errors.js';
 import {
   assertValidBucketName,
+  assertValidFolderName,
   assertValidKeyPrefix,
   assertValidObjectKey,
+  buildFolderMarkerKey,
   commonPrefixOf,
 } from './object-key.js';
 
@@ -113,6 +115,23 @@ describe('assertValidKeyPrefix', () => {
   it('rejects traversal, absolute paths and null bytes', () => {
     for (const prefix of ['../', 'a/../b', '/etc', 'a\\b', 'a\0']) {
       expectRejected(() => assertValidKeyPrefix(prefix, MAX_KEY_LENGTH), 'STORAGE_INVALID_KEY');
+    }
+  });
+});
+
+describe('folder markers', () => {
+  it('builds a canonical nested marker key', () => {
+    expect(buildFolderMarkerKey('documents/2026/', 'reports', MAX_KEY_LENGTH)).toBe(
+      'documents/2026/reports/',
+    );
+    expect(buildFolderMarkerKey('documents/2026', 'reports', MAX_KEY_LENGTH)).toBe(
+      'documents/2026/reports/',
+    );
+  });
+
+  it('rejects unsafe folder names', () => {
+    for (const name of ['', '.', '..', 'nested/folder', 'a\\b', 'folder\0']) {
+      expectRejected(() => assertValidFolderName(name, MAX_KEY_LENGTH), 'STORAGE_INVALID_KEY');
     }
   });
 });

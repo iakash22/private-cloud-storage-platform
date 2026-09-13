@@ -439,6 +439,53 @@ describe('VaultStackApiClient storage + auth', () => {
     );
   });
 
+  it('creates a folder marker through the storage API', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: () => Promise.resolve({ folder: { id: 'folder-marker' } }),
+    });
+    const client = new VaultStackApiClient({
+      baseUrl: 'http://localhost:3000',
+      fetchImpl,
+    });
+
+    await client.createFolder('bucket-1', {
+      name: 'reports',
+      parentPrefix: 'documents/2026/',
+    });
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://localhost:3000/api/v1/storage/buckets/bucket-1/folders',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'reports',
+          parentPrefix: 'documents/2026/',
+        }),
+      }),
+    );
+  });
+
+  it('loads the bucket control-center summary', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ summary: { health: 'HEALTHY' } }),
+    });
+    const client = new VaultStackApiClient({
+      baseUrl: 'http://localhost:3000',
+      fetchImpl,
+    });
+
+    await client.getBucketSummary('bucket-1');
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://localhost:3000/api/v1/storage/buckets/bucket-1/summary',
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
   it('lists organization users through the access API', async () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,

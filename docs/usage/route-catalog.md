@@ -13,17 +13,20 @@ Auth legend: **Pub** public · **Sess** session/API key · **Tok** content token
 
 ## Auth
 
-| Method | Path                        | Auth |
-| ------ | --------------------------- | ---- |
-| `POST` | `/api/v1/auth/register`     | Pub  |
-| `POST` | `/api/v1/auth/login`        | Pub  |
-| `POST` | `/api/v1/auth/login/totp`   | Pub  |
-| `POST` | `/api/v1/auth/logout`       | Sess |
-| `GET`  | `/api/v1/auth/me`           | Sess |
-| `POST` | `/api/v1/auth/organization` | Sess |
-| `POST` | `/api/v1/auth/2fa/setup`    | Sess |
-| `POST` | `/api/v1/auth/2fa/enable`   | Sess |
-| `POST` | `/api/v1/auth/2fa/disable`  | Sess |
+| Method   | Path                                  | Auth |
+| -------- | ------------------------------------- | ---- |
+| `POST`   | `/api/v1/auth/register`               | Pub  |
+| `POST`   | `/api/v1/auth/login`                  | Pub  |
+| `POST`   | `/api/v1/auth/login/totp`             | Pub  |
+| `POST`   | `/api/v1/auth/logout`                 | Sess |
+| `GET`    | `/api/v1/auth/sessions`               | Sess |
+| `DELETE` | `/api/v1/auth/sessions/:sessionId`    | Sess |
+| `POST`   | `/api/v1/auth/sessions/revoke-others` | Sess |
+| `GET`    | `/api/v1/auth/me`                     | Sess |
+| `POST`   | `/api/v1/auth/organization`           | Sess |
+| `POST`   | `/api/v1/auth/2fa/setup`              | Sess |
+| `POST`   | `/api/v1/auth/2fa/enable`             | Sess |
+| `POST`   | `/api/v1/auth/2fa/disable`            | Sess |
 
 ## Organizations / IAM
 
@@ -52,11 +55,18 @@ Auth legend: **Pub** public · **Sess** session/API key · **Tok** content token
 | `GET/POST`         | `/api/v1/storage/buckets`                                                        |
 | `GET/DELETE`       | `/api/v1/storage/buckets/:bucketId`                                              |
 | `PUT`              | `/api/v1/storage/buckets/:bucketId/versioning`                                   |
+| `GET`              | `/api/v1/storage/buckets/:bucketId/summary`                                      |
 | `GET`              | `/api/v1/storage/buckets/:bucketId/objects`                                      |
+| `POST`             | `/api/v1/storage/buckets/:bucketId/folders`                                      |
+| `POST`             | `/api/v1/storage/folder-operations`                                              |
+| `GET/POST`         | `/api/v1/storage/folder-operations/:jobId` · `/cancel` · `/retry`                |
 | `GET/DELETE`       | `/api/v1/storage/objects/:objectId`                                              |
+| `PATCH`            | `/api/v1/storage/objects/:objectId/metadata`                                     |
+| `GET`              | `/api/v1/storage/buckets/:bucketId/folder-access`                                |
+| `POST/DELETE`      | `/api/v1/storage/folder-access` · `/:ruleId`                                     |
 | `POST`             | `/api/v1/storage/objects/:objectId/download-url`                                 |
 | `POST`             | `/api/v1/storage/objects/:objectId/previews`                                     |
-| `GET`              | `/api/v1/storage/previews/:jobId`                                               |
+| `GET`              | `/api/v1/storage/previews/:jobId`                                                |
 | `GET`              | `/api/v1/storage/objects/:objectId/versions[/:versionId]`                        |
 | `POST/DELETE`      | `/api/v1/storage/objects/:objectId/versions/:versionId/restore` · delete version |
 | `POST`             | `/api/v1/storage/objects/:objectId/copy` · `/move`                               |

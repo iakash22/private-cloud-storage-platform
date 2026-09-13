@@ -65,6 +65,21 @@ describe('object repository listings', () => {
     expect(prefixes).toEqual(['docs/2024/', 'docs/2025/']);
   });
 
+  it('keeps an explicitly created empty folder visible', async () => {
+    const { repository } = repositoryOver(['docs/empty/']);
+
+    const prefixes = await repository.listPrefixes({
+      organizationId: ORG,
+      bucketId: BUCKET,
+      prefix: 'docs/',
+      delimiter: '/',
+      limit: 10,
+      includeFolderMarkers: true,
+    });
+
+    expect(prefixes).toEqual(['docs/empty/']);
+  });
+
   it('returns nothing when no delimiter is supplied', async () => {
     const { repository, findMany } = repositoryOver(['docs/a.pdf']);
 
@@ -76,5 +91,41 @@ describe('object repository listings', () => {
 
     expect(prefixes).toEqual([]);
     expect(findMany).not.toHaveBeenCalled();
+  });
+
+  it('excludes folder marker keys from dashboard object listings', async () => {
+    const { repository, findMany } = repositoryOver([]);
+
+    await repository.list({
+      organizationId: ORG,
+      bucketId: BUCKET,
+      limit: 10,
+    });
+
+    expect(findMany.mock.calls[0]?.[0]).toMatchObject({
+      where: {
+        NOT: { key: { endsWith: '/' } },
+      },
+    });
+  });
+
+  it('adds a case-insensitive key search to listings', async () => {
+    const { repository, findMany } = repositoryOver([]);
+
+    await repository.list({
+      organizationId: ORG,
+      bucketId: BUCKET,
+      search: 'report',
+      limit: 10,
+    });
+
+    expect(findMany.mock.calls[0]?.[0]).toMatchObject({
+      where: {
+        key: {
+          contains: 'report',
+          mode: 'insensitive',
+        },
+      },
+    });
   });
 });

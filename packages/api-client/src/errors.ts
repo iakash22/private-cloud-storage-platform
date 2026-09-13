@@ -25,6 +25,11 @@ export class ApiClientError extends Error {
   readonly status: number;
   readonly requestId?: string;
   readonly fields?: ApiFieldErrors;
+  /**
+   * Set when the client's onUnauthorized handler already handled this 401
+   * (session expiry). Callers should skip duplicate error toasts.
+   */
+  sessionHandled = false;
 
   constructor(
     code: string,

@@ -1,5 +1,5 @@
 import { BucketVersioningStatus, type Bucket, type PrismaClient } from '@vaultstack/database';
-import type { PublicBucket } from '@vaultstack/types';
+import type { PublicBucket, PublicBucketSummary } from '@vaultstack/types';
 import { writeAuditLog } from '../../../lib/audit.js';
 import {
   AppError,
@@ -30,6 +30,7 @@ export interface CreateBucketOptions {
 export interface BucketService {
   list(organizationId: string): Promise<PublicBucket[]>;
   get(organizationId: string, bucketId: string): Promise<PublicBucket>;
+  getSummary(organizationId: string, bucketId: string): Promise<PublicBucketSummary>;
   getByName(organizationId: string, name: string): Promise<PublicBucket>;
   create(
     organizationId: string,
@@ -71,6 +72,71 @@ export function createBucketService(deps: {
         throw storageBucketNotFound();
       }
       return serializeBucket(bucket);
+    },
+
+    async getSummary(organizationId, bucketId) {
+      const resolved = await storage.resolveBucket(organizationId, bucketId);
+      const { bucket, providerRecord } = resolved;
+      const [objects, versions, folders, shares, operations, policies] = await Promise.all([
+        prisma.storageObject.aggregate({
+          where: { organizationId, bucketId, isDeleted: false },
+          _count: { _all: true },
+          _sum: { size: true },
+        }),
+        prisma.objectVersion.count({ where: { organizationId, bucketId } }),
+        prisma.storageObject.count({
+          where: {
+            organizationId,
+            bucketId,
+            isDeleted: false,
+            key: { endsWith: '/' },
+          },
+        }),
+        prisma.shareLink.count({
+          where: {
+            organizationId,
+            object: { bucketId },
+            revokedAt: null,
+            OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+          },
+        }),
+        prisma.folderOperationJob.count({
+          where: {
+            organizationId,
+            bucketId,
+            status: { in: ['QUEUED', 'RUNNING', 'PAUSED'] },
+          },
+        }),
+        prisma.storagePolicy.count({ where: { organizationId, bucketId } }),
+      ]);
+      const config = isRecord(providerRecord.config) ? providerRecord.config : {};
+      const providerStatus = providerRecord.status;
+
+      return {
+        bucket: serializeBucket(bucket),
+        provider: {
+          id: providerRecord.id,
+          name: providerRecord.name,
+          dialect: typeof config.dialect === 'string' ? config.dialect : providerRecord.type,
+          status: providerStatus,
+          isDefault: providerRecord.isDefault,
+        },
+        usage: {
+          objectCount: objects._count._all,
+          totalBytes: Number(objects._sum.size ?? 0n),
+          explicitFolderCount: folders,
+          versionCount: versions,
+        },
+        activeShareCount: shares,
+        activeOperationCount: operations,
+        policyCount: policies,
+        health:
+          providerStatus === 'DISABLED'
+            ? 'DISABLED'
+            : providerStatus === 'DEGRADED'
+              ? 'DEGRADED'
+              : 'HEALTHY',
+      };
     },
 
     async getByName(organizationId, name) {
@@ -216,6 +282,10 @@ export function createBucketService(deps: {
       return serializeBucket(updated);
     },
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }
 
 function normalizeUniqueViolation(error: unknown): unknown {

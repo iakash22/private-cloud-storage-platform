@@ -4,6 +4,7 @@ import {
   completeUploadBodySchema,
   confirmMultipartPartBodySchema,
   createBucketBodySchema,
+  createFolderBodySchema,
   createLifecyclePolicyBodySchema,
   deleteObjectQuerySchema,
   downloadUrlBodySchema,
@@ -14,6 +15,7 @@ import {
   multipartPartDestinationBodySchema,
   multipartPartParamsSchema,
   objectDestinationBodySchema,
+  updateObjectMetadataBodySchema,
   updateBucketVersioningBodySchema,
   updateLifecyclePolicyBodySchema,
   uploadPartQuerySchema,
@@ -62,6 +64,32 @@ export class StorageController extends StorageScopedController {
     },
   );
 
+  getBucketSummary: AsyncRouteHandler = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const summary = await this.container.storage.buckets.getSummary(
+        this.organizationId(req),
+        routeParam(req, 'bucketId'),
+      );
+      this.ok(res, { summary });
+    },
+  );
+
+  createFolder: AsyncRouteHandler = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const auth = this.requireAuth(req);
+      const body = readBody(req, createFolderBodySchema);
+      const folder = await this.container.storage.objects.createFolder(
+        this.organizationId(req),
+        routeParam(req, 'bucketId'),
+        body.name,
+        body.parentPrefix ?? '',
+        auth.user.id,
+        requestMeta(req),
+      );
+      this.created(res, { folder });
+    },
+  );
+
   removeBucket: AsyncRouteHandler = asyncHandler(
     async (req: Request, res: Response): Promise<void> => {
       const auth = this.requireAuth(req);
@@ -98,6 +126,7 @@ export class StorageController extends StorageScopedController {
         routeParam(req, 'bucketId'),
         {
           prefix: query.prefix,
+          search: query.search,
           delimiter: query.delimiter,
           limit: query.limit ?? 100,
           cursor: query.cursor,
@@ -112,6 +141,21 @@ export class StorageController extends StorageScopedController {
       const object = await this.container.storage.objects.get(
         this.organizationId(req),
         routeParam(req, 'objectId'),
+      );
+      this.ok(res, { object });
+    },
+  );
+
+  updateObjectMetadata: AsyncRouteHandler = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const auth = this.requireAuth(req);
+      const body = readBody(req, updateObjectMetadataBodySchema);
+      const object = await this.container.storage.objects.updateMetadata(
+        this.organizationId(req),
+        routeParam(req, 'objectId'),
+        body,
+        auth.user.id,
+        requestMeta(req),
       );
       this.ok(res, { object });
     },

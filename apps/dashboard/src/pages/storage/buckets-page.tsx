@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import {
   BucketDetails,
   Button,
@@ -12,12 +13,24 @@ import {
   DialogActions,
   EmptyState,
   FieldError,
+  formatBytes,
   Input,
   Label,
   PageHeader,
   Select,
 } from '@vaultstack/ui';
-import { Database } from 'lucide-react';
+import {
+  Activity,
+  Archive,
+  Database,
+  FolderOpen,
+  HardDrive,
+  Link2,
+  ScrollText,
+  Share2,
+  Workflow,
+} from 'lucide-react';
+import type { PublicBucketSummary } from '@vaultstack/types';
 import { createBucketBodySchema, parseForm } from '@vaultstack/validation';
 import { useAuth } from '../../context/auth-context.js';
 import { useBuckets, useStorageProviders } from '../../hooks/use-storage.js';
@@ -36,9 +49,41 @@ export function BucketsPage() {
   const [deleteTarget, setDeleteTarget] = useState<string | undefined>();
   const [selectedBucketId, setSelectedBucketId] = useState<string | undefined>();
   const [enableVersioning, setEnableVersioning] = useState(false);
+  const [summary, setSummary] = useState<PublicBucketSummary>();
+  const [summaryLoading, setSummaryLoading] = useState(false);
 
   const selectedBucket = buckets.find((bucket) => bucket.id === selectedBucketId) ?? buckets[0];
   const defaultProvider = providers.find((provider) => provider.isDefault) ?? providers[0];
+
+  useEffect(() => {
+    if (!selectedBucket) {
+      setSummary(undefined);
+      return;
+    }
+    let cancelled = false;
+    setSummaryLoading(true);
+    void apiClient
+      .getBucketSummary(selectedBucket.id)
+      .then((next) => {
+        if (!cancelled) {
+          setSummary(next);
+        }
+      })
+      .catch((caught: unknown) => {
+        if (!cancelled) {
+          setSummary(undefined);
+          catchError(caught);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setSummaryLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [catchError, selectedBucket]);
 
   const handleCreate = async () => {
     const body = validate(
@@ -97,7 +142,12 @@ export function BucketsPage() {
         icon={<Database className="h-5 w-5" aria-hidden="true" />}
         actions={
           canUploadStorage(permissions) ? (
-            <Button type="button" onClick={() => setCreateOpen(true)}>
+            <Button
+              type="button"
+              onClick={() => {
+                setCreateOpen(true);
+              }}
+            >
               Create bucket
             </Button>
           ) : null
@@ -140,7 +190,9 @@ export function BucketsPage() {
                   }}
                 >
                   <div className="min-w-0">
-                    <p className={`truncate font-medium ${selected ? 'text-white' : 'text-slate-900'}`}>
+                    <p
+                      className={`truncate font-medium ${selected ? 'text-white' : 'text-slate-900'}`}
+                    >
                       {bucket.name}
                     </p>
                     <p className={`text-xs ${selected ? 'text-slate-300' : 'text-slate-500'}`}>
@@ -152,7 +204,11 @@ export function BucketsPage() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      className={selected ? 'border-slate-600 bg-transparent text-white hover:bg-slate-800' : ''}
+                      className={
+                        selected
+                          ? 'border-slate-600 bg-transparent text-white hover:bg-slate-800'
+                          : ''
+                      }
                       onClick={(event) => {
                         event.stopPropagation();
                         setDeleteTarget(bucket.id);
@@ -169,6 +225,96 @@ export function BucketsPage() {
 
         <div className="space-y-4">
           <BucketDetails bucket={selectedBucket} />
+          {selectedBucket ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Bucket control center</CardTitle>
+                <CardDescription>
+                  {summaryLoading
+                    ? 'Refreshing bucket health…'
+                    : `${summary?.provider.name ?? 'Provider'} · ${summary?.health ?? 'Unknown'}`}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {summary ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      <SummaryMetric
+                        icon={<HardDrive className="h-4 w-4" aria-hidden="true" />}
+                        label="Objects"
+                        value={String(summary.usage.objectCount)}
+                      />
+                      <SummaryMetric
+                        icon={<FolderOpen className="h-4 w-4" aria-hidden="true" />}
+                        label="Folders"
+                        value={String(summary.usage.explicitFolderCount)}
+                      />
+                      <SummaryMetric
+                        icon={<Share2 className="h-4 w-4" aria-hidden="true" />}
+                        label="Active shares"
+                        value={String(summary.activeShareCount)}
+                      />
+                      <SummaryMetric
+                        icon={<Workflow className="h-4 w-4" aria-hidden="true" />}
+                        label="Jobs"
+                        value={String(summary.activeOperationCount)}
+                      />
+                    </div>
+                    <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                      {formatBytes(summary.usage.totalBytes)} stored · {summary.usage.versionCount}{' '}
+                      versions · {summary.policyCount} policies
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Link
+                        to={`/storage/files?bucket=${selectedBucket.id}`}
+                        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        <FolderOpen className="h-4 w-4" aria-hidden="true" />
+                        Browse files
+                      </Link>
+                      <Link
+                        to="/storage/providers"
+                        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        <Link2 className="h-4 w-4" aria-hidden="true" />
+                        Provider
+                      </Link>
+                      <Link
+                        to="/activity"
+                        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        <Activity className="h-4 w-4" aria-hidden="true" />
+                        Activity
+                      </Link>
+                      <Link
+                        to="/storage/shares"
+                        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        <Share2 className="h-4 w-4" aria-hidden="true" />
+                        Shares
+                      </Link>
+                      <Link
+                        to="/storage/policies"
+                        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        <ScrollText className="h-4 w-4" aria-hidden="true" />
+                        Policies
+                      </Link>
+                      <Link
+                        to="/backups"
+                        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        <Archive className="h-4 w-4" aria-hidden="true" />
+                        Backups
+                      </Link>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-slate-500">Bucket summary unavailable.</p>
+                )}
+              </CardContent>
+            </Card>
+          ) : null}
           {selectedBucket && canUploadStorage(permissions) ? (
             <div className="flex flex-wrap gap-2">
               {selectedBucket.versioning !== 'ENABLED' ? (
@@ -255,7 +401,9 @@ export function BucketsPage() {
             type="checkbox"
             className="h-4 w-4 rounded border-slate-300"
             checked={enableVersioning}
-            onChange={(event) => setEnableVersioning(event.target.checked)}
+            onChange={(event) => {
+              setEnableVersioning(event.target.checked);
+            }}
           />
           Enable versioning
         </label>
@@ -272,6 +420,18 @@ export function BucketsPage() {
         }}
         onConfirm={() => void handleDelete()}
       />
+    </div>
+  );
+}
+
+function SummaryMetric({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2">
+      <div className="flex items-center gap-2 text-slate-500">
+        {icon}
+        <span className="text-xs">{label}</span>
+      </div>
+      <p className="mt-1 text-lg font-semibold text-slate-900">{value}</p>
     </div>
   );
 }

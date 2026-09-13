@@ -6,16 +6,23 @@ import {
   type AuthTotpChallengePayload,
   type TotpEnablePayload,
   type TotpSetupPayload,
+  type PublicAuthSession,
+  type PublicAuthSessionList,
   type HealthResponse,
   type InitiatedUpload,
   type MultipartPartTransferDescriptor,
   type MultipartUploadStatusName,
   type PublicBucket,
+  type PublicBucketSummary,
   type PublicMultipartPart,
   type PublicMultipartSession,
   type PublicMultipartSessionDetail,
   type PublicMultipartSessionListPage,
   type PublicObjectListPage,
+  type PublicFolderOperationJob,
+  type PublicFolderAccessRule,
+  type FolderAccessRole,
+  type FolderOperationName,
   type PublicObjectVersion,
   type PublicObjectVersionListPage,
   type PublicPresignedUrl,
@@ -94,6 +101,7 @@ export interface RequestOptions {
 
 export interface ListObjectsParams {
   prefix?: string;
+  search?: string;
   delimiter?: string;
   limit?: number;
   cursor?: string;
@@ -225,6 +233,26 @@ export class VaultStackApiClient {
 
   async disableTotp(input: { password: string; code: string }): Promise<{ user: PublicUser }> {
     return this.request<{ user: PublicUser }>('POST', '/api/v1/auth/2fa/disable', { body: input });
+  }
+
+  async listSessions(): Promise<PublicAuthSession[]> {
+    const result = await this.request<PublicAuthSessionList>('GET', '/api/v1/auth/sessions');
+    return result.sessions;
+  }
+
+  async revokeSession(sessionId: string): Promise<{ revokedCurrent: boolean }> {
+    const result = await this.request<{ revokedCurrent: boolean }>(
+      'DELETE',
+      `/api/v1/auth/sessions/${encodeURIComponent(sessionId)}`,
+    );
+    if (result.revokedCurrent) {
+      this.clearSession();
+    }
+    return result;
+  }
+
+  async revokeOtherSessions(): Promise<{ revokedCount: number }> {
+    return this.request<{ revokedCount: number }>('POST', '/api/v1/auth/sessions/revoke-others');
   }
 
   async logout(): Promise<void> {
@@ -360,6 +388,14 @@ export class VaultStackApiClient {
     return result.bucket;
   }
 
+  async getBucketSummary(bucketId: string): Promise<PublicBucketSummary> {
+    const result = await this.request<{ summary: PublicBucketSummary }>(
+      'GET',
+      `/api/v1/storage/buckets/${bucketId}/summary`,
+    );
+    return result.summary;
+  }
+
   async listObjects(
     bucketId: string,
     params: ListObjectsParams = {},
@@ -367,6 +403,9 @@ export class VaultStackApiClient {
     const search = new URLSearchParams();
     if (params.prefix) {
       search.set('prefix', params.prefix);
+    }
+    if (params.search) {
+      search.set('search', params.search);
     }
     if (params.delimiter) {
       search.set('delimiter', params.delimiter);
@@ -383,10 +422,99 @@ export class VaultStackApiClient {
     return this.request<PublicObjectListPage>('GET', path);
   }
 
+  async createFolder(
+    bucketId: string,
+    input: { name: string; parentPrefix?: string },
+  ): Promise<PublicStorageObject> {
+    const result = await this.request<{ folder: PublicStorageObject }>(
+      'POST',
+      `/api/v1/storage/buckets/${bucketId}/folders`,
+      { body: input },
+    );
+    return result.folder;
+  }
+
+  async createFolderOperation(input: {
+    bucketId: string;
+    operation: FolderOperationName;
+    sourcePrefix: string;
+    destinationPrefix?: string;
+  }): Promise<PublicFolderOperationJob> {
+    const result = await this.request<{ job: PublicFolderOperationJob }>(
+      'POST',
+      '/api/v1/storage/folder-operations',
+      { body: input },
+    );
+    return result.job;
+  }
+
+  async getFolderOperation(jobId: string): Promise<PublicFolderOperationJob> {
+    const result = await this.request<{ job: PublicFolderOperationJob }>(
+      'GET',
+      `/api/v1/storage/folder-operations/${jobId}`,
+    );
+    return result.job;
+  }
+
+  async cancelFolderOperation(jobId: string): Promise<void> {
+    await this.request<undefined>('POST', `/api/v1/storage/folder-operations/${jobId}/cancel`);
+  }
+
+  async retryFolderOperation(jobId: string): Promise<PublicFolderOperationJob> {
+    const result = await this.request<{ job: PublicFolderOperationJob }>(
+      'POST',
+      `/api/v1/storage/folder-operations/${jobId}/retry`,
+    );
+    return result.job;
+  }
+
+  async listFolderAccessRules(
+    bucketId: string,
+    prefix?: string,
+  ): Promise<PublicFolderAccessRule[]> {
+    const search = prefix ? `?prefix=${encodeURIComponent(prefix)}` : '';
+    const result = await this.request<{ rules: PublicFolderAccessRule[] }>(
+      'GET',
+      `/api/v1/storage/buckets/${bucketId}/folder-access${search}`,
+    );
+    return result.rules;
+  }
+
+  async createFolderAccessRule(input: {
+    bucketId: string;
+    prefix: string;
+    role: FolderAccessRole;
+    userId?: string;
+    teamId?: string;
+  }): Promise<PublicFolderAccessRule> {
+    const result = await this.request<{ rule: PublicFolderAccessRule }>(
+      'POST',
+      '/api/v1/storage/folder-access',
+      { body: input },
+    );
+    return result.rule;
+  }
+
+  async deleteFolderAccessRule(ruleId: string): Promise<void> {
+    await this.request<undefined>('DELETE', `/api/v1/storage/folder-access/${ruleId}`);
+  }
+
   async getObject(objectId: string): Promise<PublicStorageObject> {
     const result = await this.request<{ object: PublicStorageObject }>(
       'GET',
       `/api/v1/storage/objects/${objectId}`,
+    );
+    return result.object;
+  }
+
+  async updateObjectMetadata(
+    objectId: string,
+    input: { description?: string | null; tags?: string[] },
+  ): Promise<PublicStorageObject> {
+    const result = await this.request<{ object: PublicStorageObject }>(
+      'PATCH',
+      `/api/v1/storage/objects/${objectId}/metadata`,
+      { body: input },
     );
     return result.object;
   }
@@ -1654,6 +1782,7 @@ export class VaultStackApiClient {
     if (!response.ok) {
       const error = await ApiClientError.fromResponse(response);
       if (error.status === 401 && shouldEmitUnauthorized(path) && this.onUnauthorized) {
+        error.sessionHandled = true;
         this.onUnauthorized(error);
       }
       throw error;

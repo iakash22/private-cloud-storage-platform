@@ -6,6 +6,7 @@ export { CalendarRange, type CalendarRangeProps } from './components/calendar-ra
 export { DateField, type DateFieldProps } from './components/date-field.js';
 export { Select, type SelectOption, type SelectProps } from './components/select.js';
 export { Input } from './components/input.js';
+export { PasswordInput, type PasswordInputProps } from './components/password-input.js';
 export { Label } from './components/label.js';
 export { FieldError, FormField } from './components/field-error.js';
 export { Badge } from './components/badge.js';

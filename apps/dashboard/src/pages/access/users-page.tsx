@@ -12,6 +12,7 @@ import {
   Input,
   Label,
   PageHeader,
+  PasswordInput,
   Select,
 } from '@vaultstack/ui';
 import { Users } from 'lucide-react';
@@ -258,9 +259,9 @@ export function UsersPage() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="user-password">Password</Label>
-            <Input
+            <PasswordInput
               id="user-password"
-              type="password"
+              autoComplete="new-password"
               value={password}
               aria-invalid={Boolean(fieldErrors.password)}
               onChange={(event) => setPassword(event.target.value)}

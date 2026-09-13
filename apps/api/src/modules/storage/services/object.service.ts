@@ -1,4 +1,4 @@
-import type { Readable } from 'node:stream';
+import { Readable } from 'node:stream';
 import { ChecksumAlgorithm, type PrismaClient, type StorageObject } from '@vaultstack/database';
 import type { Logger } from '@vaultstack/logger';
 import type {
@@ -6,6 +6,7 @@ import type {
   PublicObjectVersion,
   PublicObjectVersionListPage,
   PublicPresignedUrl,
+  PublicStorageFolder,
   PublicStorageObject,
 } from '@vaultstack/types';
 import { writeAuditLog } from '../../../lib/audit.js';
@@ -18,7 +19,12 @@ import {
 } from '../../../lib/errors.js';
 import { serializeObjectVersion, serializeStorageObject } from '../mappers/storage.mapper.js';
 import { ObjectTooLargeError } from '../domain/integrity.js';
-import { assertValidKeyPrefix, assertValidObjectKey } from '../domain/object-key.js';
+import {
+  assertValidKeyPrefix,
+  assertValidObjectKey,
+  buildFolderMarkerKey,
+  assertValidFolderMarkerKey,
+} from '../domain/object-key.js';
 import type { GetObjectResult } from '../domain/storage.types.js';
 import { usesDeleteMarkers } from '../domain/versioning.js';
 import type { ObjectRepository } from '../repositories/object.repository.js';
@@ -40,11 +46,16 @@ export interface PutObjectOptions {
   expectedChecksumSha256?: string;
   signal?: AbortSignal;
   userId: string | null;
+  allowFolderMarker?: boolean;
+  auditAction?: string;
+  auditMeta?: RequestMeta;
 }
 
 export interface ListOptions {
   prefix?: string;
+  search?: string;
   delimiter?: string;
+  includeFolderMarkers?: boolean;
   limit: number;
   cursor?: string;
 }
@@ -56,7 +67,22 @@ export interface ObjectService {
     options: ListOptions,
   ): Promise<PublicObjectListPage>;
   get(organizationId: string, objectId: string): Promise<PublicStorageObject>;
+  updateMetadata(
+    organizationId: string,
+    objectId: string,
+    input: { description?: string | null; tags?: string[] },
+    userId: string,
+    meta: RequestMeta,
+  ): Promise<PublicStorageObject>;
   findByKey(organizationId: string, bucketId: string, key: string): Promise<PublicStorageObject>;
+  createFolder(
+    organizationId: string,
+    bucketId: string,
+    name: string,
+    parentPrefix: string,
+    userId: string,
+    meta: RequestMeta,
+  ): Promise<PublicStorageObject>;
   put(options: PutObjectOptions): Promise<PublicStorageObject>;
   openDownload(
     organizationId: string,
@@ -100,6 +126,7 @@ export interface ObjectService {
     objectId: string;
     destinationBucketId: string;
     destinationKey: string;
+    allowFolderMarker?: boolean;
     userId: string;
     meta: RequestMeta;
   }): Promise<PublicStorageObject>;
@@ -108,6 +135,7 @@ export interface ObjectService {
     objectId: string;
     destinationBucketId: string;
     destinationKey: string;
+    allowFolderMarker?: boolean;
     userId: string;
     meta: RequestMeta;
   }): Promise<PublicStorageObject>;
@@ -237,19 +265,35 @@ export function createObjectService(deps: {
         organizationId,
         bucketId,
         prefix,
+        search: options.search,
         delimiter: options.delimiter,
         limit: Math.min(options.limit, 1000),
         cursorKey: options.cursor,
+        includeFolderMarkers: options.includeFolderMarkers,
       };
 
       const [page, prefixes] = await Promise.all([
         objects.list(query),
-        options.delimiter ? objects.listPrefixes(query) : Promise.resolve([]),
+        options.delimiter
+          ? objects.listPrefixes({ ...query, includeFolderMarkers: true })
+          : Promise.resolve([]),
       ]);
+      const delimiter = options.delimiter ?? '/';
+      const folders: PublicStorageFolder[] = prefixes.map((folderPrefix) => ({
+        name:
+          folderPrefix
+            .slice(prefix?.length ?? 0, -delimiter.length)
+            .split('/')
+            .filter(Boolean)
+            .at(-1) ?? folderPrefix,
+        prefix: folderPrefix,
+        objectCount: null,
+      }));
 
       return {
         objects: page.objects.map(serializeStorageObject),
         prefixes,
+        folders,
         nextCursor: page.nextCursor,
         isTruncated: page.isTruncated,
       };
@@ -258,6 +302,40 @@ export function createObjectService(deps: {
     async get(organizationId, objectId) {
       const { object } = await requireLiveObject(organizationId, objectId);
       return serializeStorageObject(object);
+    },
+
+    async updateMetadata(organizationId, objectId, input, userId, meta) {
+      const object = await objects.findById(organizationId, objectId);
+      if (!object) {
+        throw storageObjectNotFound();
+      }
+      const existing = isStringRecord(object.metadata) ? object.metadata : {};
+      const metadata: Record<string, string> = { ...existing };
+      if (input.description !== undefined) {
+        if (input.description === null || input.description.length === 0) {
+          delete metadata.description;
+        } else {
+          metadata.description = input.description;
+        }
+      }
+      if (input.tags !== undefined) {
+        metadata.tags = JSON.stringify([...new Set(input.tags)]);
+      }
+      const updated = await prisma.storageObject.update({
+        where: { id: objectId },
+        data: { metadata },
+      });
+      await writeAuditLog(prisma, {
+        organizationId,
+        userId,
+        action: 'storage.object.metadata_updated',
+        resourceType: 'object',
+        resourceId: objectId,
+        metadata: { bucketId: object.bucketId, key: object.key },
+        ipAddress: meta.ipAddress,
+        userAgent: meta.userAgent,
+      });
+      return serializeStorageObject(updated);
     },
 
     async findByKey(organizationId, bucketId, key) {
@@ -269,8 +347,31 @@ export function createObjectService(deps: {
       return serializeStorageObject(object);
     },
 
+    async createFolder(organizationId, bucketId, name, parentPrefix, userId, meta) {
+      const key = buildFolderMarkerKey(parentPrefix, name, limits.maxKeyLength);
+      const existing = await objects.findByKey(organizationId, bucketId, key);
+      if (existing && !existing.isDeleted) {
+        return serializeStorageObject(existing);
+      }
+      return service.put({
+        organizationId,
+        bucketId,
+        key,
+        body: Readable.from([]),
+        contentType: 'application/x-directory',
+        expectedSize: 0,
+        metadata: { folderMarker: 'true' },
+        userId,
+        allowFolderMarker: true,
+        auditAction: 'storage.folder.created',
+        auditMeta: meta,
+      });
+    },
+
     async put(options) {
-      const key = assertValidObjectKey(options.key, limits.maxKeyLength);
+      const key = options.allowFolderMarker
+        ? assertValidFolderMarkerKey(options.key, limits.maxKeyLength)
+        : assertValidObjectKey(options.key, limits.maxKeyLength);
       assertMetadataSize(options.metadata, limits.maxMetadataBytes);
 
       if (options.expectedSize !== undefined && options.expectedSize > limits.maxObjectSizeBytes) {
@@ -407,10 +508,12 @@ export function createObjectService(deps: {
       await writeAuditLog(prisma, {
         organizationId: options.organizationId,
         userId: options.userId,
-        action: 'storage.object.uploaded',
+        action: options.auditAction ?? 'storage.object.uploaded',
         resourceType: 'object',
         resourceId: saved.id,
         metadata: { bucketId: options.bucketId, key, size: result.size },
+        ipAddress: options.auditMeta?.ipAddress,
+        userAgent: options.auditMeta?.userAgent,
       });
 
       return serializeStorageObject(saved);
@@ -721,7 +824,9 @@ export function createObjectService(deps: {
 
     async copy(input) {
       const source = await requireLiveObject(input.organizationId, input.objectId);
-      const destinationKey = assertValidObjectKey(input.destinationKey, limits.maxKeyLength);
+      const destinationKey = input.allowFolderMarker
+        ? assertValidFolderMarkerKey(input.destinationKey, limits.maxKeyLength)
+        : assertValidObjectKey(input.destinationKey, limits.maxKeyLength);
       const destination = await storage.resolveBucket(
         input.organizationId,
         input.destinationBucketId,
@@ -808,7 +913,9 @@ export function createObjectService(deps: {
      */
     async move(input) {
       const source = await requireLiveObject(input.organizationId, input.objectId);
-      const destinationKey = assertValidObjectKey(input.destinationKey, limits.maxKeyLength);
+      const destinationKey = input.allowFolderMarker
+        ? assertValidFolderMarkerKey(input.destinationKey, limits.maxKeyLength)
+        : assertValidObjectKey(input.destinationKey, limits.maxKeyLength);
 
       if (source.object.bucketId === input.destinationBucketId) {
         const clash = await objects.findByKey(
@@ -862,6 +969,14 @@ export function createObjectService(deps: {
   };
 
   return service;
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Object.values(value).every((entry) => typeof entry === 'string')
+  );
 }
 
 function checkIntegrity(
