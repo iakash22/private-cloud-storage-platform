@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { ApiClientError } from '@vaultstack/api-client';
+import { useToast } from '@vaultstack/ui';
 import type {
   AuthLoginResult,
   AuthSessionPayload,
@@ -18,6 +19,7 @@ import type {
   PublicUser,
 } from '@vaultstack/types';
 import { apiClient } from '../lib/api.js';
+import { parseRequestError } from '../lib/form-errors.js';
 import { clearMultipartSessions, emitSessionCleared } from '../lib/session-events.js';
 
 interface AuthContextValue {
@@ -28,7 +30,6 @@ interface AuthContextValue {
   currentSessionId: string | null;
   permissions: string[];
   loading: boolean;
-  error: string | null;
   login: (input: { email: string; password: string }) => Promise<AuthLoginResult>;
   verifyTotp: (input: { challengeToken: string; code: string }) => Promise<void>;
   register: (input: {
@@ -66,9 +67,9 @@ function isTotpChallenge(payload: AuthLoginResult): payload is AuthTotpChallenge
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const toast = useToast();
   const [session, setSession] = useState<AuthSessionPayload | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const sessionRef = useRef<AuthSessionPayload | null>(null);
 
   const applySession = useCallback((payload: AuthSessionPayload | null) => {
@@ -89,7 +90,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const clearLocalAuthState = useCallback(() => {
     applySession(null);
-    setError(null);
     clearMultipartSessions();
     emitSessionCleared();
   }, [applySession]);
@@ -99,26 +99,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!silent) {
       setLoading(true);
     }
-    setError(null);
 
     try {
       const payload = await apiClient.me();
       applySession(payload);
     } catch (caught) {
       applySession(null);
+      // No cookie / expired session is normal on the login screen — stay quiet.
       if (!(caught instanceof ApiClientError) || caught.status !== 401) {
-        if (caught instanceof ApiClientError && caught.status >= 500) {
-          setError('Internal server error');
-        } else {
-          setError(caught instanceof Error ? caught.message : 'Unable to load session');
-        }
+        const parsed = parseRequestError(caught);
+        toast.error(parsed.message);
       }
     } finally {
       if (!silent) {
         setLoading(false);
       }
     }
-  }, [applySession]);
+  }, [applySession, toast]);
 
   useEffect(() => {
     void refresh();
@@ -193,7 +190,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       currentSessionId: session?.currentSessionId ?? null,
       permissions,
       loading,
-      error,
       login,
       verifyTotp,
       register,
@@ -205,7 +201,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [
     session,
     loading,
-    error,
     login,
     verifyTotp,
     register,

@@ -98,10 +98,15 @@ provider credentials to browser code.
 
 ## Dashboard UX
 
-| Package              | Where            | Why                                                                             |
-| -------------------- | ---------------- | ------------------------------------------------------------------------------- |
-| `react-helmet-async` | `apps/dashboard` | Route-aware browser titles and metadata without mutating document head manually |
-| `lucide-react`       | `apps/dashboard` | Consistent accessible navigation and page icons                                 |
-| `highlight.js`       | `apps/dashboard` | Safe generated syntax highlighting for text/code share previews                 |
-| `recharts`           | `apps/dashboard` | Responsive time-series charts for API-backed infrastructure monitoring          |
+| Package                | Where            | Why                                                                             |
+| ---------------------- | ---------------- | ------------------------------------------------------------------------------- |
+| `react-helmet-async`   | `apps/dashboard` | Route-aware browser titles and metadata without mutating document head manually |
+| `lucide-react`         | `apps/dashboard` | Consistent accessible navigation and page icons                                 |
+| `highlight.js`         | `apps/dashboard` | Safe generated syntax highlighting for text/code share previews                 |
+| `recharts`             | `apps/dashboard` | Responsive time-series charts for API-backed infrastructure monitoring          |
 | `fflate`             | `apps/api`       | Bounded ZIP/TAR.GZ archive inspection without extracting members publicly       |
+
+Dashboard toasts in `@vaultstack/ui` follow the shadcn toast layout (typed title, message, Lucide
+status icon, dismiss control) using existing `lucide-react` / `class-variance-authority` — no extra
+toast library. Call sites keep `useToast().error()` / `.success()`.
+

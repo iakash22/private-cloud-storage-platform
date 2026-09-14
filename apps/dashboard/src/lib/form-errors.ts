@@ -89,13 +89,14 @@ export function useFormSubmit() {
       }
 
       const fields = parsed.fields;
-      if (Object.keys(fields).length > 0) {
+      const hasFieldErrors = Object.keys(fields).length > 0;
+      if (hasFieldErrors) {
         setFieldErrors(fields);
-      } else {
-        setFieldErrors({});
+        return;
       }
 
-      toast.error(parsed.message || 'Request failed');
+      setFieldErrors({});
+      toast.error(parsed.message);
     },
     [toast],
   );

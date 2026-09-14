@@ -163,7 +163,7 @@ function SignupFields({
  * Both `/login` and `/signup` render this so the shell never remounts harshly.
  */
 export function AuthGatePage() {
-  const { user, loading, error, login, verifyTotp, register } = useAuth();
+  const { user, loading, login, verifyTotp, register } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const mode = modeFromPath(location.pathname);
@@ -388,12 +388,6 @@ export function AuthGatePage() {
           Use a different account
         </button>
       </form>
-    );
-  } else if (error) {
-    badge = (
-      <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950">
-        {error}. You can still sign in below.
-      </div>
     );
   }
 

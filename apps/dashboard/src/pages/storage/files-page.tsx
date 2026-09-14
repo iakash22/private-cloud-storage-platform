@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   BucketSelector,
@@ -64,6 +64,7 @@ export function FilesPage() {
     searchParams.get('bucket') ?? getSelectedBucketId(),
   );
   const [prefix, setPrefix] = useState(searchParams.get('prefix') ?? '');
+  const pendingPrefixRef = useRef<string | null>(null);
   const [search, setSearch] = useState(searchParams.get('search') ?? '');
   const [filters, setFilters] = useState<PublicObjectListFilters>(() => ({
     contentType: searchParams.get('contentType') ?? undefined,
@@ -196,10 +197,22 @@ export function FilesPage() {
     if (nextBucketId && nextBucketId !== bucketId) {
       setBucketId(nextBucketId);
     }
+    if (pendingPrefixRef.current !== null) {
+      if (pendingPrefixRef.current === nextPrefix) {
+        pendingPrefixRef.current = null;
+      }
+      return;
+    }
     if (nextPrefix !== prefix) {
       setPrefix(nextPrefix);
     }
   }, [bucketId, prefix, searchParams]);
+
+  const navigatePrefix = useCallback((nextPrefix: string) => {
+    pendingPrefixRef.current = nextPrefix;
+    setPrefix(nextPrefix);
+    setSelectedEntry(undefined);
+  }, []);
 
   useEffect(() => {
     if (!bucketId) {
@@ -297,8 +310,7 @@ export function FilesPage() {
 
   const handleOpen = (entry: ExplorerEntry) => {
     if (entry.kind === 'folder') {
-      setPrefix(entry.key);
-      setSelectedEntry(undefined);
+      navigatePrefix(entry.key);
       return;
     }
 
@@ -623,7 +635,7 @@ export function FilesPage() {
             onSortDirectionChange={setSortDirection}
             selectedId={selectedEntry?.id}
             favoriteIds={favoriteIds}
-            onNavigatePrefix={setPrefix}
+            onNavigatePrefix={navigatePrefix}
             onSelect={setSelectedEntry}
             onOpen={handleOpen}
             onDownload={

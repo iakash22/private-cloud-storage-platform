@@ -75,4 +75,11 @@ describe('parseRequestError', () => {
   it('falls back to a generic message for unknown failures', () => {
     expect(parseRequestError({})).toEqual({ message: 'Request failed', fields: {} });
   });
+
+  it('maps network failures to their Error message for toasts', () => {
+    expect(parseRequestError(new Error('Failed to fetch'))).toEqual({
+      message: 'Failed to fetch',
+      fields: {},
+    });
+  });
 });

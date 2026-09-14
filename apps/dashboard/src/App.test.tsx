@@ -13,7 +13,6 @@ vi.mock('./context/auth-context.js', () => ({
     activeOrganizationId: null,
     permissions: [],
     loading: false,
-    error: null,
     login: vi.fn(),
     verifyTotp: vi.fn(),
     register: vi.fn(),
