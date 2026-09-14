@@ -100,7 +100,7 @@ export function ArtifactsProjectsPage() {
         icon={<Package className="h-5 w-5" aria-hidden="true" />}
         actions={
           canUpload ? (
-            <Button type="button" onClick={() => setCreateOpen(true)}>
+            <Button type="button" onClick={() => { setCreateOpen(true); }}>
               Create project
             </Button>
           ) : null
@@ -144,7 +144,7 @@ export function ArtifactsProjectsPage() {
                     type="button"
                     size="sm"
                     variant="outline"
-                    onClick={() => setDeleteId(project.id)}
+                    onClick={() => { setDeleteId(project.id); }}
                   >
                     Delete
                   </Button>
@@ -164,7 +164,7 @@ export function ArtifactsProjectsPage() {
           <DialogActions
             confirmLabel="Create"
             confirmDisabled={false}
-            onCancel={() => setCreateOpen(false)}
+            onCancel={() => { setCreateOpen(false); }}
             onConfirm={() => void handleCreate()}
           />
         }
@@ -176,7 +176,7 @@ export function ArtifactsProjectsPage() {
               id="project-name"
               value={name}
               aria-invalid={Boolean(fieldErrors.name)}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) => { setName(event.target.value); }}
             />
             <FieldError message={fieldErrors.name} />
           </div>
@@ -186,7 +186,7 @@ export function ArtifactsProjectsPage() {
               id="project-slug"
               value={slug}
               aria-invalid={Boolean(fieldErrors.slug)}
-              onChange={(event) => setSlug(event.target.value)}
+              onChange={(event) => { setSlug(event.target.value); }}
             />
             <FieldError message={fieldErrors.slug} />
           </div>
@@ -195,7 +195,7 @@ export function ArtifactsProjectsPage() {
             <Input
               id="project-description"
               value={description}
-              onChange={(event) => setDescription(event.target.value)}
+              onChange={(event) => { setDescription(event.target.value); }}
             />
           </div>
           <div>
@@ -204,7 +204,7 @@ export function ArtifactsProjectsPage() {
               id="project-retention"
               inputMode="numeric"
               value={retentionDays}
-              onChange={(event) => setRetentionDays(event.target.value)}
+              onChange={(event) => { setRetentionDays(event.target.value); }}
             />
           </div>
         </div>

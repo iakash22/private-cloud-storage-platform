@@ -42,12 +42,20 @@ export function Dialog({
     }
 
     if (!dialog.open) {
-      dialog.showModal();
+      if (typeof dialog.showModal === 'function') {
+        dialog.showModal();
+      } else {
+        dialog.setAttribute('open', '');
+      }
     }
 
     return () => {
       if (dialog.open) {
-        dialog.close();
+        if (typeof dialog.close === 'function') {
+          dialog.close();
+        } else {
+          dialog.removeAttribute('open');
+        }
       }
     };
   }, [open]);
@@ -130,7 +138,7 @@ export function DialogActions({
   confirmVariant = 'default',
 }: {
   onCancel: () => void;
-  onConfirm: () => void | Promise<unknown>;
+  onConfirm: () => unknown;
   confirmLabel?: string;
   cancelLabel?: string;
   confirmDisabled?: boolean;

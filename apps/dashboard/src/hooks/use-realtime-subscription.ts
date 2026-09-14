@@ -9,7 +9,7 @@ export function useRealtimeSubscription(
     const allowed = new Set(types);
     const listener = (event: Event): void => {
       const detail = (event as CustomEvent<RealtimeEvent>).detail;
-      if (!detail || !allowed.has(detail.type)) {
+      if (!allowed.has(detail.type)) {
         return;
       }
       handler(detail);

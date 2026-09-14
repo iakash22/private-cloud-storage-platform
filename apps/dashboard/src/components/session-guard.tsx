@@ -25,7 +25,7 @@ export function SessionGuard({ children }: { children: ReactNode }) {
       if (hadSession) {
         toast.error('Your session has expired. Please sign in again.');
       }
-      navigate('/login', { replace: true });
+      void navigate('/login', { replace: true });
       handlingRef.current = false;
     });
 

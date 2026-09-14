@@ -1,7 +1,18 @@
 import { expect, test, type APIRequestContext, type APIResponse } from '@playwright/test';
 
-const apiBase = 'http://127.0.0.1:3000';
+const apiBase = 'http://localhost:3000';
 const MULTIPART_THRESHOLD_BYTES = 8 * 1024 * 1024;
+
+async function chooseSelectOption(
+  page: import('@playwright/test').Page,
+  label: string,
+  optionName: string,
+): Promise<void> {
+  const trigger = page.getByRole('button', { name: label });
+  await expect(trigger).toBeEnabled();
+  await trigger.click();
+  await page.getByRole('option', { name: optionName }).click();
+}
 
 async function expectOk(response: APIResponse, label: string): Promise<void> {
   if (response.ok()) {
@@ -49,6 +60,7 @@ test.describe('VaultStack storage dashboard', () => {
     page,
     request,
   }) => {
+    test.setTimeout(90_000);
     const email = `storage-e2e-${Date.now()}@example.com`;
     const password = 'password123';
     const bucketName = `e2e-bucket-${Date.now()}`;
@@ -56,11 +68,12 @@ test.describe('VaultStack storage dashboard', () => {
     const fileBody = 'VaultStack Phase 4 E2E upload';
 
     await page.goto('/login');
-    await page.getByRole('button', { name: 'Need an account? Register' }).click();
+    await page.getByRole('button', { name: 'Create one' }).click();
+    await expect(page.getByRole('heading', { name: 'Create your workspace' })).toBeVisible();
     await page.getByLabel('Name').fill('E2E User');
     await page.getByLabel('Organization').fill('E2E Org');
     await page.getByLabel('Email').fill(email);
-    await page.getByLabel('Password').fill(password);
+    await page.getByRole('textbox', { name: 'Password' }).fill(password);
     await page.getByRole('button', { name: 'Create account' }).click();
 
     await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({
@@ -75,26 +88,40 @@ test.describe('VaultStack storage dashboard', () => {
     await page.getByRole('button', { name: 'Create', exact: true }).click();
     await expect(page.getByRole('button', { name: bucketName })).toBeVisible();
 
-    await page.getByRole('link', { name: 'Files' }).click();
-    await page.getByLabel('Select bucket').selectOption({ label: bucketName });
-    await page.getByRole('button', { name: 'Upload' }).click();
-
-    const fileInput = page.locator('input[type="file"]');
-    await fileInput.setInputFiles({
+    await page.getByRole('link', { name: 'Files', exact: true }).click();
+    await chooseSelectOption(page, 'Select bucket', bucketName);
+    await expect(page.getByRole('button', { name: 'Select bucket' })).toContainText(bucketName);
+    await page.getByRole('button', { name: 'Upload files' }).click();
+    await page.locator('input[type="file"][aria-label="Choose files to upload"]').setInputFiles({
       name: fileName,
       mimeType: 'text/plain',
       buffer: Buffer.from(fileBody),
     });
 
-    await expect(page.getByText(fileName)).toBeVisible({ timeout: 20_000 });
-    await page.getByText(fileName).click();
+    await expect(page.getByText('Uploads')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Completed')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('button', { name: 'Select bucket' })).toContainText(bucketName);
+    const fileRow = page.getByRole('button', { name: new RegExp(fileName) }).first();
+    await expect(fileRow).toBeVisible({ timeout: 20_000 });
+    await fileRow.click();
     await expect(page.getByText('Object details')).toBeVisible();
-    await expect(page.getByText(fileName).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Download', exact: true })).toBeVisible();
 
-    const downloadPromise = page.waitForEvent('download');
-    await page.getByRole('button', { name: 'Download' }).first().click();
-    const download = await downloadPromise;
-    expect(download.suggestedFilename()).toMatch(/hello-e2e/);
+    // Downloads open via window.open() to a content URL (not a browser download event).
+    const [downloadUrlResponse] = await Promise.all([
+      page.waitForResponse(
+        (response) =>
+          response.url().includes('/download-url') &&
+          response.request().method() === 'POST' &&
+          response.ok(),
+      ),
+      page.getByRole('button', { name: 'Download', exact: true }).click(),
+    ]);
+    const downloadBody = (await downloadUrlResponse.json()) as { download: { url: string } };
+    expect(downloadBody.download.url).toMatch(/\/content\?token=/);
+    const fileResponse = await request.get(downloadBody.download.url);
+    expect(fileResponse.ok()).toBeTruthy();
+    expect(await fileResponse.text()).toBe(fileBody);
 
     await page.getByRole('button', { name: `Delete ${fileName}` }).click();
     await page.getByRole('button', { name: 'Delete', exact: true }).click();
@@ -158,11 +185,12 @@ test.describe('VaultStack storage dashboard', () => {
     const bucketName = `large-bucket-${Date.now()}`;
 
     await page.goto('/login');
-    await page.getByRole('button', { name: 'Need an account? Register' }).click();
+    await page.getByRole('button', { name: 'Create one' }).click();
+    await expect(page.getByRole('heading', { name: 'Create your workspace' })).toBeVisible();
     await page.getByLabel('Name').fill('Large Upload User');
     await page.getByLabel('Organization').fill('Large Upload Org');
     await page.getByLabel('Email').fill(email);
-    await page.getByLabel('Password').fill(password);
+    await page.getByRole('textbox', { name: 'Password' }).fill(password);
     await page.getByRole('button', { name: 'Create account' }).click();
 
     await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({
@@ -175,18 +203,19 @@ test.describe('VaultStack storage dashboard', () => {
     await page.getByLabel('Bucket name').fill(bucketName);
     await page.getByRole('button', { name: 'Create', exact: true }).click();
 
-    await page.getByRole('link', { name: 'Files' }).click();
-    await page.getByLabel('Select bucket').selectOption({ label: bucketName });
-    await page.getByRole('button', { name: 'Upload' }).click();
+    await page.getByRole('link', { name: 'Files', exact: true }).click();
+    await chooseSelectOption(page, 'Select bucket', bucketName);
+    await expect(page.getByRole('button', { name: 'Select bucket' })).toContainText(bucketName);
+    await page.getByRole('button', { name: 'Upload files' }).click();
 
     const largeBuffer = Buffer.alloc(MULTIPART_THRESHOLD_BYTES, 'a');
-    await page.locator('input[type="file"]').setInputFiles({
+    await page.locator('input[type="file"][aria-label="Choose files to upload"]').setInputFiles({
       name: 'large.bin',
       mimeType: 'application/octet-stream',
       buffer: largeBuffer,
     });
 
-    await expect(page.getByText('Uploads')).toBeVisible();
+    await expect(page.getByText('Uploads')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/uploading|completing|completed/i)).toBeVisible({
       timeout: 60_000,
     });

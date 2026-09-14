@@ -2,8 +2,8 @@ import { Resend } from 'resend';
 import type { EmailProvider, OutboundEmail } from './types.js';
 
 export class NoopEmailProvider implements EmailProvider {
-  async send(_message: OutboundEmail): Promise<{ id: string | null }> {
-    return { id: null };
+  send(_message: OutboundEmail): Promise<{ id: string | null }> {
+    return Promise.resolve({ id: null });
   }
 }
 
@@ -33,7 +33,7 @@ export class ResendEmailProvider implements EmailProvider {
       throw new Error(response.error.message);
     }
 
-    return { id: response.data?.id ?? null };
+    return { id: response.data.id };
   }
 }
 

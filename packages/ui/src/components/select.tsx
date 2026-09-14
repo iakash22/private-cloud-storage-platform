@@ -168,7 +168,7 @@ export function Select({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={listId}
-        aria-invalid={ariaInvalid || undefined}
+        aria-invalid={ariaInvalid ? true : undefined}
         className={cn(
           'vs-form-control flex min-h-11 w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-sm text-slate-900 transition-[border-color,background-color] duration-200 outline-none hover:border-slate-300 focus:border-slate-900 focus:outline-none focus-visible:border-slate-900 focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:opacity-60',
           open && 'border-slate-900',
@@ -200,7 +200,7 @@ export function Select({
               aria-labelledby={id}
               style={menuStyle}
               className={cn(
-                'vs-menu-enter custom-scrollbar overflow-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl',
+                'vs-menu-enter custom-scrollbar z-[110] overflow-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl',
                 position.placement === 'top' ? 'origin-bottom' : 'origin-top',
               )}
             >
@@ -232,7 +232,9 @@ export function Select({
                 );
               })}
             </ul>,
-            document.body,
+            // Native <dialog showModal()> uses the top layer; menus portaled to
+            // document.body sit under the backdrop and cannot be selected.
+            triggerRef.current?.closest('dialog') ?? document.body,
           )
         : null}
     </div>

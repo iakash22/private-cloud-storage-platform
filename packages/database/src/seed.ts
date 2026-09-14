@@ -51,10 +51,6 @@ export async function syncSystemRolePermissions(prisma: PrismaClient): Promise<n
   let attached = 0;
   for (const role of systemRoles) {
     const expected = SYSTEM_ROLE_PERMISSIONS[role.name as SystemRoleName];
-    if (!expected) {
-      continue;
-    }
-
     const existing = new Set(role.permissions.map((entry) => entry.permissionId));
     for (const key of expected) {
       const permissionId = permissionByKey.get(key);

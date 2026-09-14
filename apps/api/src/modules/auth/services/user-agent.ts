@@ -7,7 +7,7 @@ export interface ParsedUserAgent {
   isMobile: boolean;
 }
 
-function pickMatch(value: string, patterns: Array<[RegExp, string]>): string {
+function pickMatch(value: string, patterns: [RegExp, string][]): string {
   for (const [pattern, label] of patterns) {
     if (pattern.test(value)) {
       return label;
@@ -23,7 +23,8 @@ function captureVersion(ua: string, pattern: RegExp): string {
 
 /** Lightweight UA parsing for session labels — no extra dependency. */
 export function parseUserAgent(userAgent: string | null | undefined): ParsedUserAgent {
-  const ua = userAgent?.trim() || 'unknown';
+  const trimmed = userAgent?.trim();
+  const ua = trimmed != null && trimmed.length > 0 ? trimmed : 'unknown';
 
   const browser = pickMatch(ua, [
     [/Edg\//i, 'Microsoft Edge'],

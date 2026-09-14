@@ -47,7 +47,7 @@ function LoginFields({
           value={email}
           aria-invalid={Boolean(fieldErrors.email)}
           aria-describedby={fieldErrors.email ? 'auth-email-error' : undefined}
-          onChange={(event) => onEmail(event.target.value)}
+          onChange={(event) => { onEmail(event.target.value); }}
         />
         <FieldError id="auth-email-error" message={fieldErrors.email} />
       </div>
@@ -59,7 +59,7 @@ function LoginFields({
           value={password}
           aria-invalid={Boolean(fieldErrors.password)}
           aria-describedby={fieldErrors.password ? 'auth-password-error' : undefined}
-          onChange={(event) => onPassword(event.target.value)}
+          onChange={(event) => { onPassword(event.target.value); }}
         />
         <FieldError id="auth-password-error" message={fieldErrors.password} />
       </div>
@@ -106,7 +106,7 @@ function SignupFields({
             value={name}
             aria-invalid={Boolean(fieldErrors.name)}
             aria-describedby={fieldErrors.name ? 'auth-name-error' : undefined}
-            onChange={(event) => onName(event.target.value)}
+            onChange={(event) => { onName(event.target.value); }}
           />
           <FieldError id="auth-name-error" message={fieldErrors.name} />
         </div>
@@ -118,7 +118,7 @@ function SignupFields({
             value={organizationName}
             aria-invalid={Boolean(fieldErrors.organizationName)}
             aria-describedby={fieldErrors.organizationName ? 'auth-org-error' : undefined}
-            onChange={(event) => onOrganizationName(event.target.value)}
+            onChange={(event) => { onOrganizationName(event.target.value); }}
           />
           <FieldError id="auth-org-error" message={fieldErrors.organizationName} />
         </div>
@@ -132,7 +132,7 @@ function SignupFields({
           value={email}
           aria-invalid={Boolean(fieldErrors.email)}
           aria-describedby={fieldErrors.email ? 'auth-signup-email-error' : undefined}
-          onChange={(event) => onEmail(event.target.value)}
+          onChange={(event) => { onEmail(event.target.value); }}
         />
         <FieldError id="auth-signup-email-error" message={fieldErrors.email} />
       </div>
@@ -144,7 +144,7 @@ function SignupFields({
           value={password}
           aria-invalid={Boolean(fieldErrors.password)}
           aria-describedby={fieldErrors.password ? 'auth-signup-password-error' : undefined}
-          onChange={(event) => onPassword(event.target.value)}
+          onChange={(event) => { onPassword(event.target.value); }}
         />
         <FieldError id="auth-signup-password-error" message={fieldErrors.password} />
         <p className="text-xs leading-5 text-vs-shade-500">
@@ -274,7 +274,7 @@ export function AuthGatePage() {
       <button
         type="button"
         className="font-medium text-vs-shade-900 underline underline-offset-4"
-        onClick={() => goMode('signup')}
+        onClick={() => { goMode('signup'); }}
       >
         Create one
       </button>
@@ -301,7 +301,7 @@ export function AuthGatePage() {
         <button
           type="button"
           className="font-medium text-vs-shade-900 underline underline-offset-4"
-          onClick={() => goMode('login')}
+          onClick={() => { goMode('login'); }}
         >
           Sign in
         </button>
@@ -366,7 +366,7 @@ export function AuthGatePage() {
             value={code}
             aria-invalid={Boolean(fieldErrors.code)}
             aria-describedby={fieldErrors.code ? 'auth-code-error' : 'auth-code-hint'}
-            onChange={(event) => setCode(event.target.value)}
+            onChange={(event) => { setCode(event.target.value); }}
           />
           <p id="auth-code-hint" className="text-xs text-vs-shade-500">
             Backup codes look like <span className="font-mono">AAAAA-BBBBB</span>.

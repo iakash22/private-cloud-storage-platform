@@ -64,6 +64,9 @@ describe('TwoFactorSettings', () => {
     render(<TwoFactorSettings />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Enable two-factor authentication' }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Continue to verify' })).toBeInTheDocument();
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Continue to verify' }));
     await waitFor(() => {
       expect(screen.getByLabelText('One-time password')).toBeInTheDocument();

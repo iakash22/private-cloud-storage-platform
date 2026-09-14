@@ -65,7 +65,11 @@ export class PrismaStorageMonitorCollector implements StorageMonitorCollector {
             type: row.type,
             status: row.status,
             healthy: health.ok,
-            message: health.ok ? 'Healthy' : health.message || 'Provider unavailable',
+            message: health.ok
+              ? 'Healthy'
+              : health.message != null && health.message.length > 0
+                ? health.message
+                : 'Provider unavailable',
           };
         } catch (error) {
           return {
@@ -102,8 +106,8 @@ export class PrismaStorageMonitorCollector implements StorageMonitorCollector {
 async function readStorageRoot(path: string): Promise<PublicDiskVolume> {
   try {
     const stats = await statfs(path);
-    const totalBytes = Number(stats.blocks) * Number(stats.bsize);
-    const freeBytes = Number(stats.bavail) * Number(stats.bsize);
+    const totalBytes = stats.blocks * stats.bsize;
+    const freeBytes = stats.bavail * stats.bsize;
     const usedBytes = Math.max(0, totalBytes - freeBytes);
     return {
       path,

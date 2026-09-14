@@ -99,7 +99,7 @@ export function ApiKeysPage() {
         description="Bearer tokens for programmatic access. The secret is shown once at creation."
         icon={<KeyRound className="h-5 w-5" aria-hidden="true" />}
         actions={
-          <Button type="button" onClick={() => setCreateOpen(true)}>
+          <Button type="button" onClick={() => { setCreateOpen(true); }}>
             Create API key
           </Button>
         }
@@ -142,7 +142,7 @@ await client.uploadArtifact({ projectId, buildId, name: 'app.zip', body: bytes }
             >
               Read the SDK usage guide
             </a>
-            <Button type="button" size="sm" variant="outline" onClick={() => setPlaintext(null)}>
+            <Button type="button" size="sm" variant="outline" onClick={() => { setPlaintext(null); }}>
               Dismiss
             </Button>
           </CardContent>
@@ -209,7 +209,7 @@ await client.uploadArtifact({ projectId, buildId, name: 'app.zip', body: bytes }
           <DialogActions
             confirmLabel="Create"
             confirmDisabled={!name.trim()}
-            onCancel={() => setCreateOpen(false)}
+            onCancel={() => { setCreateOpen(false); }}
             onConfirm={() => void handleCreate()}
           />
         }
@@ -221,7 +221,7 @@ await client.uploadArtifact({ projectId, buildId, name: 'app.zip', body: bytes }
               id="api-key-name"
               value={name}
               aria-invalid={Boolean(fieldErrors.name)}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) => { setName(event.target.value); }}
             />
             <FieldError message={fieldErrors.name} />
           </div>
@@ -232,7 +232,7 @@ await client.uploadArtifact({ projectId, buildId, name: 'app.zip', body: bytes }
               type="datetime-local"
               value={expiresAt}
               aria-invalid={Boolean(fieldErrors.expiresAt)}
-              onChange={(event) => setExpiresAt(event.target.value)}
+              onChange={(event) => { setExpiresAt(event.target.value); }}
             />
             <FieldError message={fieldErrors.expiresAt} />
           </div>

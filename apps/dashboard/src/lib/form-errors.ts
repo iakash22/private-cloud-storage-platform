@@ -25,7 +25,7 @@ export function parseRequestError(error: unknown): {
 
     if (error.status === 404) {
       return {
-        message: error.message?.trim() || 'Not found',
+        message: error.message.trim() || 'Not found',
         code: error.code,
         fields: error.fields ?? {},
         status: error.status,
@@ -34,7 +34,7 @@ export function parseRequestError(error: unknown): {
     }
 
     return {
-      message: error.message?.trim() || 'Request failed',
+      message: error.message.trim() || 'Request failed',
       code: error.code,
       fields: error.fields ?? {},
       status: error.status,
@@ -43,7 +43,7 @@ export function parseRequestError(error: unknown): {
   }
 
   if (error instanceof Error) {
-    const message = error.message?.trim();
+    const message = error.message.trim();
     if (message) {
       return { message, fields: {} };
     }
@@ -61,14 +61,15 @@ export function useFormSubmit() {
   }, []);
 
   const applyFields = useCallback((fields: FieldErrorMap): undefined => {
-    setFieldErrors(fields ?? {});
+    setFieldErrors(fields);
     return undefined;
   }, []);
 
   const validate = useCallback(
     <T>(parsed: { ok: true; data: T } | { ok: false; fields: FieldErrorMap }): T | undefined => {
-      if (!parsed?.ok) {
-        return applyFields(parsed?.fields ?? {});
+      if (!parsed.ok) {
+        applyFields(parsed.fields);
+        return;
       }
 
       setFieldErrors({});
@@ -87,7 +88,7 @@ export function useFormSubmit() {
         return;
       }
 
-      const fields = parsed.fields ?? {};
+      const fields = parsed.fields;
       if (Object.keys(fields).length > 0) {
         setFieldErrors(fields);
       } else {
@@ -106,6 +107,6 @@ export function useFormSubmit() {
     validate,
     catchError,
     toastSuccess: toast.success,
-    hasFieldError: (name: string) => Boolean(fieldErrors?.[name]?.trim()),
+    hasFieldError: (name: string) => Boolean(fieldErrors[name]?.trim()),
   };
 }

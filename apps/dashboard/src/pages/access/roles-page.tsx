@@ -130,7 +130,7 @@ export function RolesPage() {
           <DialogActions
             confirmLabel="Create"
             confirmDisabled={!name.trim() || selected.length === 0}
-            onCancel={() => setCreateOpen(false)}
+            onCancel={() => { setCreateOpen(false); }}
             onConfirm={() => void handleCreate()}
           />
         }
@@ -142,7 +142,7 @@ export function RolesPage() {
               id="role-name"
               value={name}
               aria-invalid={Boolean(fieldErrors.name)}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) => { setName(event.target.value); }}
             />
             <FieldError message={fieldErrors.name} />
           </div>
@@ -151,7 +151,7 @@ export function RolesPage() {
             <Input
               id="role-description"
               value={description}
-              onChange={(event) => setDescription(event.target.value)}
+              onChange={(event) => { setDescription(event.target.value); }}
             />
           </div>
           <fieldset className="space-y-2">
@@ -164,7 +164,7 @@ export function RolesPage() {
                     type="checkbox"
                     className="mt-1"
                     checked={selected.includes(permission.key)}
-                    onChange={() => togglePermission(permission.key)}
+                    onChange={() => { togglePermission(permission.key); }}
                   />
                   <span>
                     <span className="font-medium text-slate-800">{permission.key}</span>

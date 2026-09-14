@@ -25,7 +25,7 @@ const devEnv = {
   MINIO_ACCESS_KEY: 'vaultstack_minio',
   MINIO_SECRET_KEY: 'vaultstack_minio_secret_change_me',
   MINIO_BUCKET: 'vaultstack',
-  VITE_API_URL: `http://127.0.0.1:${apiPort}`,
+  VITE_API_URL: `http://localhost:${apiPort}`,
 };
 
 export default defineConfig({
@@ -37,7 +37,8 @@ export default defineConfig({
   reporter: [['list']],
   use: {
     trace: 'on-first-retry',
-    baseURL: `http://127.0.0.1:${dashboardPort}`,
+    // Keep dashboard + API on the same hostname so session cookies are same-site.
+    baseURL: `http://localhost:${dashboardPort}`,
   },
   projects: [
     {
@@ -48,14 +49,14 @@ export default defineConfig({
   webServer: [
     {
       command: 'pnpm --filter @vaultstack/api dev',
-      url: `http://127.0.0.1:${apiPort}/ready`,
+      url: `http://localhost:${apiPort}/ready`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
       env: devEnv,
     },
     {
       command: 'pnpm --filter @vaultstack/dashboard dev',
-      url: `http://127.0.0.1:${dashboardPort}`,
+      url: `http://localhost:${dashboardPort}`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
       env: devEnv,

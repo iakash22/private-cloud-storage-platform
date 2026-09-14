@@ -185,7 +185,7 @@ export function DashboardShell() {
       setApiBusy(detail.active);
     };
     window.addEventListener('vaultstack:request-activity', handleActivity);
-    return () => window.removeEventListener('vaultstack:request-activity', handleActivity);
+    return () => { window.removeEventListener('vaultstack:request-activity', handleActivity); };
   }, []);
 
   useEffect(() => {

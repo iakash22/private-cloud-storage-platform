@@ -143,7 +143,7 @@ export function AuthFlipStage({
     const h = measureFace();
     if (h > 0) {
       setShellHeightPx(h);
-      window.requestAnimationFrame(() => releaseShellHeight());
+      window.requestAnimationFrame(() => { releaseShellHeight(); });
     }
     return () => {
       stopHeightSpring();
@@ -153,9 +153,10 @@ export function AuthFlipStage({
 
   useLayoutEffect(() => {
     if (mode === modeRef.current) {
-      if (!animatingRef.current) {
-        setPending(children);
-      }
+      // Keep interactive content live for the active mode. Freezing children while
+      // the flip animation finishes caused submit handlers to close over stale
+      // empty field state even though the DOM inputs looked filled.
+      setPending(children);
       return;
     }
 
@@ -168,7 +169,7 @@ export function AuthFlipStage({
       window.requestAnimationFrame(() => {
         const h = measureFace();
         setShellHeightPx(h);
-        window.requestAnimationFrame(() => releaseShellHeight());
+        window.requestAnimationFrame(() => { releaseShellHeight(); });
       });
       return;
     }

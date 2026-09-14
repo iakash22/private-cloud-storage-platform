@@ -1,7 +1,7 @@
 import type { ActorContext, OutboundEmail, SessionContext } from '../types.js';
 import { detailTable, renderEmailLayout } from './layout.js';
 
-function sessionRows(session: SessionContext): Array<{ label: string; value: string }> {
+function sessionRows(session: SessionContext): { label: string; value: string }[] {
   return [
     { label: 'When', value: session.occurredAt },
     ...(session.locationLabel ? [{ label: 'Location', value: session.locationLabel }] : []),

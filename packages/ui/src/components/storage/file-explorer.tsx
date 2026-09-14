@@ -56,7 +56,7 @@ function buildEntries(
     return [];
   }
 
-  const folderPrefixes = page.folders?.map((folder) => folder.prefix) ?? page.prefixes;
+  const folderPrefixes = page.folders.map((folder) => folder.prefix);
   const folders: ExplorerEntry[] = folderPrefixes.map((folderPrefix) => {
     const { name } = splitObjectKey(folderPrefix.replace(/\/$/, ''));
     return {

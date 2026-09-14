@@ -45,7 +45,7 @@ function SessionDetailRows({ session }: { session: PublicAuthSession }) {
       ? `${session.latitude.toFixed(4)}, ${session.longitude.toFixed(4)}`
       : null;
 
-  const rows: Array<{ label: string; value: string }> = [
+  const rows: { label: string; value: string }[] = [
     { label: 'Device', value: session.label },
     { label: 'Browser', value: session.browser },
     { label: 'Operating system', value: session.os },
@@ -186,7 +186,7 @@ export function ActiveSessionsSettings() {
             type="button"
             variant="outline"
             disabled={loading || otherCount === 0 || revokingOthers}
-            onClick={() => setConfirmOthers(true)}
+            onClick={() => { setConfirmOthers(true); }}
           >
             Sign out other sessions
           </Button>
@@ -239,7 +239,7 @@ export function ActiveSessionsSettings() {
                     variant="outline"
                     size="sm"
                     aria-label={`View details for ${session.label}`}
-                    onClick={() => setDetail(session)}
+                    onClick={() => { setDetail(session); }}
                   >
                     <Eye className="h-4 w-4" aria-hidden="true" />
                   </Button>
@@ -249,7 +249,7 @@ export function ActiveSessionsSettings() {
                     size="sm"
                     loading={busyId === session.id}
                     loadingLabel="Signing out…"
-                    onClick={() => setConfirmRevoke(session)}
+                    onClick={() => { setConfirmRevoke(session); }}
                   >
                     {session.current ? 'Sign out' : 'Revoke'}
                   </Button>
@@ -278,8 +278,8 @@ export function ActiveSessionsSettings() {
           <DialogActions
             cancelLabel="Close"
             confirmLabel={detail?.current ? 'Sign out' : 'Revoke session'}
-            confirmLoading={Boolean(detail && busyId === detail.id)}
-            onCancel={() => setDetail(null)}
+            confirmLoading={busyId === detail?.id}
+            onCancel={() => { setDetail(null); }}
             onConfirm={() => {
               if (detail) {
                 setConfirmRevoke(detail);
@@ -308,8 +308,8 @@ export function ActiveSessionsSettings() {
           <DialogActions
             cancelLabel="Cancel"
             confirmLabel={confirmRevoke?.current ? 'Sign out' : 'Revoke session'}
-            confirmLoading={Boolean(confirmRevoke && busyId === confirmRevoke.id)}
-            onCancel={() => setConfirmRevoke(null)}
+            confirmLoading={busyId === confirmRevoke?.id}
+            onCancel={() => { setConfirmRevoke(null); }}
             onConfirm={() => {
               if (confirmRevoke) {
                 void handleRevoke(confirmRevoke);
@@ -336,7 +336,7 @@ export function ActiveSessionsSettings() {
             cancelLabel="Cancel"
             confirmLabel="Sign out others"
             confirmLoading={revokingOthers}
-            onCancel={() => setConfirmOthers(false)}
+            onCancel={() => { setConfirmOthers(false); }}
             onConfirm={() => void handleRevokeOthers()}
           />
         }

@@ -41,7 +41,7 @@ function addMonths(value: Date, amount: number): Date {
   return new Date(value.getFullYear(), value.getMonth() + amount, 1);
 }
 
-function buildCells(month: Date): Array<{ date: Date; inMonth: boolean }> {
+function buildCells(month: Date): { date: Date; inMonth: boolean }[] {
   const first = startOfMonth(month);
   const startOffset = (first.getDay() + 6) % 7; // Monday-first
   const gridStart = new Date(first);

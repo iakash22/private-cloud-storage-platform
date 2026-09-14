@@ -268,10 +268,10 @@ export function ArtifactsProjectPage() {
           actions={
             canUpload ? (
               <>
-                <Button type="button" variant="outline" onClick={() => setEditOpen(true)}>
+                <Button type="button" variant="outline" onClick={() => { setEditOpen(true); }}>
                   Edit project
                 </Button>
-                <Button type="button" onClick={() => setBuildOpen(true)}>
+                <Button type="button" onClick={() => { setBuildOpen(true); }}>
                   New build
                 </Button>
               </>
@@ -299,7 +299,7 @@ export function ArtifactsProjectPage() {
                   className={`w-full rounded-md px-3 py-2 text-left text-sm ${
                     build.id === selectedBuildId ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'
                   }`}
-                  onClick={() => setSelectedBuildId(build.id)}
+                  onClick={() => { setSelectedBuildId(build.id); }}
                 >
                   <span className="block font-medium">#{build.number}</span>
                   <span className="block text-xs opacity-80">{build.status}</span>
@@ -342,14 +342,14 @@ export function ArtifactsProjectPage() {
                         label: status,
                       }))}
                     />
-                    <Button type="button" onClick={() => setUploadOpen(true)}>
+                    <Button type="button" onClick={() => { setUploadOpen(true); }}>
                       Upload artifact
                     </Button>
                     {canDelete ? (
                       <Button
                         type="button"
                         variant="outline"
-                        onClick={() => setDeleteBuildId(selectedBuild.id)}
+                        onClick={() => { setDeleteBuildId(selectedBuild.id); }}
                       >
                         Delete build
                       </Button>
@@ -411,7 +411,7 @@ export function ArtifactsProjectPage() {
                               type="button"
                               size="sm"
                               variant="outline"
-                              onClick={() => setDeleteArtifactId(artifact.id)}
+                              onClick={() => { setDeleteArtifactId(artifact.id); }}
                             >
                               Delete
                             </Button>
@@ -478,7 +478,7 @@ export function ArtifactsProjectPage() {
         footer={
           <DialogActions
             confirmLabel="Create"
-            onCancel={() => setBuildOpen(false)}
+            onCancel={() => { setBuildOpen(false); }}
             onConfirm={() => void handleCreateBuild()}
           />
         }
@@ -493,7 +493,7 @@ export function ArtifactsProjectPage() {
             <Input
               id="build-title"
               value={title}
-              onChange={(event) => setTitle(event.target.value)}
+              onChange={(event) => { setTitle(event.target.value); }}
             />
           </div>
           <div>
@@ -501,7 +501,7 @@ export function ArtifactsProjectPage() {
             <Input
               id="build-ref"
               value={gitRef}
-              onChange={(event) => setGitRef(event.target.value)}
+              onChange={(event) => { setGitRef(event.target.value); }}
             />
           </div>
           <div>
@@ -510,7 +510,7 @@ export function ArtifactsProjectPage() {
               id="build-sha"
               value={commitSha}
               aria-invalid={Boolean(fieldErrors.commitSha)}
-              onChange={(event) => setCommitSha(event.target.value)}
+              onChange={(event) => { setCommitSha(event.target.value); }}
             />
             <FieldError message={fieldErrors.commitSha} />
           </div>
@@ -525,7 +525,7 @@ export function ArtifactsProjectPage() {
           <DialogActions
             confirmLabel="Save"
             confirmDisabled={!projectName.trim()}
-            onCancel={() => setEditOpen(false)}
+            onCancel={() => { setEditOpen(false); }}
             onConfirm={() => void handleUpdateProject()}
           />
         }
@@ -537,7 +537,7 @@ export function ArtifactsProjectPage() {
               id="edit-project-name"
               value={projectName}
               aria-invalid={Boolean(fieldErrors.name)}
-              onChange={(event) => setProjectName(event.target.value)}
+              onChange={(event) => { setProjectName(event.target.value); }}
             />
             <FieldError message={fieldErrors.name} />
           </div>
@@ -546,7 +546,7 @@ export function ArtifactsProjectPage() {
             <Input
               id="edit-project-description"
               value={projectDescription}
-              onChange={(event) => setProjectDescription(event.target.value)}
+              onChange={(event) => { setProjectDescription(event.target.value); }}
             />
           </div>
           <div>
@@ -556,7 +556,7 @@ export function ArtifactsProjectPage() {
               inputMode="numeric"
               value={retentionDays}
               aria-invalid={Boolean(fieldErrors.retentionDays)}
-              onChange={(event) => setRetentionDays(event.target.value)}
+              onChange={(event) => { setRetentionDays(event.target.value); }}
             />
             <FieldError message={fieldErrors.retentionDays} />
           </div>
@@ -572,7 +572,7 @@ export function ArtifactsProjectPage() {
             confirmLabel="Upload"
             confirmDisabled={!file}
             confirmLoading={uploading}
-            onCancel={() => setUploadOpen(false)}
+            onCancel={() => { setUploadOpen(false); }}
             onConfirm={() => handleUpload()}
           />
         }
@@ -596,7 +596,7 @@ export function ArtifactsProjectPage() {
               value={artifactName}
               placeholder={file?.name}
               aria-invalid={Boolean(fieldErrors.name)}
-              onChange={(event) => setArtifactName(event.target.value)}
+              onChange={(event) => { setArtifactName(event.target.value); }}
             />
             <FieldError message={fieldErrors.name} />
           </div>
@@ -606,7 +606,7 @@ export function ArtifactsProjectPage() {
               id="artifact-kind"
               aria-label="Kind"
               value={artifactKind}
-              onChange={(value) => setArtifactKind(value as ArtifactKindName)}
+              onChange={(value) => { setArtifactKind(value as ArtifactKindName); }}
               options={ARTIFACT_KINDS.map((kind) => ({ value: kind, label: kind }))}
             />
           </div>
@@ -616,7 +616,7 @@ export function ArtifactsProjectPage() {
               id="artifact-label"
               value={versionLabel}
               aria-invalid={Boolean(fieldErrors.versionLabel)}
-              onChange={(event) => setVersionLabel(event.target.value)}
+              onChange={(event) => { setVersionLabel(event.target.value); }}
             />
             <FieldError message={fieldErrors.versionLabel} />
           </div>
@@ -626,7 +626,7 @@ export function ArtifactsProjectPage() {
               id="artifact-file"
               type="file"
               disabled={uploading}
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              onChange={(event) => { setFile(event.target.files?.[0] ?? null); }}
             />
           </div>
           {uploading || uploadProgress > 0 ? (

@@ -184,7 +184,7 @@ export function ProvidersPage() {
         icon={<CloudCog className="h-5 w-5" aria-hidden="true" />}
         actions={
           canUploadStorage(permissions) ? (
-            <Button type="button" onClick={() => setCreateOpen(true)}>
+            <Button type="button" onClick={() => { setCreateOpen(true); }}>
               Add provider
             </Button>
           ) : null
@@ -276,7 +276,7 @@ export function ProvidersPage() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => openEdit(provider.id)}
+                      onClick={() => { openEdit(provider.id); }}
                     >
                       Edit
                     </Button>
@@ -499,7 +499,7 @@ export function ProvidersPage() {
               id="edit-provider-name"
               value={name}
               aria-invalid={Boolean(fieldErrors.name)}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) => { setName(event.target.value); }}
             />
             <FieldError message={fieldErrors.name} />
           </div>
@@ -510,7 +510,7 @@ export function ProvidersPage() {
               value={endpoint}
               disabled={editingLocalProvider}
               aria-invalid={Boolean(fieldErrors.endpoint)}
-              onChange={(event) => setEndpoint(event.target.value)}
+              onChange={(event) => { setEndpoint(event.target.value); }}
             />
             <FieldError message={fieldErrors.endpoint} />
           </div>
@@ -520,7 +520,7 @@ export function ProvidersPage() {
               id="edit-provider-region"
               value={region}
               disabled={editingLocalProvider}
-              onChange={(event) => setRegion(event.target.value)}
+              onChange={(event) => { setRegion(event.target.value); }}
             />
           </div>
           <div className="space-y-2">
@@ -529,7 +529,7 @@ export function ProvidersPage() {
               id="edit-provider-bucket"
               value={bucket}
               disabled={editingLocalProvider}
-              onChange={(event) => setBucket(event.target.value)}
+              onChange={(event) => { setBucket(event.target.value); }}
             />
           </div>
           <div className="space-y-2">
@@ -539,7 +539,7 @@ export function ProvidersPage() {
               value={accessKeyId}
               disabled={editingLocalProvider}
               aria-invalid={Boolean(fieldErrors.accessKeyId)}
-              onChange={(event) => setAccessKeyId(event.target.value)}
+              onChange={(event) => { setAccessKeyId(event.target.value); }}
             />
             <FieldError message={fieldErrors.accessKeyId} />
           </div>
@@ -551,7 +551,7 @@ export function ProvidersPage() {
               value={secretAccessKey}
               disabled={editingLocalProvider}
               aria-invalid={Boolean(fieldErrors.secretAccessKey)}
-              onChange={(event) => setSecretAccessKey(event.target.value)}
+              onChange={(event) => { setSecretAccessKey(event.target.value); }}
             />
             <FieldError message={fieldErrors.secretAccessKey} />
           </div>
@@ -561,7 +561,7 @@ export function ProvidersPage() {
               id="edit-provider-status"
               aria-label="Status"
               value={status}
-              onChange={(value) => setStatus(value as 'ACTIVE' | 'DEGRADED' | 'DISABLED')}
+              onChange={(value) => { setStatus(value as 'ACTIVE' | 'DEGRADED' | 'DISABLED'); }}
               options={[
                 { value: 'ACTIVE', label: 'Active' },
                 { value: 'DEGRADED', label: 'Degraded' },
@@ -573,7 +573,7 @@ export function ProvidersPage() {
             <input
               type="checkbox"
               checked={tls}
-              onChange={(event) => setTls(event.target.checked)}
+              onChange={(event) => { setTls(event.target.checked); }}
             />
             Require TLS
           </label>
@@ -581,7 +581,7 @@ export function ProvidersPage() {
             <input
               type="checkbox"
               checked={forcePathStyle}
-              onChange={(event) => setForcePathStyle(event.target.checked)}
+              onChange={(event) => { setForcePathStyle(event.target.checked); }}
             />
             Path-style addressing
           </label>
@@ -589,7 +589,7 @@ export function ProvidersPage() {
             <input
               type="checkbox"
               checked={isDefault}
-              onChange={(event) => setIsDefault(event.target.checked)}
+              onChange={(event) => { setIsDefault(event.target.checked); }}
             />
             Default provider
           </label>

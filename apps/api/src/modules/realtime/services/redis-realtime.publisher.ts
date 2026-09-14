@@ -47,8 +47,8 @@ export class RedisRealtimePublisher {
 }
 
 export class NoopRealtimePublisher {
-  async publish(_input: Omit<RealtimeEvent, 'id' | 'createdAt'>): Promise<void> {
-    return;
+  publish(_input: Omit<RealtimeEvent, 'id' | 'createdAt'>): Promise<void> {
+    return Promise.resolve();
   }
 }
 

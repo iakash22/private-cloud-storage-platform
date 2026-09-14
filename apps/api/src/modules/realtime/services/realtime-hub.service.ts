@@ -86,7 +86,7 @@ export class RealtimeHubService {
       Connection: 'keep-alive',
       'X-Accel-Buffering': 'no',
     });
-    input.response.flushHeaders?.();
+    input.response.flushHeaders();
     input.response.write(': connected\n\n');
 
     this.connections.set(input.connectionId, {

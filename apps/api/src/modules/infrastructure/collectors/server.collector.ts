@@ -15,9 +15,7 @@ export class OsServerCollector implements ServerCollector {
       const traffic = counters.get(name);
       return {
         name,
-        addresses: (entries ?? [])
-          .filter((entry) => entry.family === 'IPv4' || entry.family === 'IPv6')
-          .map((entry) => entry.address),
+        addresses: (entries ?? []).map((entry) => entry.address),
         rxBytes: traffic?.rx ?? null,
         txBytes: traffic?.tx ?? null,
       };
@@ -51,7 +49,7 @@ async function readNetworkCounters(): Promise<Map<string, { rx: number; tx: numb
   try {
     const raw = await readFile('/proc/net/dev', 'utf8');
     for (const line of raw.split('\n').slice(2)) {
-      const match = line.trim().match(/^([^:]+):\s+(\d+)\s+(?:\S+\s+){7}(\d+)/);
+      const match = /^([^:]+):\s+(\d+)\s+(?:\S+\s+){7}(\d+)/.exec(line.trim());
       if (!match) {
         continue;
       }

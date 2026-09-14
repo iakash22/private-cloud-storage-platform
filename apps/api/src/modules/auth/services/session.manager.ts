@@ -23,6 +23,14 @@ export interface ActiveSessionRow {
   userAgent: string | null;
 }
 
+function nonEmptyTrim(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  if (trimmed == null || trimmed.length === 0) {
+    return null;
+  }
+  return trimmed;
+}
+
 export class SessionManager {
   private readonly tokens: TokenService;
 
@@ -64,8 +72,8 @@ export class SessionManager {
       return null;
     }
 
-    const nextIp = meta?.ipAddress?.trim() || null;
-    const nextUa = meta?.userAgent?.trim() || null;
+    const nextIp = nonEmptyTrim(meta?.ipAddress);
+    const nextUa = nonEmptyTrim(meta?.userAgent);
     await this.prisma.session.update({
       where: { id: session.id },
       data: {

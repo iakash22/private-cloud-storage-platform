@@ -188,9 +188,12 @@ export function FilesPage() {
   }, [bucketId, buckets]);
 
   useEffect(() => {
-    const nextBucketId = searchParams.get('bucket') ?? undefined;
+    const nextBucketId = searchParams.get('bucket');
     const nextPrefix = searchParams.get('prefix') ?? '';
-    if (nextBucketId !== bucketId) {
+    // Only mirror an explicit ?bucket= value into state. Treating a missing
+    // query param as "clear selection" races with local Select changes before
+    // the outbound sync effect can write the URL, which drops bucketId mid-upload.
+    if (nextBucketId && nextBucketId !== bucketId) {
       setBucketId(nextBucketId);
     }
     if (nextPrefix !== prefix) {

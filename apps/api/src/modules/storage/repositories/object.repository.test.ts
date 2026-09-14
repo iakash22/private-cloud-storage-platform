@@ -121,10 +121,10 @@ describe('object repository listings', () => {
 
     expect(findMany.mock.calls[0]?.[0]).toMatchObject({
       where: {
-        key: {
-          contains: 'report',
-          mode: 'insensitive',
-        },
+        OR: [
+          { key: { contains: 'report', mode: 'insensitive' } },
+          { contentType: { contains: 'report', mode: 'insensitive' } },
+        ],
       },
     });
   });

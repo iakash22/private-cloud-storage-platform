@@ -139,7 +139,7 @@ export function UsersPage() {
         icon={<Users className="h-5 w-5" aria-hidden="true" />}
         actions={
           manage ? (
-            <Button type="button" onClick={() => setCreateOpen(true)}>
+            <Button type="button" onClick={() => { setCreateOpen(true); }}>
               Invite user
             </Button>
           ) : null
@@ -230,7 +230,7 @@ export function UsersPage() {
           <DialogActions
             confirmLabel="Create"
             confirmDisabled={false}
-            onCancel={() => setCreateOpen(false)}
+            onCancel={() => { setCreateOpen(false); }}
             onConfirm={() => void handleCreate()}
           />
         }
@@ -242,7 +242,7 @@ export function UsersPage() {
               id="user-name"
               value={name}
               aria-invalid={Boolean(fieldErrors.name)}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) => { setName(event.target.value); }}
             />
             <FieldError message={fieldErrors.name} />
           </div>
@@ -253,7 +253,7 @@ export function UsersPage() {
               type="email"
               value={email}
               aria-invalid={Boolean(fieldErrors.email)}
-              onChange={(event) => setEmail(event.target.value)}
+              onChange={(event) => { setEmail(event.target.value); }}
             />
             <FieldError message={fieldErrors.email} />
           </div>
@@ -264,7 +264,7 @@ export function UsersPage() {
               autoComplete="new-password"
               value={password}
               aria-invalid={Boolean(fieldErrors.password)}
-              onChange={(event) => setPassword(event.target.value)}
+              onChange={(event) => { setPassword(event.target.value); }}
             />
             <FieldError message={fieldErrors.password} />
           </div>
@@ -296,7 +296,7 @@ export function UsersPage() {
           <DialogActions
             confirmLabel="Assign"
             confirmDisabled={!assignRoleId}
-            onCancel={() => setAssignUser(null)}
+            onCancel={() => { setAssignUser(null); }}
             onConfirm={() => void handleAssign()}
           />
         }
@@ -326,7 +326,7 @@ export function UsersPage() {
           <DialogActions
             confirmLabel="Remove"
             confirmDisabled={!assignRoleId}
-            onCancel={() => setRemoveUser(null)}
+            onCancel={() => { setRemoveUser(null); }}
             onConfirm={() => void handleRemoveRole()}
           />
         }

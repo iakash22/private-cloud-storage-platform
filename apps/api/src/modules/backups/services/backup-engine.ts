@@ -448,7 +448,7 @@ export class BackupEngine {
 
     const payload = {
       jobId: job.id,
-      status: job.status as 'QUEUED' | 'RUNNING' | 'VERIFYING' | 'COMPLETED' | 'FAILED' | 'CANCELLED',
+      status: job.status,
       progressPercent: job.progressPercent,
       currentStep: job.currentStep,
       errorMessage: job.errorMessage,

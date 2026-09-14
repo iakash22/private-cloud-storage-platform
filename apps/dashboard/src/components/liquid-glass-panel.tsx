@@ -8,13 +8,13 @@ import {
   type ReactNode,
 } from 'react';
 
-type SpringState = {
+interface SpringState {
   x: number;
   y: number;
   rx: number;
   ry: number;
   ripple: number;
-};
+}
 
 function prefersReducedMotion(): boolean {
   return (
@@ -130,7 +130,7 @@ export function LiquidGlassPanel({
       };
 
       let moving = false;
-      for (const key of Object.keys(tunings) as Array<keyof SpringState>) {
+      for (const key of Object.keys(tunings) as (keyof SpringState)[]) {
         const { stiffness, damping } = tunings[key];
         const stepped = springStep(
           currentRef.current[key],

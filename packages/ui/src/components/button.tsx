@@ -30,7 +30,7 @@ export interface ButtonProps
     VariantProps<typeof buttonVariants> {
   loading?: boolean;
   loadingLabel?: string;
-  onClick?: (event: MouseEvent<HTMLButtonElement>) => void | Promise<unknown>;
+  onClick?: (event: MouseEvent<HTMLButtonElement>) => unknown;
 }
 
 function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
@@ -55,7 +55,9 @@ export function Button({
     const result = onClick?.(event);
     if (isPromiseLike(result)) {
       setPromisePending(true);
-      void Promise.resolve(result).finally(() => setPromisePending(false));
+      void Promise.resolve(result).finally(() => {
+        setPromisePending(false);
+      });
     }
   };
 
@@ -63,7 +65,7 @@ export function Button({
     <button
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
-      disabled={disabled || isLoading}
+      disabled={(disabled ?? false) || isLoading}
       aria-busy={isLoading || undefined}
       onClick={handleClick}
     >

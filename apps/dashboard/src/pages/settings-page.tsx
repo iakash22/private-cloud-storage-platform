@@ -82,7 +82,7 @@ export function SettingsPage() {
     setProfileName(user?.name ?? '');
   }, [user?.name]);
 
-  const rolesLabel = useMemo(() => membership?.roles?.join(', ') ?? 'None', [membership?.roles]);
+  const rolesLabel = useMemo(() => membership?.roles.join(', ') ?? 'None', [membership?.roles]);
   const orgDirty = orgName.trim() !== (organization?.name ?? '').trim();
   const createOrgReady = newOrgName.trim().length > 0;
   const profileDirty =

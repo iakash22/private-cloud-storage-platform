@@ -23,7 +23,7 @@ function stringMeta(value: unknown): string | undefined {
 }
 
 function prismaUniqueFields(error: Prisma.PrismaClientKnownRequestError): ApiFieldErrors {
-  const target = error.meta?.['target'];
+  const target = error.meta?.target;
   const fields: ApiFieldErrors = {};
   const message = 'A record with that value already exists';
 
@@ -42,7 +42,7 @@ function prismaUniqueFields(error: Prisma.PrismaClientKnownRequestError): ApiFie
 
 function prismaDependencyFields(error: Prisma.PrismaClientKnownRequestError): ApiFieldErrors {
   const fieldName =
-    stringMeta(error.meta?.['field_name']) ?? stringMeta(error.meta?.['fieldName']);
+    stringMeta(error.meta?.field_name) ?? stringMeta(error.meta?.fieldName);
   if (!fieldName) {
     return {};
   }

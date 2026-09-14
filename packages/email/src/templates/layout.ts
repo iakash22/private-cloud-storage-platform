@@ -109,7 +109,7 @@ function stripHtml(value: string): string {
     .trim();
 }
 
-export function detailTable(rows: Array<{ label: string; value: string }>): string {
+export function detailTable(rows: { label: string; value: string }[]): string {
   const cells = rows
     .map(
       (row) => `<tr>

@@ -29,6 +29,13 @@ const LOOKUP_TIMEOUT_MS = 2500;
 
 const cache = new Map<string, CacheEntry>();
 
+function nonEmptyOrNull(value: string | undefined): string | null {
+  if (value == null || value.length === 0) {
+    return null;
+  }
+  return value;
+}
+
 function isPrivateOrLocal(ip: string): boolean {
   const value = ip.trim().toLowerCase();
   if (!value || value === '::1' || value === '127.0.0.1' || value === '0.0.0.0') {
@@ -46,7 +53,7 @@ function isPrivateOrLocal(ip: string): boolean {
   return false;
 }
 
-function buildLabel(parts: Array<string | null | undefined>): string | null {
+function buildLabel(parts: (string | null | undefined)[]): string | null {
   const cleaned = parts.map((part) => part?.trim()).filter((part): part is string => Boolean(part));
   return cleaned.length > 0 ? cleaned.join(', ') : null;
 }
@@ -68,7 +75,7 @@ function localLookup(ipAddress: string): IpGeoLookup {
 
 async function fetchIpApi(ipAddress: string): Promise<IpGeoLookup | null> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), LOOKUP_TIMEOUT_MS);
+  const timer = setTimeout(() => { controller.abort(); }, LOOKUP_TIMEOUT_MS);
   try {
     const response = await fetch(
       `https://ipapi.co/${encodeURIComponent(ipAddress)}/json/`,
@@ -95,19 +102,20 @@ async function fetchIpApi(ipAddress: string): Promise<IpGeoLookup | null> {
     if (payload.error) {
       return null;
     }
-    const city = payload.city?.trim() || null;
-    const region = payload.region?.trim() || null;
-    const country = payload.country_name?.trim() || null;
-    const countryCode = payload.country_code?.trim() || null;
+    const city = nonEmptyOrNull(payload.city?.trim());
+    const region = nonEmptyOrNull(payload.region?.trim());
+    const country = nonEmptyOrNull(payload.country_name?.trim());
+    const countryCode = nonEmptyOrNull(payload.country_code?.trim());
+    const trimmedIp = nonEmptyOrNull(payload.ip?.trim());
     return {
-      ipAddress: payload.ip?.trim() || ipAddress,
+      ipAddress: trimmedIp ?? ipAddress,
       city,
       region,
       country,
       countryCode,
       latitude: typeof payload.latitude === 'number' ? payload.latitude : null,
       longitude: typeof payload.longitude === 'number' ? payload.longitude : null,
-      isp: payload.org?.trim() || null,
+      isp: nonEmptyOrNull(payload.org?.trim()),
       locationLabel: buildLabel([city, region, countryCode ?? country]),
       accuracy: 'ip-approximate',
     };
@@ -135,7 +143,7 @@ export async function lookupIpGeo(ipAddress: string | null | undefined): Promise
 }
 
 export async function lookupIpGeoMany(
-  ips: Array<string | null | undefined>,
+  ips: (string | null | undefined)[],
 ): Promise<Map<string, IpGeoLookup | null>> {
   const unique = [...new Set(ips.map((ip) => ip?.trim()).filter((ip): ip is string => Boolean(ip)))];
   const entries = await Promise.all(

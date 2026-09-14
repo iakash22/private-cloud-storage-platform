@@ -21,7 +21,7 @@ export interface OutboundEmail {
   html: string;
   text: string;
   templateId: EmailTemplateId;
-  tags?: Array<{ name: string; value: string }>;
+  tags?: { name: string; value: string }[];
 }
 
 export interface EmailProvider {

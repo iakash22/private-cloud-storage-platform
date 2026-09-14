@@ -12,7 +12,6 @@ import {
   CardTitle,
   FieldError,
   formatBytes,
-  Input,
   Label,
   PasswordInput,
 } from '@vaultstack/ui';
@@ -65,7 +64,7 @@ export function PublicSharePage() {
       return;
     }
 
-    let cancelled = false;
+    const previewState = { cancelled: false };
     setPreviewLoading(true);
     setPreviewError(undefined);
     void apiClient
@@ -74,7 +73,7 @@ export function PublicSharePage() {
         accessToken,
       })
       .then(async (preview) => {
-        if (cancelled) {
+        if (previewState.cancelled) {
           return;
         }
         setPreviewUrl(preview.url);
@@ -84,24 +83,22 @@ export function PublicSharePage() {
             throw new Error('Unable to load file preview');
           }
           const text = await response.text();
-          if (!cancelled) {
-            setPreviewText(text);
-          }
+          setPreviewText(text);
         }
       })
       .catch((caught: unknown) => {
-        if (!cancelled) {
+        if (!previewState.cancelled) {
           setPreviewError(caught instanceof Error ? caught.message : 'Preview unavailable');
         }
       })
       .finally(() => {
-        if (!cancelled) {
+        if (!previewState.cancelled) {
           setPreviewLoading(false);
         }
       });
 
     return () => {
-      cancelled = true;
+      previewState.cancelled = true;
     };
   }, [accessToken, password, share, token]);
 
@@ -110,8 +107,9 @@ export function PublicSharePage() {
       setRemaining('No expiry');
       return;
     }
+    const expiresAt = share.expiresAt;
     const update = () => {
-      const milliseconds = new Date(share.expiresAt!).getTime() - Date.now();
+      const milliseconds = new Date(expiresAt).getTime() - Date.now();
       if (milliseconds <= 0) {
         setRemaining('Expired');
         return;
@@ -129,7 +127,7 @@ export function PublicSharePage() {
     };
     update();
     const timer = window.setInterval(update, 1_000);
-    return () => window.clearInterval(timer);
+    return () => { window.clearInterval(timer); };
   }, [share?.expiresAt]);
 
   const handleUnlock = async (event: FormEvent): Promise<void> => {
@@ -271,7 +269,7 @@ export function PublicSharePage() {
                   type="button"
                   variant="outline"
                   onClick={() => {
-                    void previewRef.current?.requestFullscreen?.();
+                    void previewRef.current?.requestFullscreen();
                   }}
                   disabled={!share.allowView || !previewUrl}
                 >

@@ -6,7 +6,7 @@ import {
   type Page,
 } from '@playwright/test';
 
-const apiBase = 'http://127.0.0.1:3000';
+const apiBase = 'http://localhost:3000';
 
 async function expectOk(response: APIResponse, label: string): Promise<void> {
   if (response.ok()) {
@@ -99,11 +99,12 @@ test.describe('VaultStack backups dashboard', () => {
     const password = 'password123';
 
     await page.goto('/login');
-    await page.getByRole('button', { name: 'Need an account? Register' }).click();
+    await page.getByRole('button', { name: 'Create one' }).click();
+    await expect(page.getByRole('heading', { name: 'Create your workspace' })).toBeVisible();
     await page.getByLabel('Name').fill('Backup E2E User');
     await page.getByLabel('Organization').fill('Backup E2E Org');
     await page.getByLabel('Email').fill(email);
-    await page.getByLabel('Password').fill(password);
+    await page.getByRole('textbox', { name: 'Password' }).fill(password);
     await page.getByRole('button', { name: 'Create account' }).click();
 
     await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible({
@@ -113,8 +114,19 @@ test.describe('VaultStack backups dashboard', () => {
     await page.getByRole('link', { name: 'Backups', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Backup overview' })).toBeVisible();
 
-    await page.getByRole('button', { name: 'Create backup' }).click();
-    await expect(page.getByText('Latest job')).toBeVisible({ timeout: 15_000 });
+    const [createResponse] = await Promise.all([
+      page.waitForResponse(
+        (response) =>
+          response.url().includes('/api/v1/backups/jobs') &&
+          response.request().method() === 'POST',
+      ),
+      page.getByRole('button', { name: 'Create backup' }).click(),
+    ]);
+    expect(
+      createResponse.ok(),
+      `create backup failed: ${createResponse.status()} ${await createResponse.text()}`,
+    ).toBeTruthy();
+    await refreshUntilVisible(page, 'Latest job', 60_000);
 
     await page.getByRole('link', { name: 'Jobs', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Backup jobs' })).toBeVisible();
@@ -153,17 +165,24 @@ test.describe('VaultStack backups dashboard', () => {
     const snapshots = await request.get(`${apiBase}/api/v1/backups/snapshots`, { headers });
     await expectOk(snapshots, 'list snapshots');
     const snapshotList = (
-      (await snapshots.json()) as { snapshots: { verificationPassed: boolean }[] }
+      (await snapshots.json()) as {
+        snapshots: { id: string; verificationPassed: boolean }[];
+      }
     ).snapshots;
     expect(snapshotList.length).toBeGreaterThan(0);
     expect(snapshotList[0]?.verificationPassed).toBe(true);
+    const snapshotId = snapshotList[0]?.id;
+    expect(snapshotId).toBeTruthy();
 
     await page.getByRole('link', { name: 'Restore', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Restore', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Start restore' }).click();
-    const snapshotSelect = page.getByLabel('Snapshot');
-    await expect(snapshotSelect.locator('option').nth(1)).toHaveAttribute('value', /.+/);
-    await snapshotSelect.selectOption({ index: 1 });
+    const snapshotTrigger = page.getByRole('button', { name: 'Snapshot' });
+    await expect(snapshotTrigger).toBeEnabled({ timeout: 15_000 });
+    await snapshotTrigger.click();
+    await page.getByRole('option', { name: snapshotId! }).click();
+    await expect(snapshotTrigger).toContainText(snapshotId!);
+    await expect(page.getByRole('button', { name: 'Restore', exact: true })).toBeEnabled();
     await page.getByRole('button', { name: 'Restore', exact: true }).click();
 
     await expect(page.getByRole('heading', { name: 'Restore', exact: true })).toBeVisible();

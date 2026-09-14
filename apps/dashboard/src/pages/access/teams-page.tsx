@@ -66,7 +66,7 @@ export function TeamsPage() {
       .listTeamMembers(activeOrganizationId, selectedId)
       .then((next) => {
         setMembers(next);
-        setMemberUserId((current) => current || users[0]?.id || '');
+        setMemberUserId((current) => (current.length > 0 ? current : (users[0]?.id ?? '')));
       })
       .catch((caught: unknown) => {
         setError(caught instanceof Error ? caught.message : 'Unable to load members');
@@ -157,7 +157,7 @@ export function TeamsPage() {
         icon={<UsersRound className="h-5 w-5" aria-hidden="true" />}
         actions={
           manage ? (
-            <Button type="button" onClick={() => setCreateOpen(true)}>
+            <Button type="button" onClick={() => { setCreateOpen(true); }}>
               Create team
             </Button>
           ) : null
@@ -179,7 +179,7 @@ export function TeamsPage() {
                   className={`w-full rounded-md px-3 py-2 text-left text-sm ${
                     team.id === selectedId ? 'bg-slate-900 text-white' : 'hover:bg-slate-100'
                   }`}
-                  onClick={() => setSelectedId(team.id)}
+                  onClick={() => { setSelectedId(team.id); }}
                 >
                   {team.name}
                 </button>
@@ -269,7 +269,7 @@ export function TeamsPage() {
           <DialogActions
             confirmLabel="Create"
             confirmDisabled={false}
-            onCancel={() => setCreateOpen(false)}
+            onCancel={() => { setCreateOpen(false); }}
             onConfirm={() => void handleCreate()}
           />
         }
@@ -280,7 +280,7 @@ export function TeamsPage() {
             id="team-name"
             value={name}
             aria-invalid={Boolean(fieldErrors.name)}
-            onChange={(event) => setName(event.target.value)}
+            onChange={(event) => { setName(event.target.value); }}
           />
           <FieldError message={fieldErrors.name} />
         </div>
@@ -294,7 +294,7 @@ export function TeamsPage() {
           <DialogActions
             confirmLabel="Save"
             confirmDisabled={false}
-            onCancel={() => setRenameOpen(false)}
+            onCancel={() => { setRenameOpen(false); }}
             onConfirm={() => void handleRename()}
           />
         }
@@ -305,7 +305,7 @@ export function TeamsPage() {
             id="team-rename"
             value={renameValue}
             aria-invalid={Boolean(fieldErrors.name)}
-            onChange={(event) => setRenameValue(event.target.value)}
+            onChange={(event) => { setRenameValue(event.target.value); }}
           />
           <FieldError message={fieldErrors.name} />
         </div>

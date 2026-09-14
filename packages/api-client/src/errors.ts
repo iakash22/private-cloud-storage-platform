@@ -72,11 +72,11 @@ export class ApiClientError extends Error {
     }
 
     return new ApiClientError(
-      body?.error?.code ?? 'INTERNAL_ERROR',
-      body?.error?.message ?? response.statusText ?? 'Request failed',
+      body?.error.code ?? 'INTERNAL_ERROR',
+      body?.error.message ?? response.statusText ?? 'Request failed',
       response.status,
       body?.requestId,
-      body?.error?.fields,
+      body?.error.fields,
     );
   }
 }

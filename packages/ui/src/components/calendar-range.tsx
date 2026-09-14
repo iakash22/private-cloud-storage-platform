@@ -44,7 +44,9 @@ export function CalendarRange({ from, to, onFromChange, onToChange, onClear }: C
             type="button"
             size="sm"
             variant="outline"
-            onClick={() => setPreset(days)}
+            onClick={() => {
+              setPreset(days);
+            }}
           >
             {days} days
           </Button>

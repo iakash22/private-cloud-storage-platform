@@ -29,7 +29,7 @@ import { useFormSubmit } from '../lib/form-errors.js';
 
 type SetupStep = 'scan' | 'verify' | 'backup';
 
-const STEPS: Array<{ id: SetupStep; label: string; hint: string }> = [
+const STEPS: { id: SetupStep; label: string; hint: string }[] = [
   { id: 'scan', label: 'Scan QR', hint: 'Add app' },
   { id: 'verify', label: 'Verify', hint: 'Enter OTP' },
   { id: 'backup', label: 'Backup', hint: 'Save codes' },
@@ -274,7 +274,7 @@ export function TwoFactorSettings() {
                     autoComplete="current-password"
                     value={password}
                     aria-invalid={Boolean(fieldErrors.password)}
-                    onChange={(event) => setPassword(event.target.value)}
+                    onChange={(event) => { setPassword(event.target.value); }}
                   />
                   <FieldError message={fieldErrors.password} />
                 </div>
@@ -284,7 +284,7 @@ export function TwoFactorSettings() {
                     id="totp-disable-code"
                     value={code}
                     aria-invalid={Boolean(fieldErrors.code)}
-                    onChange={(event) => setCode(event.target.value)}
+                    onChange={(event) => { setCode(event.target.value); }}
                   />
                   <FieldError message={fieldErrors.code} />
                 </div>
@@ -326,7 +326,7 @@ export function TwoFactorSettings() {
               cancelLabel="Cancel"
               confirmLabel="Continue to verify"
               onCancel={resetEnrollment}
-              onConfirm={() => setStep('verify')}
+              onConfirm={() => { setStep('verify'); }}
             />
           ) : step === 'verify' ? (
             <DialogActions
@@ -334,7 +334,7 @@ export function TwoFactorSettings() {
               confirmLabel={busy ? 'Verifying…' : 'Confirm & enable'}
               confirmDisabled={busy}
               confirmLoading={busy}
-              onCancel={() => setStep('scan')}
+              onCancel={() => { setStep('scan'); }}
               onConfirm={() => void confirmEnable()}
             />
           ) : (
@@ -413,7 +413,7 @@ export function TwoFactorSettings() {
                     className="text-center font-mono text-lg tracking-[0.35em]"
                     value={code}
                     aria-invalid={Boolean(fieldErrors.code)}
-                    onChange={(event) => setCode(digitsOnly(event.target.value))}
+                    onChange={(event) => { setCode(digitsOnly(event.target.value)); }}
                   />
                   <FieldError message={fieldErrors.code} />
                 </div>

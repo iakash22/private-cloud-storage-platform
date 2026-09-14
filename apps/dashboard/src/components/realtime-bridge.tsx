@@ -34,7 +34,7 @@ export function RealtimeBridge({ children }: { children: ReactNode }) {
                 : 'This session was revoked from another device.',
             );
           }
-          navigate('/login', { replace: true });
+          void navigate('/login', { replace: true });
         }
         return;
       }
@@ -44,7 +44,7 @@ export function RealtimeBridge({ children }: { children: ReactNode }) {
         if (hadSession) {
           toast.error('Your account sessions were revoked.');
         }
-        navigate('/login', { replace: true });
+        void navigate('/login', { replace: true });
       }
     };
 
@@ -56,7 +56,7 @@ export function RealtimeBridge({ children }: { children: ReactNode }) {
           signal: abort.signal,
           onEvent: handleSecurityEvent,
         });
-      } catch (error: unknown) {
+      } catch {
         if (cancelled || abort.signal.aborted) {
           return;
         }

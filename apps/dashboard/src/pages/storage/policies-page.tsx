@@ -188,7 +188,7 @@ export function PoliciesPage() {
                     {policy.enabled ? 'Enabled' : 'Disabled'}
                   </Badge>
                   {canUploadStorage(permissions) ? (
-                    <Button type="button" size="sm" variant="outline" onClick={() => openEdit(policy)}>
+                    <Button type="button" size="sm" variant="outline" onClick={() => { openEdit(policy); }}>
                       Edit
                     </Button>
                   ) : null}
@@ -197,7 +197,7 @@ export function PoliciesPage() {
                       type="button"
                       size="sm"
                       variant="outline"
-                      onClick={() => setDeleteId(policy.id)}
+                      onClick={() => { setDeleteId(policy.id); }}
                     >
                       Delete
                     </Button>
@@ -217,7 +217,7 @@ export function PoliciesPage() {
           <DialogActions
             confirmLabel="Create"
             confirmDisabled={!name.trim() || Number(days) < 1}
-            onCancel={() => setCreateOpen(false)}
+            onCancel={() => { setCreateOpen(false); }}
             onConfirm={() => void handleCreate()}
           />
         }
@@ -253,7 +253,7 @@ export function PoliciesPage() {
           <DialogActions
             confirmLabel="Save"
             confirmDisabled={!name.trim() || Number(days) < 1}
-            onCancel={() => setEditPolicy(null)}
+            onCancel={() => { setEditPolicy(null); }}
             onConfirm={() => void handleUpdate()}
           />
         }
@@ -346,7 +346,7 @@ function PolicyForm({
           id="policy-name"
           value={name}
           aria-invalid={Boolean(fieldErrors.name)}
-          onChange={(event) => onName(event.target.value)}
+          onChange={(event) => { onName(event.target.value); }}
         />
         <FieldError message={fieldErrors.name} />
       </div>
@@ -372,12 +372,12 @@ function PolicyForm({
         <Input
           id="policy-prefix"
           value={keyPrefix}
-          onChange={(event) => onKeyPrefix(event.target.value)}
+          onChange={(event) => { onKeyPrefix(event.target.value); }}
         />
       </div>
       <div>
         <Label htmlFor="policy-days">Days</Label>
-        <Input id="policy-days" inputMode="numeric" value={days} aria-invalid={Boolean(fieldErrors.days)} onChange={(event) => onDays(event.target.value)} />
+        <Input id="policy-days" inputMode="numeric" value={days} aria-invalid={Boolean(fieldErrors.days)} onChange={(event) => { onDays(event.target.value); }} />
         <FieldError message={fieldErrors.days} />
       </div>
       <div>
@@ -386,7 +386,7 @@ function PolicyForm({
           id="policy-action"
           aria-label="Action"
           value={lifecycleAction}
-          onChange={(value) => onAction(value as StorageLifecycleActionName)}
+          onChange={(value) => { onAction(value as StorageLifecycleActionName); }}
           options={(Object.keys(LIFECYCLE_LABELS) as StorageLifecycleActionName[]).map((action) => ({
             value: action,
             label: LIFECYCLE_LABELS[action],
@@ -394,7 +394,7 @@ function PolicyForm({
         />
       </div>
       <label className="flex items-center gap-2 text-sm text-slate-700">
-        <input type="checkbox" checked={enabled} onChange={(event) => onEnabled(event.target.checked)} />
+        <input type="checkbox" checked={enabled} onChange={(event) => { onEnabled(event.target.checked); }} />
         Enabled
       </label>
     </div>

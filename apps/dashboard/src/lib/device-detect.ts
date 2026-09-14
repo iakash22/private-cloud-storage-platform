@@ -36,7 +36,7 @@ export interface LinkedAuthenticatorDevice extends DetectedDevice {
 
 const LINKED_DEVICES_KEY = 'vaultstack:2fa-linked-devices';
 
-function pickMatch(value: string, patterns: Array<[RegExp, string]>): string {
+function pickMatch(value: string, patterns: [RegExp, string][]): string {
   for (const [pattern, label] of patterns) {
     if (pattern.test(value)) {
       return label;
@@ -72,15 +72,13 @@ export function detectDevice(
   userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : '',
 ): DetectedDevice {
   const ua = userAgent || 'unknown';
+  const userAgentData = (
+    typeof navigator !== 'undefined'
+      ? (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData
+      : undefined
+  );
   const platform =
-    typeof navigator !== 'undefined' && 'userAgentData' in navigator
-      ? String(
-          (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData
-            ?.platform ?? '',
-        )
-      : typeof navigator !== 'undefined'
-        ? navigator.platform
-        : '';
+    typeof userAgentData?.platform === 'string' ? userAgentData.platform : '';
 
   const browser = pickMatch(ua, [
     [/Edg\//i, 'Microsoft Edge'],
@@ -137,9 +135,9 @@ export function detectDevice(
 
   const language =
     typeof navigator !== 'undefined' ? navigator.language || 'unknown' : 'unknown';
-  const languages =
+  const languages: string[] =
     typeof navigator !== 'undefined' && Array.isArray(navigator.languages)
-      ? [...navigator.languages]
+      ? Array.from(navigator.languages as readonly string[])
       : [language];
 
   let timeZone = 'UTC';
@@ -181,7 +179,7 @@ export function detectDevice(
 export async function enrichDeviceNetwork(device: DetectedDevice): Promise<DetectedDevice> {
   try {
     const controller = new AbortController();
-    const timer = window.setTimeout(() => controller.abort(), 3500);
+    const timer = window.setTimeout(() => { controller.abort(); }, 3500);
     const response = await fetch('https://ipapi.co/json/', {
       signal: controller.signal,
       headers: { Accept: 'application/json' },
@@ -223,7 +221,7 @@ export function loadLinkedAuthenticatorDevices(): LinkedAuthenticatorDevice[] {
     if (!raw) {
       return [];
     }
-    const parsed = JSON.parse(raw) as Array<Partial<LinkedAuthenticatorDevice> & DetectedDevice>;
+    const parsed = JSON.parse(raw) as (Partial<LinkedAuthenticatorDevice> & DetectedDevice)[];
     return Array.isArray(parsed) ? parsed.map((item) => normalizeDevice(item)) : [];
   } catch {
     return [];

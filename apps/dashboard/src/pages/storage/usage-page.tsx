@@ -96,7 +96,7 @@ export function UsagePage() {
                 {fallback.objectCount} objects across {fallback.bucketCount} buckets.
               </p>
             ) : null}
-            {metrics && metrics.buckets.length === 0 ? (
+            {metrics?.buckets.length === 0 ? (
               <p className="text-slate-500">No bucket usage recorded yet.</p>
             ) : null}
           </CardContent>

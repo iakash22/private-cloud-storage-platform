@@ -26,8 +26,8 @@ export class StatfsDiskCollector implements DiskCollector {
   ): Promise<PublicDiskVolume> {
     try {
       const stats = await statfs(path);
-      const totalBytes = Number(stats.blocks) * Number(stats.bsize);
-      const freeBytes = Number(stats.bavail) * Number(stats.bsize);
+      const totalBytes = stats.blocks * stats.bsize;
+      const freeBytes = stats.bavail * stats.bsize;
       const usedBytes = Math.max(0, totalBytes - freeBytes);
       const usedPercent =
         totalBytes === 0 ? 0 : Number(((usedBytes / totalBytes) * 100).toFixed(2));
